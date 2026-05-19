@@ -306,7 +306,7 @@ Not done:
 
 ## Phase 5 — Arc / Circle Integration
 
-Status: Not started, 0%.
+Status: Planning ready, Phase 5.1 next.
 
 Done:
 
@@ -314,21 +314,50 @@ Done:
   - Arc docs: https://docs.arc.network/
   - Arc prediction market blueprint: https://www.arc.network/blog/build-institutional-grade-prediction-markets-on-arc-arc-blueprints
   - Circle developer docs: https://developers.circle.com/
+  - Circle Agents docs: https://agents.circle.com/
   - Circle grants page: https://www.circle.com/grant
 - Project rule added: Arc/Circle behavior must use official docs only.
+- Reviewed Arc official documentation snapshots for:
+  - Connect to Arc
+  - Deploy on Arc
+  - EVM compatibility
+- Confirmed documented Arc Testnet network details:
+  - Network: Arc Testnet
+  - Chain ID: `5042002`
+  - Primary RPC: `https://rpc.testnet.arc.network`
+  - Explorer: `https://testnet.arcscan.app`
+  - Faucet: `https://faucet.circle.com`
+  - Currency / native gas token: USDC
+- Confirmed Arc is currently documented as testnet phase; Arc mainnet remains unknown / not documented from reviewed Arc pages.
+- Confirmed Arc EVM compatibility is documented.
+- Confirmed Solidity smart contract deployment to Arc Testnet with Foundry is documented.
+- Confirmed Arc docs mention standard Ethereum tooling including Solidity, Foundry, Hardhat, and Viem.
+- Confirmed Arc uses USDC as native gas.
+- Confirmed Arc deterministic finality is documented.
+- Confirmed Arc USDC has dual interface behavior:
+  - native balance uses 18 decimals
+  - ERC-20 interface uses 6 decimals
+  - both interfaces share one underlying USDC balance
+- Collected preliminary Circle Docs AI response for Circle Wallets, CCTP, Gateway, Paymaster, Circle Agent Stack, and Arc Testnet support; this still needs exact official page snapshots before implementation decisions.
 
 Not done:
 
-- Confirm current Arc testnet/mainnet setup from official docs.
-- Confirm Circle wallet approach from official docs.
 - Confirm USDC flow from Circle docs.
-- Confirm supported Arc RPC / chain details.
-- Configure wallet strategy.
-- Integrate Circle Developer Platform.
-- Integrate Arc transaction flow.
-- Add webhook handling.
-- Add testnet transaction proof.
+- Create `docs/arc-circle-research.md`.
+- Create `docs/wallet-strategy.md`.
+- Create `docs/usdc-integration-plan.md`.
+- Create `docs/agent-wallet-boundary.md`.
+- Create `docs/contract-requirements.md`.
+- Confirm Circle wallet approach from exact official docs page snapshots.
+- Confirm Circle Wallets / Agent Wallets Arc Testnet support from exact official docs page snapshots.
+- Decide MVP wallet strategy:
+  - browser wallet path using Wagmi/Viem/RainbowKit
+  - Circle Wallets path if officially documented and needed
+  - hybrid path if both are appropriate
+- Define Arc transaction flow for Phase 6/7.
+- Define Circle webhook/event handling plan.
 - Document unknown / not documented behavior.
+- Do not implement contracts until Phase 6.
 
 ## Phase 6 — Contracts / Settlement Prototype
 
@@ -420,7 +449,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Start Phase 5 Arc / Circle Integration planning by verifying current official Arc and Circle documentation before implementing any integration.
+- Start Phase 5.1 by creating `docs/arc-circle-research.md` from official Arc and Circle documentation snapshots before implementing any wallet, Arc, Circle, or contract integration.
 
 Do not start unrelated coding before checking:
 
