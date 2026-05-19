@@ -232,7 +232,7 @@ Not done:
 
 ## Phase 4 — Frontend MVP
 
-Status: Not started as product, about 5%.
+Status: In progress, Phase 4.1 complete.
 
 Done:
 
@@ -240,6 +240,15 @@ Done:
 - Frontend moved to `apps/web`.
 - shadcn/ui base components exist.
 - Frontend runs locally.
+- Added frontend API environment example at `apps/web/.env.example`.
+- Added typed frontend API client at `apps/web/src/lib/api.ts`.
+- Added frontend API helpers for Phase 3 backend endpoints:
+  - `GET /health`
+  - `GET /readyz`
+  - `GET /schema/validate`
+  - `GET /markets`
+  - `GET /markets/{id}`
+  - `GET /agent/markets`
 
 Not done:
 
@@ -252,8 +261,6 @@ Not done:
 - Resolver dashboard.
 - Intelligence dashboard.
 - Wallet connect UI integration.
-- API client layer.
-- Frontend env config.
 - Frontend loading/error states.
 - Responsive layout polish.
 - Demo-ready UI.
