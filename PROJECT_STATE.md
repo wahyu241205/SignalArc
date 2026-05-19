@@ -232,7 +232,7 @@ Not done:
 
 ## Phase 4 — Frontend MVP
 
-Status: In progress, Phase 4.5 complete.
+Status: In progress, Phase 4.6 complete.
 
 Done:
 
@@ -266,11 +266,15 @@ Done:
 - Wired trade intent panel into the market detail UI.
 - Added trade intent idle, submitting, success, and error states.
 - Kept trade intent UI explicitly intent-only: no wallet execution, no onchain settlement, no position update.
+- Added frontend portfolio API helpers for `GET /users/{user_id}/positions` and `GET /users/{user_id}/settlements`.
+- Added portfolio page at `apps/web/src/app/portfolio/page.tsx`.
+- Added portfolio view at `apps/web/src/features/portfolio/portfolio-view.tsx`.
+- Added read-only portfolio idle, loading, empty, error, and loaded states.
+- Kept portfolio UI explicitly read-only: no wallet balance, no claim flow, no settlement mutation.
 
 Not done:
 
 - SignalArc landing page.
-- User portfolio page.
 - Resolver dashboard.
 - Intelligence dashboard.
 - Wallet connect UI integration.

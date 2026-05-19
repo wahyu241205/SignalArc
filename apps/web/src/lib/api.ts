@@ -90,6 +90,32 @@ export type Trade = {
   updated_at: string
 }
 
+export type Position = {
+  id: string
+  user_id: string
+  market_id: string
+  outcome: string
+  quantity: string
+  average_entry_price: string
+  realized_pnl: string
+  created_at: string
+  updated_at: string
+}
+
+export type Settlement = {
+  id: string
+  market_id: string
+  user_id: string | null
+  resolution_id: string | null
+  outcome: string | null
+  amount: string
+  status: string
+  tx_hash: string | null
+  settled_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type AgentMarket = {
   id: string
   title: string
@@ -138,6 +164,14 @@ export type TradeIntentResponse = {
     status: string
     reason: string
   }
+}
+
+export type UserPositionsResponse = {
+  positions: Position[]
+}
+
+export type UserSettlementsResponse = {
+  settlements: Settlement[]
 }
 
 export type AgentMarketsResponse = {
@@ -262,6 +296,14 @@ export function createTradeIntent(input: CreateTradeIntentRequest) {
     method: "POST",
     body: input,
   })
+}
+
+export function getUserPositions(userId: string) {
+  return apiRequest<UserPositionsResponse>(`/users/${encodeURIComponent(userId)}/positions`)
+}
+
+export function getUserSettlements(userId: string) {
+  return apiRequest<UserSettlementsResponse>(`/users/${encodeURIComponent(userId)}/settlements`)
 }
 
 export function getAgentMarkets() {
