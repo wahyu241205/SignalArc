@@ -33,6 +33,20 @@ type MarketsRepository struct {
 	db *database.DB
 }
 
+type CreateMarketInput struct {
+	CreatorUserID    string
+	Title            string
+	Description      sql.NullString
+	Category         sql.NullString
+	OutcomeYesLabel  string
+	OutcomeNoLabel   string
+	CollateralAsset  string
+	Chain            string
+	ResolutionSource sql.NullString
+	OpensAt          sql.NullTime
+	ClosesAt         time.Time
+}
+
 func NewMarketsRepository(db *database.DB) *MarketsRepository {
 	return &MarketsRepository{db: db}
 }
@@ -42,6 +56,78 @@ func (r *MarketsRepository) GetMarketByID(ctx context.Context, id string) (Marke
 	err := r.db.QueryRow(ctx, marketSelectSQL+`
 		WHERE id = $1
 	`, id).Scan(
+		&market.ID,
+		&market.CreatorUserID,
+		&market.Title,
+		&market.Description,
+		&market.Category,
+		&market.Status,
+		&market.OutcomeYesLabel,
+		&market.OutcomeNoLabel,
+		&market.CollateralAsset,
+		&market.Chain,
+		&market.ResolutionSource,
+		&market.OpensAt,
+		&market.ClosesAt,
+		&market.ResolvedAt,
+		&market.SettledAt,
+		&market.WinningOutcome,
+		&market.CreatedAt,
+		&market.UpdatedAt,
+	)
+
+	return market, err
+}
+
+func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarketInput) (Market, error) {
+	var market Market
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO markets (
+			creator_user_id,
+			title,
+			description,
+			category,
+			outcome_yes_label,
+			outcome_no_label,
+			collateral_asset,
+			chain,
+			resolution_source,
+			opens_at,
+			closes_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING
+			id::text,
+			creator_user_id::text,
+			title,
+			description,
+			category,
+			status,
+			outcome_yes_label,
+			outcome_no_label,
+			collateral_asset,
+			chain,
+			resolution_source,
+			opens_at,
+			closes_at,
+			resolved_at,
+			settled_at,
+			winning_outcome,
+			created_at,
+			updated_at
+	`,
+		input.CreatorUserID,
+		input.Title,
+		input.Description,
+		input.Category,
+		input.OutcomeYesLabel,
+		input.OutcomeNoLabel,
+		input.CollateralAsset,
+		input.Chain,
+		input.ResolutionSource,
+		input.OpensAt,
+		input.ClosesAt,
+	).Scan(
 		&market.ID,
 		&market.CreatorUserID,
 		&market.Title,

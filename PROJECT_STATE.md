@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Continue Phase 3 Backend API MVP by adding market creation endpoint with request validation.
+Continue Phase 3 Backend API MVP by adding trade intent endpoint and agent-readable market API baseline.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 45%.
+Status: Started, about 55%.
 
 Done:
 
@@ -183,6 +183,8 @@ Done:
 - Added read-only position endpoints.
 - Added read-only resolution status endpoint.
 - Added read-only settlement status endpoints.
+- Added market creation endpoint.
+- Added market creation request validation.
 - Verified:
 
 ```bash
@@ -202,6 +204,7 @@ Current endpoints:
 - `GET /schema/validate`
 - `GET /markets`
 - `GET /markets/{id}`
+- `POST /markets`
 - `GET /users/{user_id}/positions`
 - `GET /markets/{market_id}/positions`
 - `GET /markets/{market_id}/resolution`
@@ -210,7 +213,6 @@ Current endpoints:
 
 Not done:
 
-- Market creation endpoint.
 - Trade intent endpoint.
 - Resolver endpoint.
 - Agent API endpoint.
@@ -366,7 +368,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Continue Phase 3 Backend API MVP by adding market creation endpoint with request validation.
+- Continue Phase 3 Backend API MVP by adding trade intent endpoint and agent-readable market API baseline.
 
 Do not start unrelated coding before checking:
 
