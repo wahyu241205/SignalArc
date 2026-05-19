@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Start Phase 3 Backend API MVP by wiring database access and read-only health/schema validation endpoints.
+Continue Phase 3 Backend API MVP by cleaning backend API structure and adding a consistent JSON response/error model.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 10%.
+Status: Started, about 20%.
 
 Done:
 
@@ -168,6 +168,12 @@ Done:
   - `godotenv`
 - Added backend API entrypoint.
 - Added health endpoint.
+- Added backend config package.
+- Added PostgreSQL database connection package using pgxpool.
+- Added startup database ping.
+- Added readiness endpoint.
+- Added schema validation endpoint for Phase 2 tables and migration version.
+- Verified `/health`, `/readyz`, and `/schema/validate` locally.
 - Verified:
 
 ```bash
@@ -180,15 +186,14 @@ Expected result:
 {"status":"ok"}
 ```
 
-Current endpoint:
+Current endpoints:
 
 - `GET /health`
+- `GET /readyz`
+- `GET /schema/validate`
 
 Not done:
 
-- Backend config package.
-- Database connection package.
-- Readiness endpoint.
 - User repository.
 - Wallet repository.
 - Market repository.
@@ -355,7 +360,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Start Phase 3 Backend API MVP by wiring database access and read-only health/schema validation endpoints.
+- Continue Phase 3 Backend API MVP by cleaning backend API structure and adding a consistent JSON response/error model.
 
 Do not start unrelated coding before checking:
 
