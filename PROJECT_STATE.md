@@ -232,7 +232,7 @@ Not done:
 
 ## Phase 4 — Frontend MVP
 
-Status: In progress, Phase 4.2 complete.
+Status: In progress, Phase 4.3 complete.
 
 Done:
 
@@ -253,11 +253,14 @@ Done:
 - Added market list component at `apps/web/src/features/markets/market-list.tsx`.
 - Wired market list UI to `GET /markets` through the frontend API client.
 - Added market list loading, empty, and error states.
+- Added market detail page at `apps/web/src/app/markets/[id]/page.tsx`.
+- Added market detail component at `apps/web/src/features/markets/market-detail.tsx`.
+- Wired market detail UI to `GET /markets/{id}` through the frontend API client.
+- Added market detail loading and error states.
 
 Not done:
 
 - SignalArc landing page.
-- Market detail page.
 - Create market form.
 - YES/NO trade panel UI.
 - User portfolio page.
