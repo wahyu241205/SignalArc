@@ -232,7 +232,7 @@ Not done:
 
 ## Phase 4 — Frontend MVP
 
-Status: In progress, Phase 4.7 complete.
+Status: In progress, Phase 4.8 complete.
 
 Done:
 
@@ -276,11 +276,15 @@ Done:
 - Wired market resolution panel into the market detail UI.
 - Added read-only resolution loading, empty/not-found, error, and loaded states.
 - Kept resolution UI explicitly read-only: no resolver submission, no claim flow, no settlement execution, no eligibility inference.
+- Added intelligence page at `apps/web/src/app/intelligence/page.tsx`.
+- Added intelligence dashboard at `apps/web/src/features/intelligence/intelligence-dashboard.tsx`.
+- Wired intelligence dashboard to `GET /agent/markets` through the frontend API client.
+- Added intelligence loading, empty, error, and loaded states.
+- Kept intelligence UI explicitly read-only: no agent execution, no paid access, no API key enforcement, no trading automation.
 
 Not done:
 
 - SignalArc landing page.
-- Intelligence dashboard.
 - Wallet connect UI integration.
 - Frontend loading/error states.
 - Responsive layout polish.
