@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Continue Phase 3 Backend API MVP by cleaning backend API structure and adding a consistent JSON response/error model.
+Continue Phase 3 Backend API MVP by adding read-only repository layer for core database entities.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 20%.
+Status: Started, about 25%.
 
 Done:
 
@@ -174,6 +174,8 @@ Done:
 - Added readiness endpoint.
 - Added schema validation endpoint for Phase 2 tables and migration version.
 - Verified `/health`, `/readyz`, and `/schema/validate` locally.
+- Refactored backend API route registration into `internal/api`.
+- Added consistent JSON response/error helper package in `internal/httpjson`.
 - Verified:
 
 ```bash
@@ -207,7 +209,6 @@ Not done:
 - Resolver endpoint.
 - Settlement status endpoint.
 - Agent API endpoint.
-- API error model.
 - Request validation.
 - Structured logging middleware.
 - CORS middleware.
@@ -360,7 +361,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Continue Phase 3 Backend API MVP by cleaning backend API structure and adding a consistent JSON response/error model.
+- Continue Phase 3 Backend API MVP by adding read-only repository layer for core database entities.
 
 Do not start unrelated coding before checking:
 
