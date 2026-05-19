@@ -95,6 +95,8 @@ Done:
 - Applied audit_logs migration locally.
 - Created api_keys table migration.
 - Applied api_keys migration locally.
+- Created webhooks table migration.
+- Applied webhooks migration locally.
 
 Current local database tables:
 
@@ -109,16 +111,16 @@ Current local database tables:
 - `oracle_events`
 - `audit_logs`
 - `api_keys`
+- `webhooks`
 - `schema_migrations`
 
 Current local database migration status:
 
-- version: `11`
+- version: `12`
 - dirty: `false`
 
 Not done:
 
-- `webhooks` table.
 - `agent_access` table.
 - Final schema review.
 - Rollback/down migration test.
@@ -126,9 +128,9 @@ Not done:
 
 Next step:
 
-Push api_keys migration commit.
+Push webhooks migration commit.
 
-Then continue Phase 2 by creating webhooks table migration.
+Then continue Phase 2 by creating agent_access table migration.
 
 ## Phase 3 — Backend API MVP
 
@@ -328,12 +330,12 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Added and applied api_keys table migration locally.
+- Added and applied webhooks table migration locally.
 
 ## Next Recommended Step
 
-- Push api_keys migration commit.
-- Then continue Phase 2 by creating webhooks table migration.
+- Push webhooks migration commit.
+- Then continue Phase 2 by creating agent_access table migration.
 
 Do not start unrelated coding before checking:
 
