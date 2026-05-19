@@ -232,7 +232,7 @@ Not done:
 
 ## Phase 4 — Frontend MVP
 
-Status: In progress, Phase 4.3 complete.
+Status: In progress, Phase 4.4 complete.
 
 Done:
 
@@ -257,11 +257,14 @@ Done:
 - Added market detail component at `apps/web/src/features/markets/market-detail.tsx`.
 - Wired market detail UI to `GET /markets/{id}` through the frontend API client.
 - Added market detail loading and error states.
+- Added frontend `createMarket()` API helper for `POST /markets`.
+- Added create market page at `apps/web/src/app/markets/new/page.tsx`.
+- Added create market form at `apps/web/src/features/markets/create-market-form.tsx`.
+- Added create market idle, submitting, success, and error states.
 
 Not done:
 
 - SignalArc landing page.
-- Create market form.
 - YES/NO trade panel UI.
 - User portfolio page.
 - Resolver dashboard.

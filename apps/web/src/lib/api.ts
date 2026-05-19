@@ -93,6 +93,20 @@ export type MarketResponse = {
   market: Market
 }
 
+export type CreateMarketRequest = {
+  creator_user_id: string
+  title: string
+  description?: string
+  category?: string
+  outcome_yes_label?: string
+  outcome_no_label?: string
+  collateral_asset?: string
+  chain: string
+  resolution_source?: string
+  opens_at?: string
+  closes_at: string
+}
+
 export type AgentMarketsResponse = {
   markets: AgentMarket[]
 }
@@ -201,6 +215,13 @@ export function getMarkets() {
 
 export function getMarket(id: string) {
   return apiRequest<MarketResponse>(`/markets/${encodeURIComponent(id)}`)
+}
+
+export function createMarket(input: CreateMarketRequest) {
+  return apiRequest<MarketResponse>("/markets", {
+    method: "POST",
+    body: input,
+  })
 }
 
 export function getAgentMarkets() {
