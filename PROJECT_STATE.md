@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Continue Phase 3 Backend API MVP by adding remaining read-only repositories for positions, trades, resolutions, and settlements.
+Continue Phase 3 Backend API MVP by adding read-only position, resolution, and settlement status endpoints.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 35%.
+Status: Started, about 40%.
 
 Done:
 
@@ -179,6 +179,7 @@ Done:
 - Added read-only repository layer for users, wallets, and markets.
 - Added read-only market listing endpoint.
 - Added read-only market detail endpoint.
+- Added read-only repository layer for positions, trades, resolutions, and settlements.
 - Verified:
 
 ```bash
@@ -201,8 +202,6 @@ Current endpoints:
 
 Not done:
 
-- Position repository.
-- Trade repository.
 - Market creation endpoint.
 - Trade intent endpoint.
 - Position endpoint.
@@ -361,7 +360,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Continue Phase 3 Backend API MVP by adding remaining read-only repositories for positions, trades, resolutions, and settlements.
+- Continue Phase 3 Backend API MVP by adding read-only position, resolution, and settlement status endpoints.
 
 Do not start unrelated coding before checking:
 
