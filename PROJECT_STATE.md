@@ -151,7 +151,7 @@ Not done:
 
 Next step:
 
-Start Phase 4 Frontend MVP by wiring the frontend to the Phase 3 backend API endpoints.
+Start Phase 5 Arc / Circle Integration planning by verifying current official Arc and Circle documentation before implementing any integration.
 
 ## Phase 3 — Backend API MVP
 
@@ -232,7 +232,7 @@ Not done:
 
 ## Phase 4 — Frontend MVP
 
-Status: In progress, Phase 4.8 complete.
+Status: COMPLETE.
 
 Done:
 
@@ -281,12 +281,26 @@ Done:
 - Wired intelligence dashboard to `GET /agent/markets` through the frontend API client.
 - Added intelligence loading, empty, error, and loaded states.
 - Kept intelligence UI explicitly read-only: no agent execution, no paid access, no API key enforcement, no trading automation.
+- Completed local Phase 4 smoke validation:
+  - backend `/health` returned 200
+  - backend `/readyz` returned 200
+  - backend `/schema/validate` returned 200 with `migration_version=13`, `dirty=false`, and no missing tables
+  - frontend `/markets` returned 200
+  - frontend `/markets/new` returned 200
+  - frontend `/markets/{id}` returned 200
+  - frontend `/portfolio` returned 200
+  - frontend `/intelligence` returned 200
+  - `GET /agent/markets` returned 200
+  - `POST /markets` returned 201
+  - `POST /trade-intents` returned expected backend validation error `market_not_open` for a DRAFT market
+  - `pnpm lint` passed
+  - `pnpm exec tsc --noEmit` passed
+  - `pnpm build` passed
 
 Not done:
 
 - SignalArc landing page.
 - Wallet connect UI integration.
-- Frontend loading/error states.
 - Responsive layout polish.
 - Demo-ready UI.
 
@@ -406,7 +420,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Start Phase 4 Frontend MVP by wiring the frontend to the Phase 3 backend API endpoints.
+- Start Phase 5 Arc / Circle Integration planning by verifying current official Arc and Circle documentation before implementing any integration.
 
 Do not start unrelated coding before checking:
 
