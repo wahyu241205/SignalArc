@@ -97,6 +97,8 @@ Done:
 - Applied api_keys migration locally.
 - Created webhooks table migration.
 - Applied webhooks migration locally.
+- Created agent_access table migration.
+- Applied agent_access migration locally.
 
 Current local database tables:
 
@@ -112,25 +114,25 @@ Current local database tables:
 - `audit_logs`
 - `api_keys`
 - `webhooks`
+- `agent_access`
 - `schema_migrations`
 
 Current local database migration status:
 
-- version: `12`
+- version: `13`
 - dirty: `false`
 
 Not done:
 
-- `agent_access` table.
 - Final schema review.
 - Rollback/down migration test.
 - Seed data for local demo.
 
 Next step:
 
-Push webhooks migration commit.
+Push agent_access migration commit.
 
-Then continue Phase 2 by creating agent_access table migration.
+Then run final Phase 2 schema review.
 
 ## Phase 3 — Backend API MVP
 
@@ -330,12 +332,12 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Added and applied webhooks table migration locally.
+- Added and applied agent_access table migration locally.
 
 ## Next Recommended Step
 
-- Push webhooks migration commit.
-- Then continue Phase 2 by creating agent_access table migration.
+- Push agent_access migration commit.
+- Then run final Phase 2 schema review.
 
 Do not start unrelated coding before checking:
 
