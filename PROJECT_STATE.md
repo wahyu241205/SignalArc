@@ -306,7 +306,7 @@ Not done:
 
 ## Phase 5 — Arc / Circle Integration
 
-Status: Planning ready, Phase 5.2 next.
+Status: Planning ready, Phase 5.3 next.
 
 Done:
 
@@ -340,20 +340,16 @@ Done:
   - both interfaces share one underlying USDC balance
 - Collected preliminary Circle Docs AI response for Circle Wallets, CCTP, Gateway, Paymaster, Circle Agent Stack, and Arc Testnet support; this still needs exact official page snapshots before implementation decisions.
 - Created `docs/arc-circle-research.md` as the Phase 5.1 Arc / Circle research document.
+- Created `docs/wallet-strategy.md` as the Phase 5.2 wallet strategy document.
 
 Not done:
 
 - Confirm USDC flow from Circle docs.
-- Create `docs/wallet-strategy.md`.
 - Create `docs/usdc-integration-plan.md`.
 - Create `docs/agent-wallet-boundary.md`.
 - Create `docs/contract-requirements.md`.
 - Confirm Circle wallet approach from exact official docs page snapshots.
 - Confirm Circle Wallets / Agent Wallets Arc Testnet support from exact official docs page snapshots.
-- Decide MVP wallet strategy:
-  - browser wallet path using Wagmi/Viem/RainbowKit
-  - Circle Wallets path if officially documented and needed
-  - hybrid path if both are appropriate
 - Define Arc transaction flow for Phase 6/7.
 - Define Circle webhook/event handling plan.
 - Document unknown / not documented behavior.
@@ -445,11 +441,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Phase 5.1 Arc / Circle research document completed.
+- Phase 5.2 wallet strategy document completed.
 
 ## Next Recommended Step
 
-- Start Phase 5.2 by creating `docs/wallet-strategy.md` after collecting exact official Circle documentation snapshots needed for wallet strategy decisions.
+- Start Phase 5.3 by creating `docs/usdc-integration-plan.md` from verified Arc and Circle documentation, without implementing wallet, Circle, Arc runtime, contracts, settlement, or webhook logic.
 
 Do not start unrelated coding before checking:
 
