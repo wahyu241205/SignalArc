@@ -11,7 +11,7 @@ This file is the handoff source of truth for continuing SignalArc work in a new 
 
 ## Working Style
 
-- Use Indonesian for guidance.
+- Use English for repository-facing guidance and project notes.
 - Use controlled debugging.
 - One step at a time.
 - Do not jump phases without justification.
