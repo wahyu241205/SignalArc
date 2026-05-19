@@ -306,7 +306,7 @@ Not done:
 
 ## Phase 5 — Arc / Circle Integration
 
-Status: Planning ready, Phase 5.3 next.
+Status: COMPLETE.
 
 Done:
 
@@ -341,18 +341,12 @@ Done:
 - Collected preliminary Circle Docs AI response for Circle Wallets, CCTP, Gateway, Paymaster, Circle Agent Stack, and Arc Testnet support; this still needs exact official page snapshots before implementation decisions.
 - Completed Phase 5.1 Arc / Circle research as an internal/local-only planning note under ignored `docs/internal/`.
 - Completed Phase 5.2 wallet strategy as an internal/local-only planning note under ignored `docs/internal/`.
+- Completed Phase 5.3 USDC integration planning as an internal/local-only note under ignored `docs/internal/`.
+- Completed Phase 5.4 agent wallet boundary planning as an internal/local-only note under ignored `docs/internal/`.
+- Completed Phase 5.5 contract requirements handoff as an internal/local-only note under ignored `docs/internal/`.
 
 Not done:
 
-- Confirm USDC flow from Circle docs.
-- Complete Phase 5.3 USDC integration planning as an internal/local-only note under ignored `docs/internal/`.
-- Complete Phase 5.4 agent wallet boundary planning as an internal/local-only note under ignored `docs/internal/`.
-- Complete Phase 5.5 contract requirements handoff as an internal/local-only note under ignored `docs/internal/`.
-- Confirm Circle wallet approach from exact official docs page snapshots.
-- Confirm Circle Wallets / Agent Wallets Arc Testnet support from exact official docs page snapshots.
-- Define Arc transaction flow for Phase 6/7.
-- Define Circle webhook/event handling plan.
-- Document unknown / not documented behavior.
 - Do not implement contracts until Phase 6.
 
 ## Phase 6 — Contracts / Settlement Prototype
@@ -441,11 +435,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Phase 5.2 wallet strategy document completed.
+- Phase 5 Arc / Circle integration planning completed.
 
 ## Next Recommended Step
 
-- Start Phase 5.3 by completing USDC integration planning as an internal/local-only note under ignored `docs/internal/`, using verified Arc and Circle documentation, without implementing wallet, Circle, Arc runtime, contracts, settlement, or webhook logic.
+- Start Phase 6 Contracts / Settlement Prototype by defining the minimal Solidity + Foundry contract scope from the completed internal Phase 5 planning notes. Do not implement production custody, settlement, or claim behavior beyond the approved prototype scope.
 
 Do not start unrelated coding before checking:
 
