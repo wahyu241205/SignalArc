@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Continue Phase 3 Backend API MVP with final smoke validation and Phase 3 completion checkpoint.
+Start Phase 4 Frontend MVP by wiring the frontend to the Phase 3 backend API endpoints.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 85%.
+Status: Complete.
 
 Done:
 
@@ -191,6 +191,7 @@ Done:
 - Added structured request logging middleware.
 - Added panic recoverer middleware.
 - Split oversized backend API router into focused handler, response, middleware, and validation files.
+- Completed final backend smoke validation for Phase 3 MVP.
 - Verified:
 
 ```bash
@@ -373,7 +374,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Continue Phase 3 Backend API MVP with final smoke validation and Phase 3 completion checkpoint.
+- Start Phase 4 Frontend MVP by wiring the frontend to the Phase 3 backend API endpoints.
 
 Do not start unrelated coding before checking:
 
