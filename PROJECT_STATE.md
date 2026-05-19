@@ -89,6 +89,8 @@ Done:
 - Applied resolutions migration locally.
 - Created settlements table migration.
 - Applied settlements migration locally.
+- Created oracle_events table migration.
+- Applied oracle_events migration locally.
 
 Current local database tables:
 
@@ -100,16 +102,16 @@ Current local database tables:
 - `liquidity`
 - `resolutions`
 - `settlements`
+- `oracle_events`
 - `schema_migrations`
 
 Current local database migration status:
 
-- version: `8`
+- version: `9`
 - dirty: `false`
 
 Not done:
 
-- `oracle_events` table.
 - `audit_logs` table.
 - `api_keys` table.
 - `webhooks` table.
@@ -120,9 +122,9 @@ Not done:
 
 Next step:
 
-Push settlements migration commit.
+Push oracle_events migration commit.
 
-Then continue Phase 2 by creating oracle_events table migration.
+Then continue Phase 2 by creating audit_logs table migration.
 
 ## Phase 3 — Backend API MVP
 
@@ -322,12 +324,12 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Added and applied settlements table migration locally.
+- Added and applied oracle_events table migration locally.
 
 ## Next Recommended Step
 
-- Push settlements migration commit.
-- Then continue Phase 2 by creating oracle_events table migration.
+- Push oracle_events migration commit.
+- Then continue Phase 2 by creating audit_logs table migration.
 
 Do not start unrelated coding before checking:
 
