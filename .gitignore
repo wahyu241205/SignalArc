@@ -51,3 +51,6 @@ next-env.d.ts
 # allow safe environment templates
 !.env.example
 !**/.env.example
+
+# Local-only internal planning notes
+docs/internal/
