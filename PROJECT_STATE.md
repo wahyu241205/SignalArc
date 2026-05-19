@@ -65,7 +65,7 @@ Not done:
 
 ## Phase 2 — Core Database Schema
 
-Status: In progress, about 40%.
+Status: COMPLETE.
 
 Done:
 
@@ -100,6 +100,22 @@ Done:
 - Created agent_access table migration.
 - Applied agent_access migration locally.
 
+Completed migrations:
+
+- `000001_create_users_table`
+- `000002_create_wallets_table`
+- `000003_create_markets_table`
+- `000004_create_positions_table`
+- `000005_create_trades_table`
+- `000006_create_liquidity_table`
+- `000007_create_resolutions_table`
+- `000008_create_settlements_table`
+- `000009_create_oracle_events_table`
+- `000010_create_audit_logs_table`
+- `000011_create_api_keys_table`
+- `000012_create_webhooks_table`
+- `000013_create_agent_access_table`
+
 Current local database tables:
 
 - `users`
@@ -122,17 +138,20 @@ Current local database migration status:
 - version: `13`
 - dirty: `false`
 
+Validation results:
+
+- final schema review: `PASS`
+- rollback/down migration test: `PASS`
+- local demo seed validation: `PASS`
+- migration status: `version=13`, `dirty=false`
+
 Not done:
 
-- Final schema review.
-- Rollback/down migration test.
-- Seed data for local demo.
+- None for Phase 2 core schema.
 
 Next step:
 
-Push agent_access migration commit.
-
-Then run final Phase 2 schema review.
+Start Phase 3 Backend API MVP by wiring database access and read-only health/schema validation endpoints.
 
 ## Phase 3 — Backend API MVP
 
@@ -332,12 +351,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Added and applied agent_access table migration locally.
+- Phase 2 Core Database Schema completed.
 
 ## Next Recommended Step
 
-- Push agent_access migration commit.
-- Then run final Phase 2 schema review.
+- Start Phase 3 Backend API MVP by wiring database access and read-only health/schema validation endpoints.
 
 Do not start unrelated coding before checking:
 
