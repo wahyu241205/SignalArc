@@ -85,6 +85,8 @@ Done:
 - Applied trades migration locally.
 - Created liquidity table migration.
 - Applied liquidity migration locally.
+- Created resolutions table migration.
+- Applied resolutions migration locally.
 
 Current local database tables:
 
@@ -94,16 +96,16 @@ Current local database tables:
 - `positions`
 - `trades`
 - `liquidity`
+- `resolutions`
 - `schema_migrations`
 
 Current local database migration status:
 
-- version: `6`
+- version: `7`
 - dirty: `false`
 
 Not done:
 
-- `resolutions` table.
 - `settlements` table.
 - `oracle_events` table.
 - `audit_logs` table.
@@ -116,9 +118,9 @@ Not done:
 
 Next step:
 
-Push liquidity migration commit.
+Push resolutions migration commit.
 
-Then continue Phase 2 by creating resolutions table migration.
+Then continue Phase 2 by creating settlements table migration.
 
 ## Phase 3 — Backend API MVP
 
@@ -318,12 +320,12 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Added and applied liquidity table migration locally.
+- Added and applied resolutions table migration locally.
 
 ## Next Recommended Step
 
-- Push liquidity migration commit.
-- Then continue Phase 2 by creating resolutions table migration.
+- Push resolutions migration commit.
+- Then continue Phase 2 by creating settlements table migration.
 
 Do not start unrelated coding before checking:
 
