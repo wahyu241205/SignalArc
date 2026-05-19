@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -65,6 +66,14 @@ func (db *DB) Ping(parent context.Context) error {
 	}
 
 	return nil
+}
+
+func (db *DB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return db.pool.Query(ctx, sql, args...)
+}
+
+func (db *DB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return db.pool.QueryRow(ctx, sql, args...)
 }
 
 func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {

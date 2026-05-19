@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Continue Phase 3 Backend API MVP by adding read-only repository layer for core database entities.
+Continue Phase 3 Backend API MVP by adding read-only market listing and market detail endpoints.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 25%.
+Status: Started, about 30%.
 
 Done:
 
@@ -176,6 +176,7 @@ Done:
 - Verified `/health`, `/readyz`, and `/schema/validate` locally.
 - Refactored backend API route registration into `internal/api`.
 - Added consistent JSON response/error helper package in `internal/httpjson`.
+- Added read-only repository layer for users, wallets, and markets.
 - Verified:
 
 ```bash
@@ -196,9 +197,6 @@ Current endpoints:
 
 Not done:
 
-- User repository.
-- Wallet repository.
-- Market repository.
 - Position repository.
 - Trade repository.
 - Market creation endpoint.
@@ -361,7 +359,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Continue Phase 3 Backend API MVP by adding read-only repository layer for core database entities.
+- Continue Phase 3 Backend API MVP by adding read-only market listing and market detail endpoints.
 
 Do not start unrelated coding before checking:
 
