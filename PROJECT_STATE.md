@@ -232,7 +232,7 @@ Not done:
 
 ## Phase 4 — Frontend MVP
 
-Status: In progress, Phase 4.6 complete.
+Status: In progress, Phase 4.7 complete.
 
 Done:
 
@@ -271,11 +271,15 @@ Done:
 - Added portfolio view at `apps/web/src/features/portfolio/portfolio-view.tsx`.
 - Added read-only portfolio idle, loading, empty, error, and loaded states.
 - Kept portfolio UI explicitly read-only: no wallet balance, no claim flow, no settlement mutation.
+- Added frontend market resolution API helpers for `GET /markets/{market_id}/resolution` and `GET /markets/{market_id}/settlements`.
+- Added market resolution panel at `apps/web/src/features/markets/market-resolution-panel.tsx`.
+- Wired market resolution panel into the market detail UI.
+- Added read-only resolution loading, empty/not-found, error, and loaded states.
+- Kept resolution UI explicitly read-only: no resolver submission, no claim flow, no settlement execution, no eligibility inference.
 
 Not done:
 
 - SignalArc landing page.
-- Resolver dashboard.
 - Intelligence dashboard.
 - Wallet connect UI integration.
 - Frontend loading/error states.

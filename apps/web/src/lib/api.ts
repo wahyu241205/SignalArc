@@ -116,6 +116,18 @@ export type Settlement = {
   updated_at: string
 }
 
+export type Resolution = {
+  id: string
+  market_id: string
+  winning_outcome: string | null
+  status: string
+  resolver_type: string | null
+  evidence_reference: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type AgentMarket = {
   id: string
   title: string
@@ -171,6 +183,14 @@ export type UserPositionsResponse = {
 }
 
 export type UserSettlementsResponse = {
+  settlements: Settlement[]
+}
+
+export type MarketResolutionResponse = {
+  resolution: Resolution
+}
+
+export type MarketSettlementsResponse = {
   settlements: Settlement[]
 }
 
@@ -304,6 +324,18 @@ export function getUserPositions(userId: string) {
 
 export function getUserSettlements(userId: string) {
   return apiRequest<UserSettlementsResponse>(`/users/${encodeURIComponent(userId)}/settlements`)
+}
+
+export function getMarketResolution(marketId: string) {
+  return apiRequest<MarketResolutionResponse>(
+    `/markets/${encodeURIComponent(marketId)}/resolution`,
+  )
+}
+
+export function getMarketSettlements(marketId: string) {
+  return apiRequest<MarketSettlementsResponse>(
+    `/markets/${encodeURIComponent(marketId)}/settlements`,
+  )
 }
 
 export function getAgentMarkets() {
