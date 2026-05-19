@@ -351,16 +351,17 @@ Not done:
 
 ## Phase 6 — Contracts / Settlement Prototype
 
-Status: Not started, 0%.
+Status: Started, Phase 6.2 next.
 
 Done:
 
 - Stack decision: Solidity + Foundry + OpenZeppelin.
+- Created `contracts` folder with `src`, `test`, and `script` placeholders.
+- Added minimal Foundry workspace config at `contracts/foundry.toml`.
+- Added `contracts/README.md` with prototype boundaries.
 
 Not done:
 
-- Create `contracts` folder.
-- Initialize Foundry.
 - Define market contract scope.
 - Define settlement contract scope.
 - Define custody/collateral assumptions.
@@ -435,11 +436,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Phase 5 Arc / Circle integration planning completed.
+- Phase 6.1 contracts workspace skeleton completed.
 
 ## Next Recommended Step
 
-- Start Phase 6 Contracts / Settlement Prototype by defining the minimal Solidity + Foundry contract scope from the completed internal Phase 5 planning notes. Do not implement production custody, settlement, or claim behavior beyond the approved prototype scope.
+- Start Phase 6.2 by defining the minimal binary market contract scope before adding USDC collateral, settlement, claim logic, or external dependencies.
 
 Do not start unrelated coding before checking:
 
