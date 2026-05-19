@@ -13,11 +13,17 @@ import (
 	"github.com/wahyu241205/SignalArc/backend/internal/repository"
 )
 
-const defaultMarketsLimit = 50
+const (
+	defaultListLimit    = 50
+	defaultMarketsLimit = defaultListLimit
+)
 
 func NewRouter(db *database.DB) http.Handler {
 	router := chi.NewRouter()
 	marketsRepository := repository.NewMarketsRepository(db)
+	positionsRepository := repository.NewPositionsRepository(db)
+	resolutionsRepository := repository.NewResolutionsRepository(db)
+	settlementsRepository := repository.NewSettlementsRepository(db)
 
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -73,7 +79,163 @@ func NewRouter(db *database.DB) http.Handler {
 		httpjson.WriteJSON(w, http.StatusOK, map[string]any{"market": newMarketResponse(market)})
 	})
 
+	router.Get("/users/{user_id}/positions", func(w http.ResponseWriter, r *http.Request) {
+		userID := chi.URLParam(r, "user_id")
+
+		positions, err := positionsRepository.ListPositionsByUserID(r.Context(), userID, defaultListLimit)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "positions_list_failed", "failed to list positions")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{"positions": newPositionResponses(positions)})
+	})
+
+	router.Get("/markets/{market_id}/positions", func(w http.ResponseWriter, r *http.Request) {
+		marketID := chi.URLParam(r, "market_id")
+
+		positions, err := positionsRepository.ListPositionsByMarketID(r.Context(), marketID, defaultListLimit)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "positions_list_failed", "failed to list positions")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{"positions": newPositionResponses(positions)})
+	})
+
+	router.Get("/markets/{market_id}/resolution", func(w http.ResponseWriter, r *http.Request) {
+		marketID := chi.URLParam(r, "market_id")
+
+		resolution, err := resolutionsRepository.GetResolutionByMarketID(r.Context(), marketID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpjson.WriteError(w, http.StatusNotFound, "resolution_not_found", "resolution not found")
+			return
+		}
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "resolution_get_failed", "failed to get resolution")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{"resolution": newResolutionResponse(resolution)})
+	})
+
+	router.Get("/users/{user_id}/settlements", func(w http.ResponseWriter, r *http.Request) {
+		userID := chi.URLParam(r, "user_id")
+
+		settlements, err := settlementsRepository.ListSettlementsByUserID(r.Context(), userID, defaultListLimit)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "settlements_list_failed", "failed to list settlements")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{"settlements": newSettlementResponses(settlements)})
+	})
+
+	router.Get("/markets/{market_id}/settlements", func(w http.ResponseWriter, r *http.Request) {
+		marketID := chi.URLParam(r, "market_id")
+
+		settlements, err := settlementsRepository.ListSettlementsByMarketID(r.Context(), marketID, defaultListLimit)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "settlements_list_failed", "failed to list settlements")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{"settlements": newSettlementResponses(settlements)})
+	})
+
 	return router
+}
+
+type positionResponse struct {
+	ID                string    `json:"id"`
+	UserID            string    `json:"user_id"`
+	MarketID          string    `json:"market_id"`
+	Outcome           string    `json:"outcome"`
+	Quantity          string    `json:"quantity"`
+	AverageEntryPrice string    `json:"average_entry_price"`
+	RealizedPnL       string    `json:"realized_pnl"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+func newPositionResponses(positions []repository.Position) []positionResponse {
+	responses := make([]positionResponse, 0, len(positions))
+	for _, position := range positions {
+		responses = append(responses, positionResponse{
+			ID:                position.ID,
+			UserID:            position.UserID,
+			MarketID:          position.MarketID,
+			Outcome:           position.Outcome,
+			Quantity:          position.Quantity,
+			AverageEntryPrice: position.AverageEntryPrice,
+			RealizedPnL:       position.RealizedPnL,
+			CreatedAt:         position.CreatedAt,
+			UpdatedAt:         position.UpdatedAt,
+		})
+	}
+
+	return responses
+}
+
+type resolutionResponse struct {
+	ID                string     `json:"id"`
+	MarketID          string     `json:"market_id"`
+	WinningOutcome    *string    `json:"winning_outcome"`
+	Status            string     `json:"status"`
+	ResolverType      *string    `json:"resolver_type"`
+	EvidenceReference *string    `json:"evidence_reference"`
+	ResolvedAt        *time.Time `json:"resolved_at"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+func newResolutionResponse(resolution repository.Resolution) resolutionResponse {
+	return resolutionResponse{
+		ID:                resolution.ID,
+		MarketID:          resolution.MarketID,
+		WinningOutcome:    nullStringPtr(resolution.WinningOutcome),
+		Status:            resolution.Status,
+		ResolverType:      nullStringPtr(resolution.ResolverType),
+		EvidenceReference: nullStringPtr(resolution.EvidenceReference),
+		ResolvedAt:        nullTimePtr(resolution.ResolvedAt),
+		CreatedAt:         resolution.CreatedAt,
+		UpdatedAt:         resolution.UpdatedAt,
+	}
+}
+
+type settlementResponse struct {
+	ID           string     `json:"id"`
+	MarketID     string     `json:"market_id"`
+	UserID       *string    `json:"user_id"`
+	ResolutionID *string    `json:"resolution_id"`
+	Outcome      *string    `json:"outcome"`
+	Amount       string     `json:"amount"`
+	Status       string     `json:"status"`
+	TxHash       *string    `json:"tx_hash"`
+	SettledAt    *time.Time `json:"settled_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+func newSettlementResponses(settlements []repository.Settlement) []settlementResponse {
+	responses := make([]settlementResponse, 0, len(settlements))
+	for _, settlement := range settlements {
+		responses = append(responses, settlementResponse{
+			ID:           settlement.ID,
+			MarketID:     settlement.MarketID,
+			UserID:       nullStringPtr(settlement.UserID),
+			ResolutionID: nullStringPtr(settlement.ResolutionID),
+			Outcome:      nullStringPtr(settlement.Outcome),
+			Amount:       settlement.Amount,
+			Status:       settlement.Status,
+			TxHash:       nullStringPtr(settlement.TxHash),
+			SettledAt:    nullTimePtr(settlement.SettledAt),
+			CreatedAt:    settlement.CreatedAt,
+			UpdatedAt:    settlement.UpdatedAt,
+		})
+	}
+
+	return responses
 }
 
 type marketResponse struct {

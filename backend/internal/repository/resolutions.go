@@ -47,6 +47,25 @@ func (r *ResolutionsRepository) GetResolutionByID(ctx context.Context, id string
 	return resolution, err
 }
 
+func (r *ResolutionsRepository) GetResolutionByMarketID(ctx context.Context, marketID string) (Resolution, error) {
+	var resolution Resolution
+	err := r.db.QueryRow(ctx, resolutionSelectSQL+`
+		WHERE market_id = $1
+	`, marketID).Scan(
+		&resolution.ID,
+		&resolution.MarketID,
+		&resolution.WinningOutcome,
+		&resolution.Status,
+		&resolution.ResolverType,
+		&resolution.EvidenceReference,
+		&resolution.ResolvedAt,
+		&resolution.CreatedAt,
+		&resolution.UpdatedAt,
+	)
+
+	return resolution, err
+}
+
 func (r *ResolutionsRepository) ListResolutionsByMarketID(ctx context.Context, marketID string, limit int) ([]Resolution, error) {
 	rows, err := r.db.Query(ctx, resolutionSelectSQL+`
 		WHERE market_id = $1

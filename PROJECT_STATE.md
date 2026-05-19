@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Continue Phase 3 Backend API MVP by adding read-only position, resolution, and settlement status endpoints.
+Continue Phase 3 Backend API MVP by adding market creation endpoint with request validation.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 40%.
+Status: Started, about 45%.
 
 Done:
 
@@ -180,6 +180,9 @@ Done:
 - Added read-only market listing endpoint.
 - Added read-only market detail endpoint.
 - Added read-only repository layer for positions, trades, resolutions, and settlements.
+- Added read-only position endpoints.
+- Added read-only resolution status endpoint.
+- Added read-only settlement status endpoints.
 - Verified:
 
 ```bash
@@ -199,14 +202,17 @@ Current endpoints:
 - `GET /schema/validate`
 - `GET /markets`
 - `GET /markets/{id}`
+- `GET /users/{user_id}/positions`
+- `GET /markets/{market_id}/positions`
+- `GET /markets/{market_id}/resolution`
+- `GET /users/{user_id}/settlements`
+- `GET /markets/{market_id}/settlements`
 
 Not done:
 
 - Market creation endpoint.
 - Trade intent endpoint.
-- Position endpoint.
 - Resolver endpoint.
-- Settlement status endpoint.
 - Agent API endpoint.
 - Request validation.
 - Structured logging middleware.
@@ -360,7 +366,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Continue Phase 3 Backend API MVP by adding read-only position, resolution, and settlement status endpoints.
+- Continue Phase 3 Backend API MVP by adding market creation endpoint with request validation.
 
 Do not start unrelated coding before checking:
 
