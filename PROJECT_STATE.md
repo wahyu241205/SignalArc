@@ -232,7 +232,7 @@ Not done:
 
 ## Phase 4 — Frontend MVP
 
-Status: In progress, Phase 4.4 complete.
+Status: In progress, Phase 4.5 complete.
 
 Done:
 
@@ -261,11 +261,15 @@ Done:
 - Added create market page at `apps/web/src/app/markets/new/page.tsx`.
 - Added create market form at `apps/web/src/features/markets/create-market-form.tsx`.
 - Added create market idle, submitting, success, and error states.
+- Added frontend `createTradeIntent()` API helper for `POST /trade-intents`.
+- Added trade intent panel at `apps/web/src/features/markets/trade-intent-panel.tsx`.
+- Wired trade intent panel into the market detail UI.
+- Added trade intent idle, submitting, success, and error states.
+- Kept trade intent UI explicitly intent-only: no wallet execution, no onchain settlement, no position update.
 
 Not done:
 
 - SignalArc landing page.
-- YES/NO trade panel UI.
 - User portfolio page.
 - Resolver dashboard.
 - Intelligence dashboard.

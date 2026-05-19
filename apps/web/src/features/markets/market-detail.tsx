@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { ApiError, getMarket, type Market } from "@/lib/api"
+import { TradeIntentPanel } from "@/features/markets/trade-intent-panel"
 
 type MarketDetailState =
   | { status: "loading" }
@@ -163,5 +164,10 @@ export function MarketDetail({ marketId }: { marketId: string }) {
     )
   }
 
-  return <MarketDetailCard market={state.market} />
+  return (
+    <div className="grid gap-6">
+      <MarketDetailCard market={state.market} />
+      <TradeIntentPanel marketId={state.market.id} />
+    </div>
+  )
 }

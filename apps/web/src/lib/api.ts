@@ -74,6 +74,22 @@ export type Market = {
   updated_at: string
 }
 
+export type Trade = {
+  id: string
+  user_id: string
+  market_id: string
+  outcome: string
+  side: string
+  quantity: string
+  price: string
+  collateral_amount: string
+  fee_amount: string
+  status: string
+  tx_hash: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type AgentMarket = {
   id: string
   title: string
@@ -105,6 +121,23 @@ export type CreateMarketRequest = {
   resolution_source?: string
   opens_at?: string
   closes_at: string
+}
+
+export type CreateTradeIntentRequest = {
+  user_id: string
+  market_id: string
+  outcome: "YES" | "NO"
+  side: "BUY" | "SELL"
+  quantity: string
+  price: string
+}
+
+export type TradeIntentResponse = {
+  trade: Trade
+  execution: {
+    status: string
+    reason: string
+  }
 }
 
 export type AgentMarketsResponse = {
@@ -219,6 +252,13 @@ export function getMarket(id: string) {
 
 export function createMarket(input: CreateMarketRequest) {
   return apiRequest<MarketResponse>("/markets", {
+    method: "POST",
+    body: input,
+  })
+}
+
+export function createTradeIntent(input: CreateTradeIntentRequest) {
+  return apiRequest<TradeIntentResponse>("/trade-intents", {
     method: "POST",
     body: input,
   })
