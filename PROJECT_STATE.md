@@ -81,6 +81,8 @@ Done:
 - Created positions table migration.
 - Applied positions migration locally.
 - Committed positions migration.
+- Created trades table migration.
+- Applied trades migration locally.
 
 Current local database tables:
 
@@ -88,11 +90,16 @@ Current local database tables:
 - `wallets`
 - `markets`
 - `positions`
+- `trades`
 - `schema_migrations`
+
+Current local database migration status:
+
+- version: `5`
+- dirty: `false`
 
 Not done:
 
-- `trades` table.
 - `liquidity` table.
 - `resolutions` table.
 - `settlements` table.
@@ -107,9 +114,9 @@ Not done:
 
 Next step:
 
-```bash
-migrate create -ext sql -dir backend/migrations -seq create_trades_table
-```
+Commit trades migration files and `PROJECT_STATE.md`.
+
+Then continue Phase 2 by creating liquidity table migration.
 
 ## Phase 3 — Backend API MVP
 
@@ -309,18 +316,12 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Added and pushed positions table migration.
-- Latest known Git status: working tree clean, `main` up to date with `origin/main`.
+- Added and applied trades table migration locally.
 
 ## Next Recommended Step
 
-Continue Phase 2 core database schema.
-
-Create migration:
-
-```bash
-migrate create -ext sql -dir backend/migrations -seq create_trades_table
-```
+- Commit trades migration files and `PROJECT_STATE.md`.
+- Then continue Phase 2 by creating liquidity table migration.
 
 Do not start unrelated coding before checking:
 
