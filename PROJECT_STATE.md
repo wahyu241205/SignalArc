@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Continue Phase 3 Backend API MVP by adding structured logging middleware and basic request validation cleanup.
+Continue Phase 3 Backend API MVP by splitting oversized router code into focused handler and response files.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 65%.
+Status: Started, about 75%.
 
 Done:
 
@@ -187,6 +187,9 @@ Done:
 - Added market creation request validation.
 - Added trade intent endpoint baseline.
 - Added agent-readable market API baseline.
+- Added request ID middleware.
+- Added structured request logging middleware.
+- Added panic recoverer middleware.
 - Verified:
 
 ```bash
@@ -219,7 +222,6 @@ Not done:
 
 - Resolver endpoint.
 - Request validation.
-- Structured logging middleware.
 - CORS middleware.
 - Auth middleware.
 - API key middleware.
@@ -370,7 +372,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Continue Phase 3 Backend API MVP by adding structured logging middleware and basic request validation cleanup.
+- Continue Phase 3 Backend API MVP by splitting oversized router code into focused handler and response files.
 
 Do not start unrelated coding before checking:
 

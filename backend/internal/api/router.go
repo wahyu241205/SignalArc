@@ -1,7 +1,10 @@
 package api
 
 import (
+	"context"
+	cryptorand "crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math/big"
@@ -13,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog/log"
 	"github.com/wahyu241205/SignalArc/backend/internal/database"
 	"github.com/wahyu241205/SignalArc/backend/internal/httpjson"
 	"github.com/wahyu241205/SignalArc/backend/internal/repository"
@@ -26,8 +30,12 @@ const (
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 var decimalPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]{1,18})?$`)
 
+type requestIDContextKey struct{}
+
 func NewRouter(db *database.DB) http.Handler {
 	router := chi.NewRouter()
+	router.Use(requestIDMiddleware, requestLoggingMiddleware, recovererMiddleware)
+
 	marketsRepository := repository.NewMarketsRepository(db)
 	positionsRepository := repository.NewPositionsRepository(db)
 	resolutionsRepository := repository.NewResolutionsRepository(db)
@@ -244,12 +252,12 @@ type createTradeIntentRequest struct {
 
 func (request createTradeIntentRequest) toRepositoryInput() (repository.CreateTradeIntentInput, error) {
 	userID := strings.TrimSpace(request.UserID)
-	if userID == "" || !uuidPattern.MatchString(userID) {
+	if userID == "" || !isUUIDShape(userID) {
 		return repository.CreateTradeIntentInput{}, errors.New("user_id is required")
 	}
 
 	marketID := strings.TrimSpace(request.MarketID)
-	if marketID == "" || !uuidPattern.MatchString(marketID) {
+	if marketID == "" || !isUUIDShape(marketID) {
 		return repository.CreateTradeIntentInput{}, errors.New("market_id is required")
 	}
 
@@ -351,6 +359,10 @@ func significantIntegerDigits(value string) int {
 	return len(trimmed)
 }
 
+func isUUIDShape(value string) bool {
+	return uuidPattern.MatchString(value)
+}
+
 type createMarketRequest struct {
 	CreatorUserID    string  `json:"creator_user_id"`
 	Title            string  `json:"title"`
@@ -429,7 +441,7 @@ func (request createMarketRequest) toRepositoryInput(now time.Time) (repository.
 	}
 
 	creatorUserID := strings.TrimSpace(request.CreatorUserID)
-	if creatorUserID == "" || !uuidPattern.MatchString(creatorUserID) {
+	if creatorUserID == "" || !isUUIDShape(creatorUserID) {
 		return repository.CreateMarketInput{}, errors.New("creator_user_id is required")
 	}
 
@@ -700,4 +712,90 @@ func nullTimePtr(value sql.NullTime) *time.Time {
 	}
 
 	return &value.Time
+}
+
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (recorder *responseRecorder) WriteHeader(statusCode int) {
+	recorder.statusCode = statusCode
+	recorder.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (recorder *responseRecorder) Write(data []byte) (int, error) {
+	if recorder.statusCode == 0 {
+		recorder.statusCode = http.StatusOK
+	}
+
+	return recorder.ResponseWriter.Write(data)
+}
+
+func requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if requestID == "" {
+			requestID = newRequestID()
+		}
+
+		w.Header().Set("X-Request-ID", requestID)
+		ctx := context.WithValue(r.Context(), requestIDContextKey{}, requestID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func requestLoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startedAt := time.Now()
+		recorder := &responseRecorder{ResponseWriter: w}
+
+		next.ServeHTTP(recorder, r)
+
+		statusCode := recorder.statusCode
+		if statusCode == 0 {
+			statusCode = http.StatusOK
+		}
+
+		log.Info().
+			Str("method", r.Method).
+			Str("path", r.URL.Path).
+			Int("status_code", statusCode).
+			Dur("duration", time.Since(startedAt)).
+			Str("remote_addr", r.RemoteAddr).
+			Str("request_id", requestIDFromContext(r.Context())).
+			Msg("http request")
+	})
+}
+
+func recovererMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				log.Error().
+					Interface("panic", recovered).
+					Str("method", r.Method).
+					Str("path", r.URL.Path).
+					Str("request_id", requestIDFromContext(r.Context())).
+					Msg("panic recovered")
+				httpjson.WriteError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func newRequestID() string {
+	var bytes [16]byte
+	if _, err := cryptorand.Read(bytes[:]); err == nil {
+		return hex.EncodeToString(bytes[:])
+	}
+
+	return time.Now().UTC().Format("20060102150405.000000000")
+}
+
+func requestIDFromContext(ctx context.Context) string {
+	requestID, _ := ctx.Value(requestIDContextKey{}).(string)
+	return requestID
 }
