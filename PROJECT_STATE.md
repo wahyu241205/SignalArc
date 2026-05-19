@@ -306,7 +306,7 @@ Not done:
 
 ## Phase 5 — Arc / Circle Integration
 
-Status: Planning ready, Phase 5.1 next.
+Status: Planning ready, Phase 5.2 next.
 
 Done:
 
@@ -339,11 +339,11 @@ Done:
   - ERC-20 interface uses 6 decimals
   - both interfaces share one underlying USDC balance
 - Collected preliminary Circle Docs AI response for Circle Wallets, CCTP, Gateway, Paymaster, Circle Agent Stack, and Arc Testnet support; this still needs exact official page snapshots before implementation decisions.
+- Created `docs/arc-circle-research.md` as the Phase 5.1 Arc / Circle research document.
 
 Not done:
 
 - Confirm USDC flow from Circle docs.
-- Create `docs/arc-circle-research.md`.
 - Create `docs/wallet-strategy.md`.
 - Create `docs/usdc-integration-plan.md`.
 - Create `docs/agent-wallet-boundary.md`.
@@ -445,11 +445,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Phase 2 Core Database Schema completed.
+- Phase 5.1 Arc / Circle research document completed.
 
 ## Next Recommended Step
 
-- Start Phase 5.1 by creating `docs/arc-circle-research.md` from official Arc and Circle documentation snapshots before implementing any wallet, Arc, Circle, or contract integration.
+- Start Phase 5.2 by creating `docs/wallet-strategy.md` after collecting exact official Circle documentation snapshots needed for wallet strategy decisions.
 
 Do not start unrelated coding before checking:
 
