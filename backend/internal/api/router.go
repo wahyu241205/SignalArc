@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"net/http"
 	"regexp"
 	"strings"
@@ -23,6 +24,7 @@ const (
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+var decimalPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]{1,18})?$`)
 
 func NewRouter(db *database.DB) http.Handler {
 	router := chi.NewRouter()
@@ -30,6 +32,7 @@ func NewRouter(db *database.DB) http.Handler {
 	positionsRepository := repository.NewPositionsRepository(db)
 	resolutionsRepository := repository.NewResolutionsRepository(db)
 	settlementsRepository := repository.NewSettlementsRepository(db)
+	tradesRepository := repository.NewTradesRepository(db)
 
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -69,6 +72,16 @@ func NewRouter(db *database.DB) http.Handler {
 		httpjson.WriteJSON(w, http.StatusOK, map[string]any{"markets": newMarketResponses(markets)})
 	})
 
+	router.Get("/agent/markets", func(w http.ResponseWriter, r *http.Request) {
+		markets, err := marketsRepository.ListMarkets(r.Context(), defaultMarketsLimit)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "markets_list_failed", "failed to list markets")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{"markets": newAgentMarketResponses(markets)})
+	})
+
 	router.Post("/markets", func(w http.ResponseWriter, r *http.Request) {
 		var request createMarketRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -93,6 +106,48 @@ func NewRouter(db *database.DB) http.Handler {
 		}
 
 		httpjson.WriteJSON(w, http.StatusCreated, map[string]any{"market": newMarketResponse(market)})
+	})
+
+	router.Post("/trade-intents", func(w http.ResponseWriter, r *http.Request) {
+		var request createTradeIntentRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+			return
+		}
+
+		input, err := request.toRepositoryInput()
+		if err != nil {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_trade_intent", "invalid trade intent")
+			return
+		}
+
+		market, err := marketsRepository.GetMarketByID(r.Context(), input.MarketID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpjson.WriteError(w, http.StatusNotFound, "market_not_found", "market not found")
+			return
+		}
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "trade_intent_create_failed", "failed to create trade intent")
+			return
+		}
+		if market.Status != "OPEN" {
+			httpjson.WriteError(w, http.StatusBadRequest, "market_not_open", "market is not open")
+			return
+		}
+
+		trade, err := tradesRepository.CreateTradeIntent(r.Context(), input)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "trade_intent_create_failed", "failed to create trade intent")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusCreated, map[string]any{
+			"trade": newTradeResponse(trade),
+			"execution": map[string]string{
+				"status": "not_executed",
+				"reason": "onchain execution is not implemented in Phase 3 backend MVP",
+			},
+		})
 	})
 
 	router.Get("/markets/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +233,124 @@ func NewRouter(db *database.DB) http.Handler {
 	return router
 }
 
+type createTradeIntentRequest struct {
+	UserID   string `json:"user_id"`
+	MarketID string `json:"market_id"`
+	Outcome  string `json:"outcome"`
+	Side     string `json:"side"`
+	Quantity string `json:"quantity"`
+	Price    string `json:"price"`
+}
+
+func (request createTradeIntentRequest) toRepositoryInput() (repository.CreateTradeIntentInput, error) {
+	userID := strings.TrimSpace(request.UserID)
+	if userID == "" || !uuidPattern.MatchString(userID) {
+		return repository.CreateTradeIntentInput{}, errors.New("user_id is required")
+	}
+
+	marketID := strings.TrimSpace(request.MarketID)
+	if marketID == "" || !uuidPattern.MatchString(marketID) {
+		return repository.CreateTradeIntentInput{}, errors.New("market_id is required")
+	}
+
+	outcome := strings.TrimSpace(request.Outcome)
+	if outcome != "YES" && outcome != "NO" {
+		return repository.CreateTradeIntentInput{}, errors.New("outcome must be YES or NO")
+	}
+
+	side := strings.TrimSpace(request.Side)
+	if side != "BUY" && side != "SELL" {
+		return repository.CreateTradeIntentInput{}, errors.New("side must be BUY or SELL")
+	}
+
+	quantity, quantityRat, err := parseDecimal(request.Quantity)
+	if err != nil || quantityRat.Sign() <= 0 {
+		return repository.CreateTradeIntentInput{}, errors.New("quantity must be greater than zero")
+	}
+
+	price, priceRat, err := parseDecimal(request.Price)
+	if err != nil || priceRat.Sign() < 0 || priceRat.Cmp(big.NewRat(1, 1)) > 0 {
+		return repository.CreateTradeIntentInput{}, errors.New("price must be between zero and one")
+	}
+
+	collateralAmount, err := decimalString(new(big.Rat).Mul(quantityRat, priceRat))
+	if err != nil {
+		return repository.CreateTradeIntentInput{}, err
+	}
+
+	return repository.CreateTradeIntentInput{
+		UserID:           userID,
+		MarketID:         marketID,
+		Outcome:          outcome,
+		Side:             side,
+		Quantity:         quantity,
+		Price:            price,
+		CollateralAmount: collateralAmount,
+	}, nil
+}
+
+func parseDecimal(value string) (string, *big.Rat, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || !decimalPattern.MatchString(trimmed) {
+		return "", nil, errors.New("invalid decimal")
+	}
+	integerPart := strings.SplitN(trimmed, ".", 2)[0]
+	if significantIntegerDigits(integerPart) > 18 {
+		return "", nil, errors.New("decimal integer part exceeds 18 digits")
+	}
+
+	rat, ok := new(big.Rat).SetString(trimmed)
+	if !ok {
+		return "", nil, errors.New("invalid decimal")
+	}
+
+	return trimmed, rat, nil
+}
+
+func decimalString(value *big.Rat) (string, error) {
+	numerator := new(big.Int).Set(value.Num())
+	denominator := new(big.Int).Set(value.Denom())
+	integer := new(big.Int)
+	remainder := new(big.Int)
+	integer.QuoRem(numerator, denominator, remainder)
+
+	if remainder.Sign() == 0 {
+		return integer.String(), nil
+	}
+
+	digits := strings.Builder{}
+	ten := big.NewInt(10)
+	for i := 0; i < 18 && remainder.Sign() != 0; i++ {
+		remainder.Mul(remainder, ten)
+		digit := new(big.Int)
+		digit.QuoRem(remainder, denominator, remainder)
+		digits.WriteString(digit.String())
+	}
+	if remainder.Sign() != 0 {
+		return "", errors.New("decimal requires more than 18 fractional digits")
+	}
+
+	if significantIntegerDigits(integer.String()) > 18 {
+		return "", errors.New("decimal integer part exceeds 18 digits")
+	}
+
+	fractional := strings.TrimRight(digits.String(), "0")
+	if fractional == "" {
+		return integer.String(), nil
+	}
+
+	return integer.String() + "." + fractional, nil
+}
+
+func significantIntegerDigits(value string) int {
+	trimmed := strings.TrimLeft(value, "0")
+	if trimmed == "" {
+		return 0
+	}
+
+	return len(trimmed)
+}
+
 type createMarketRequest struct {
 	CreatorUserID    string  `json:"creator_user_id"`
 	Title            string  `json:"title"`
@@ -191,6 +364,40 @@ type createMarketRequest struct {
 	OpensAt          *string `json:"opens_at"`
 	ClosesAt         string  `json:"closes_at"`
 	hasForbiddenKeys bool
+}
+
+type tradeResponse struct {
+	ID               string    `json:"id"`
+	UserID           string    `json:"user_id"`
+	MarketID         string    `json:"market_id"`
+	Outcome          string    `json:"outcome"`
+	Side             string    `json:"side"`
+	Quantity         string    `json:"quantity"`
+	Price            string    `json:"price"`
+	CollateralAmount string    `json:"collateral_amount"`
+	FeeAmount        string    `json:"fee_amount"`
+	Status           string    `json:"status"`
+	TxHash           *string   `json:"tx_hash"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+func newTradeResponse(trade repository.Trade) tradeResponse {
+	return tradeResponse{
+		ID:               trade.ID,
+		UserID:           trade.UserID,
+		MarketID:         trade.MarketID,
+		Outcome:          trade.Outcome,
+		Side:             trade.Side,
+		Quantity:         trade.Quantity,
+		Price:            trade.Price,
+		CollateralAmount: trade.CollateralAmount,
+		FeeAmount:        trade.FeeAmount,
+		Status:           trade.Status,
+		TxHash:           nullStringPtr(trade.TxHash),
+		CreatedAt:        trade.CreatedAt,
+		UpdatedAt:        trade.UpdatedAt,
+	}
 }
 
 func (request *createMarketRequest) UnmarshalJSON(data []byte) error {
@@ -416,6 +623,35 @@ type marketResponse struct {
 	WinningOutcome   *string    `json:"winning_outcome"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+type agentMarketResponse struct {
+	ID               string    `json:"id"`
+	Title            string    `json:"title"`
+	Status           string    `json:"status"`
+	Category         *string   `json:"category"`
+	CollateralAsset  string    `json:"collateral_asset"`
+	Chain            string    `json:"chain"`
+	ClosesAt         time.Time `json:"closes_at"`
+	ResolutionSource *string   `json:"resolution_source"`
+}
+
+func newAgentMarketResponses(markets []repository.Market) []agentMarketResponse {
+	responses := make([]agentMarketResponse, 0, len(markets))
+	for _, market := range markets {
+		responses = append(responses, agentMarketResponse{
+			ID:               market.ID,
+			Title:            market.Title,
+			Status:           market.Status,
+			Category:         nullStringPtr(market.Category),
+			CollateralAsset:  market.CollateralAsset,
+			Chain:            market.Chain,
+			ClosesAt:         market.ClosesAt,
+			ResolutionSource: nullStringPtr(market.ResolutionSource),
+		})
+	}
+
+	return responses
 }
 
 func newMarketResponses(markets []repository.Market) []marketResponse {

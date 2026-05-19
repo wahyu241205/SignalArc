@@ -151,11 +151,11 @@ Not done:
 
 Next step:
 
-Continue Phase 3 Backend API MVP by adding trade intent endpoint and agent-readable market API baseline.
+Continue Phase 3 Backend API MVP by adding structured logging middleware and basic request validation cleanup.
 
 ## Phase 3 — Backend API MVP
 
-Status: Started, about 55%.
+Status: Started, about 65%.
 
 Done:
 
@@ -185,6 +185,8 @@ Done:
 - Added read-only settlement status endpoints.
 - Added market creation endpoint.
 - Added market creation request validation.
+- Added trade intent endpoint baseline.
+- Added agent-readable market API baseline.
 - Verified:
 
 ```bash
@@ -205,6 +207,8 @@ Current endpoints:
 - `GET /markets`
 - `GET /markets/{id}`
 - `POST /markets`
+- `POST /trade-intents`
+- `GET /agent/markets`
 - `GET /users/{user_id}/positions`
 - `GET /markets/{market_id}/positions`
 - `GET /markets/{market_id}/resolution`
@@ -213,9 +217,7 @@ Current endpoints:
 
 Not done:
 
-- Trade intent endpoint.
 - Resolver endpoint.
-- Agent API endpoint.
 - Request validation.
 - Structured logging middleware.
 - CORS middleware.
@@ -368,7 +370,7 @@ Do not submit yet until:
 
 ## Next Recommended Step
 
-- Continue Phase 3 Backend API MVP by adding trade intent endpoint and agent-readable market API baseline.
+- Continue Phase 3 Backend API MVP by adding structured logging middleware and basic request validation cleanup.
 
 Do not start unrelated coding before checking:
 

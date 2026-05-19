@@ -29,6 +29,16 @@ type TradesRepository struct {
 	db *database.DB
 }
 
+type CreateTradeIntentInput struct {
+	UserID           string
+	MarketID         string
+	Outcome          string
+	Side             string
+	Quantity         string
+	Price            string
+	CollateralAmount string
+}
+
 func NewTradesRepository(db *database.DB) *TradesRepository {
 	return &TradesRepository{db: db}
 }
@@ -38,6 +48,54 @@ func (r *TradesRepository) GetTradeByID(ctx context.Context, id string) (Trade, 
 	err := r.db.QueryRow(ctx, tradeSelectSQL+`
 		WHERE id = $1
 	`, id).Scan(
+		&trade.ID,
+		&trade.UserID,
+		&trade.MarketID,
+		&trade.Outcome,
+		&trade.Side,
+		&trade.Quantity,
+		&trade.Price,
+		&trade.CollateralAmount,
+		&trade.FeeAmount,
+		&trade.Status,
+		&trade.TxHash,
+		&trade.CreatedAt,
+		&trade.UpdatedAt,
+	)
+
+	return trade, err
+}
+
+func (r *TradesRepository) CreateTradeIntent(ctx context.Context, input CreateTradeIntentInput) (Trade, error) {
+	var trade Trade
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO trades (
+			user_id,
+			market_id,
+			outcome,
+			side,
+			quantity,
+			price,
+			collateral_amount,
+			fee_amount,
+			status
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 'PENDING')
+		RETURNING
+			id::text,
+			user_id::text,
+			market_id::text,
+			outcome,
+			side,
+			quantity::text,
+			price::text,
+			collateral_amount::text,
+			fee_amount::text,
+			status,
+			tx_hash,
+			created_at,
+			updated_at
+	`, input.UserID, input.MarketID, input.Outcome, input.Side, input.Quantity, input.Price, input.CollateralAmount).Scan(
 		&trade.ID,
 		&trade.UserID,
 		&trade.MarketID,
