@@ -26,7 +26,8 @@ contract SignalArcMarketTest {
 
     function testConstructorSetsCloseTimestamp() external {
         uint256 closeTimestamp = block.timestamp + 1 days;
-        SignalArcMarket market = new SignalArcMarket(QUESTION, closeTimestamp, RESOLVER);
+        MockUSDC token = new MockUSDC();
+        SignalArcMarket market = new SignalArcMarket(QUESTION, closeTimestamp, RESOLVER, address(token));
 
         assertEq(market.closeTimestamp(), closeTimestamp);
     }
@@ -49,22 +50,41 @@ contract SignalArcMarketTest {
         assertEq(uint256(market.winningOutcome()), uint256(SignalArcMarket.Outcome.None));
     }
 
+    function testConstructorStoresCollateralTokenAddress() external {
+        MockUSDC token = new MockUSDC();
+        SignalArcMarket market = new SignalArcMarket(QUESTION, block.timestamp + 1 days, RESOLVER, address(token));
+
+        assertEq(address(market.collateralToken()), address(token));
+    }
+
     function testConstructorRevertsOnEmptyQuestion() external {
+        MockUSDC token = new MockUSDC();
+
         vm.expectRevert(SignalArcMarket.EmptyQuestion.selector);
 
-        new SignalArcMarket("", block.timestamp + 1 days, RESOLVER);
+        new SignalArcMarket("", block.timestamp + 1 days, RESOLVER, address(token));
     }
 
     function testConstructorRevertsOnCloseTimestampNotInFuture() external {
+        MockUSDC token = new MockUSDC();
+
         vm.expectRevert(SignalArcMarket.InvalidCloseTimestamp.selector);
 
-        new SignalArcMarket(QUESTION, block.timestamp, RESOLVER);
+        new SignalArcMarket(QUESTION, block.timestamp, RESOLVER, address(token));
     }
 
     function testConstructorRevertsOnZeroResolver() external {
+        MockUSDC token = new MockUSDC();
+
         vm.expectRevert(SignalArcMarket.InvalidResolver.selector);
 
-        new SignalArcMarket(QUESTION, block.timestamp + 1 days, address(0));
+        new SignalArcMarket(QUESTION, block.timestamp + 1 days, address(0), address(token));
+    }
+
+    function testConstructorRevertsOnZeroCollateralToken() external {
+        vm.expectRevert(SignalArcMarket.InvalidCollateralToken.selector);
+
+        new SignalArcMarket(QUESTION, block.timestamp + 1 days, RESOLVER, address(0));
     }
 
     function testIsOpenReturnsTrueBeforeClose() external {
@@ -82,7 +102,8 @@ contract SignalArcMarketTest {
 
     function testCloseMarketSucceedsAfterCloseTime() external {
         uint256 closeTimestamp = block.timestamp + 1 days;
-        SignalArcMarket market = new SignalArcMarket(QUESTION, closeTimestamp, RESOLVER);
+        MockUSDC token = new MockUSDC();
+        SignalArcMarket market = new SignalArcMarket(QUESTION, closeTimestamp, RESOLVER, address(token));
 
         vm.warp(closeTimestamp);
         market.closeMarket();
@@ -149,6 +170,157 @@ contract SignalArcMarketTest {
 
         assertEq(uint256(market.status()), uint256(SignalArcMarket.MarketStatus.Resolved));
         assertEq(uint256(market.winningOutcome()), uint256(SignalArcMarket.Outcome.No));
+    }
+
+    function testOpenPositionRevertsBeforeApprovalInsufficientAllowance() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+
+        vm.prank(USER);
+        vm.expectRevert(MockUSDC.InsufficientAllowance.selector);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 100);
+
+        assertEq(token.balanceOf(USER), 1_000);
+    }
+
+    function testOpenPositionRevertsWithAmountZero() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 100);
+
+        vm.prank(USER);
+        vm.expectRevert(SignalArcMarket.InvalidAmount.selector);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 0);
+    }
+
+    function testOpenPositionRejectsOutcomeNone() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 100);
+
+        vm.prank(USER);
+        vm.expectRevert(SignalArcMarket.InvalidSide.selector);
+        market.openPosition(SignalArcMarket.Outcome.None, 100);
+    }
+
+    function testOpenPositionRejectsInvalidSideIfPossible() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 100);
+
+        vm.prank(USER);
+        (bool success,) = address(market).call(abi.encodeWithSignature("openPosition(uint8,uint256)", 3, 100));
+
+        assertFalse(success);
+    }
+
+    function testOpenPositionAcceptsYesAfterApproval() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 100);
+
+        vm.prank(USER);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 100);
+
+        assertEq(market.yesPositions(USER), 100);
+    }
+
+    function testOpenPositionAcceptsNoAfterApproval() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 100);
+
+        vm.prank(USER);
+        market.openPosition(SignalArcMarket.Outcome.No, 100);
+
+        assertEq(market.noPositions(USER), 100);
+    }
+
+    function testOpenPositionUpdatesYesPositions() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 150);
+
+        vm.prank(USER);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 150);
+
+        assertEq(market.yesPositions(USER), 150);
+    }
+
+    function testOpenPositionUpdatesNoPositions() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 200);
+
+        vm.prank(USER);
+        market.openPosition(SignalArcMarket.Outcome.No, 200);
+
+        assertEq(market.noPositions(USER), 200);
+    }
+
+    function testOpenPositionUpdatesTotalYes() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 250);
+
+        vm.prank(USER);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 250);
+
+        assertEq(market.totalYes(), 250);
+    }
+
+    function testOpenPositionUpdatesTotalNo() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 300);
+
+        vm.prank(USER);
+        market.openPosition(SignalArcMarket.Outcome.No, 300);
+
+        assertEq(market.totalNo(), 300);
+    }
+
+    function testOpenPositionUpdatesTotalCollateral() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 350);
+
+        vm.prank(USER);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 350);
+
+        assertEq(market.totalCollateral(), 350);
+    }
+
+    function testOpenPositionTransfersMockUSDCFromUserToMarket() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 400);
+
+        vm.prank(USER);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 400);
+
+        assertEq(token.balanceOf(USER), 600);
+        assertEq(token.balanceOf(address(market)), 400);
+    }
+
+    function testOpenPositionRevertsAfterMarketCloseTime() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 100);
+
+        vm.warp(market.closeTimestamp());
+        vm.prank(USER);
+        vm.expectRevert(SignalArcMarket.MarketNotOpen.selector);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 100);
+    }
+
+    function testOpenPositionRevertsAfterCancelledMarket() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 100);
+
+        vm.prank(RESOLVER);
+        market.cancelMarket();
+
+        vm.prank(USER);
+        vm.expectRevert(SignalArcMarket.MarketNotOpen.selector);
+        market.openPosition(SignalArcMarket.Outcome.Yes, 100);
+    }
+
+    function testOpenPositionRevertsAfterResolvedMarket() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        approveMarket(token, market, 100);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        vm.prank(USER);
+        vm.expectRevert(SignalArcMarket.MarketNotOpen.selector);
+        market.openPosition(SignalArcMarket.Outcome.No, 100);
     }
 
     function testMockUSDCDecimalsIsSix() external {
@@ -224,12 +396,15 @@ contract SignalArcMarketTest {
     }
 
     function createMarket() private returns (SignalArcMarket) {
-        return new SignalArcMarket(QUESTION, block.timestamp + 1 days, RESOLVER);
+        MockUSDC token = new MockUSDC();
+
+        return new SignalArcMarket(QUESTION, block.timestamp + 1 days, RESOLVER, address(token));
     }
 
     function createClosedMarket() private returns (SignalArcMarket) {
         uint256 closeTimestamp = block.timestamp + 1 days;
-        SignalArcMarket market = new SignalArcMarket(QUESTION, closeTimestamp, RESOLVER);
+        MockUSDC token = new MockUSDC();
+        SignalArcMarket market = new SignalArcMarket(QUESTION, closeTimestamp, RESOLVER, address(token));
 
         vm.warp(closeTimestamp);
         market.closeMarket();
@@ -237,9 +412,36 @@ contract SignalArcMarketTest {
         return market;
     }
 
+    function createFundedMarket() private returns (SignalArcMarket, MockUSDC) {
+        MockUSDC token = new MockUSDC();
+        SignalArcMarket market = new SignalArcMarket(QUESTION, block.timestamp + 1 days, RESOLVER, address(token));
+        token.mint(USER, 1_000);
+
+        return (market, token);
+    }
+
+    function approveMarket(MockUSDC token, SignalArcMarket market, uint256 amount) private {
+        vm.prank(USER);
+        token.approve(address(market), amount);
+    }
+
+    function closeAndResolveMarket(SignalArcMarket market, SignalArcMarket.Outcome outcome) private {
+        vm.warp(market.closeTimestamp());
+        market.closeMarket();
+
+        vm.prank(RESOLVER);
+        market.resolve(outcome);
+    }
+
     function assertTrue(bool actual) private pure {
         if (!actual) {
             revert("assertTrue failed");
+        }
+    }
+
+    function assertFalse(bool actual) private pure {
+        if (actual) {
+            revert("assertFalse failed");
         }
     }
 

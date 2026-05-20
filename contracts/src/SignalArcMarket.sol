@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+interface IERC20Like {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
+
 contract SignalArcMarket {
     enum MarketStatus {
         Draft,
@@ -19,23 +23,34 @@ contract SignalArcMarket {
     string public question;
     uint256 public closeTimestamp;
     address public resolver;
+    IERC20Like public immutable collateralToken;
     MarketStatus public status;
     Outcome public winningOutcome;
+    mapping(address user => uint256 amount) public yesPositions;
+    mapping(address user => uint256 amount) public noPositions;
+    uint256 public totalYes;
+    uint256 public totalNo;
+    uint256 public totalCollateral;
 
     event MarketCreated(string question, uint256 closeTimestamp, address resolver);
     event MarketClosed();
     event MarketCancelled();
     event MarketResolved(Outcome winningOutcome);
+    event PositionOpened(address indexed user, Outcome indexed side, uint256 amount);
 
     error EmptyQuestion();
     error InvalidCloseTimestamp();
     error InvalidResolver();
+    error InvalidCollateralToken();
     error MarketNotOpen();
     error MarketAlreadyFinalized();
     error UnauthorizedResolver();
     error InvalidOutcome();
+    error InvalidAmount();
+    error InvalidSide();
+    error CollateralTransferFailed();
 
-    constructor(string memory question_, uint256 closeTimestamp_, address resolver_) {
+    constructor(string memory question_, uint256 closeTimestamp_, address resolver_, address collateralToken_) {
         if (bytes(question_).length == 0) {
             revert EmptyQuestion();
         }
@@ -48,9 +63,14 @@ contract SignalArcMarket {
             revert InvalidResolver();
         }
 
+        if (collateralToken_ == address(0)) {
+            revert InvalidCollateralToken();
+        }
+
         question = question_;
         closeTimestamp = closeTimestamp_;
         resolver = resolver_;
+        collateralToken = IERC20Like(collateralToken_);
         status = MarketStatus.Open;
         winningOutcome = Outcome.None;
 
@@ -58,7 +78,38 @@ contract SignalArcMarket {
     }
 
     function isOpen() external view returns (bool) {
-        return status == MarketStatus.Open && block.timestamp < closeTimestamp;
+        return _isOpen();
+    }
+
+    function openPosition(Outcome side, uint256 amount) external {
+        if (!_isOpen()) {
+            revert MarketNotOpen();
+        }
+
+        if (side != Outcome.Yes && side != Outcome.No) {
+            revert InvalidSide();
+        }
+
+        if (amount == 0) {
+            revert InvalidAmount();
+        }
+
+        bool transferred = collateralToken.transferFrom(msg.sender, address(this), amount);
+        if (!transferred) {
+            revert CollateralTransferFailed();
+        }
+
+        if (side == Outcome.Yes) {
+            yesPositions[msg.sender] += amount;
+            totalYes += amount;
+        } else {
+            noPositions[msg.sender] += amount;
+            totalNo += amount;
+        }
+
+        totalCollateral += amount;
+
+        emit PositionOpened(msg.sender, side, amount);
     }
 
     function closeMarket() external {
@@ -102,5 +153,9 @@ contract SignalArcMarket {
         winningOutcome = winningOutcome_;
 
         emit MarketResolved(winningOutcome_);
+    }
+
+    function _isOpen() private view returns (bool) {
+        return status == MarketStatus.Open && block.timestamp < closeTimestamp;
     }
 }
