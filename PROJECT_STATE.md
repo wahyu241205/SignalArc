@@ -434,6 +434,39 @@ Do not submit yet until:
 - Arc + Circle relevance is clear.
 - README explains why SignalArc exists.
 
+## Frontend Wallet and Production-Facing UI Polish
+
+Status: COMPLETE.
+
+Done:
+
+- Added external wallet connection UI using RainbowKit, Wagmi, and Viem.
+- Added Arc Testnet frontend chain configuration.
+- Added app-level Web3 providers for wallet connection.
+- Added responsive dark Web3 layout and navigation.
+- Added visible wallet connection control in the header.
+- Added connected wallet address display through RainbowKit.
+- Added wrong-network warning for non-Arc Testnet wallet connections.
+- Reworked the landing page into a production-facing SignalArc product homepage.
+- Reduced internal developer wording from user-facing pages.
+- Moved contract metadata away from the primary landing hero into lower-priority developer/network context.
+- Reworked markets, market detail, create market, portfolio, and intelligence pages for a cleaner user-facing experience.
+- Kept trade flow intent-only.
+- No Circle SDK added.
+- No Circle API key added.
+- No onchain write execution added.
+- No USDC approve, open position, claim, refund, or resolver transaction UI added.
+- No backend, Docker, contract, DNS, deployment, or mainnet changes added in this step.
+
+Validation:
+
+- `pnpm --dir apps/web lint` passed.
+- `pnpm --dir apps/web exec tsc --noEmit` passed.
+- `pnpm --dir apps/web build` passed.
+- Browser wallet connection UI rendered.
+- Wallet address displayed after connection.
+- Existing frontend pages rendered with the polished dark Web3 UI.
+
 ## Local Docker Backend Step
 
 Status: COMPLETE.
@@ -493,9 +526,8 @@ Done:
 
 ## Next Recommended Step
 
-- Run final local browser smoke test with PostgreSQL and backend running through Docker, while frontend runs manually through `pnpm dev:web`.
-- Do not start DNS or live deployment yet.
-- Do not redeploy contracts or add mainnet configuration.
+- Plan the next controlled frontend/onchain integration step: wallet-aware read-only state and safe onchain-read preparation before any transaction execution.
+- Do not add Circle SDK, Circle API keys, onchain writes, DNS, live deployment, contract redeploy, or mainnet configuration yet.
 
 Do not start unrelated coding before checking:
 

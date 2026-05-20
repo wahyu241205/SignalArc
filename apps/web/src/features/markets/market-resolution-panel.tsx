@@ -48,12 +48,17 @@ function formatDate(value: string | null) {
   }).format(date)
 }
 
+function truncateId(id: string) {
+  if (id.length <= 12) return id
+  return `${id.slice(0, 6)}…${id.slice(-4)}`
+}
+
 async function loadResolution(marketId: string) {
   try {
     const response = await getMarketResolution(marketId)
     return response.data.resolution
   } catch (error) {
-    if (error instanceof ApiError && error.code === "resolution_not_found") {
+    if (error instanceof ApiError && (error.code === "resolution_not_found" || error.status === 404)) {
       return null
     }
 
@@ -89,28 +94,24 @@ function ResolutionDetails({ resolution }: { resolution: Resolution }) {
   return (
     <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <div>
-        <dt className="text-sm font-medium text-muted-foreground">Status</dt>
-        <dd className="mt-1 text-sm text-foreground">{resolution.status}</dd>
+        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Status</dt>
+        <dd className="mt-1 text-sm font-medium text-foreground">{resolution.status}</dd>
       </div>
       <div>
-        <dt className="text-sm font-medium text-muted-foreground">Winning outcome</dt>
-        <dd className="mt-1 text-sm text-foreground">{resolution.winning_outcome ?? "-"}</dd>
+        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Winning Outcome</dt>
+        <dd className="mt-1 text-sm font-medium text-foreground">{resolution.winning_outcome ?? "-"}</dd>
       </div>
       <div>
-        <dt className="text-sm font-medium text-muted-foreground">Resolver type</dt>
-        <dd className="mt-1 text-sm text-foreground">{resolution.resolver_type ?? "-"}</dd>
+        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Resolver Type</dt>
+        <dd className="mt-1 text-sm font-medium text-foreground">{resolution.resolver_type ?? "-"}</dd>
       </div>
       <div>
-        <dt className="text-sm font-medium text-muted-foreground">Evidence reference</dt>
-        <dd className="mt-1 text-sm text-foreground">{resolution.evidence_reference ?? "-"}</dd>
+        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Evidence</dt>
+        <dd className="mt-1 text-sm font-medium text-foreground">{resolution.evidence_reference ?? "-"}</dd>
       </div>
       <div>
-        <dt className="text-sm font-medium text-muted-foreground">Resolved</dt>
-        <dd className="mt-1 text-sm text-foreground">{formatDate(resolution.resolved_at)}</dd>
-      </div>
-      <div>
-        <dt className="text-sm font-medium text-muted-foreground">Updated</dt>
-        <dd className="mt-1 text-sm text-foreground">{formatDate(resolution.updated_at)}</dd>
+        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Resolved</dt>
+        <dd className="mt-1 text-sm font-medium text-foreground">{formatDate(resolution.resolved_at)}</dd>
       </div>
     </dl>
   )
@@ -118,34 +119,36 @@ function ResolutionDetails({ resolution }: { resolution: Resolution }) {
 
 function SettlementsTable({ settlements }: { settlements: Settlement[] }) {
   if (settlements.length === 0) {
-    return <p className="text-sm text-muted-foreground">No settlement rows returned.</p>
+    return <p className="text-sm text-muted-foreground">No settlements yet.</p>
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>User</TableHead>
-          <TableHead>Outcome</TableHead>
-          <TableHead>Amount</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Tx hash</TableHead>
-          <TableHead>Settled</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {settlements.map((settlement) => (
-          <TableRow key={settlement.id}>
-            <TableCell className="font-mono text-xs">{settlement.user_id ?? "-"}</TableCell>
-            <TableCell>{settlement.outcome ?? "-"}</TableCell>
-            <TableCell>{settlement.amount}</TableCell>
-            <TableCell>{settlement.status}</TableCell>
-            <TableCell className="font-mono text-xs">{settlement.tx_hash ?? "-"}</TableCell>
-            <TableCell>{formatDate(settlement.settled_at)}</TableCell>
+    <div className="overflow-x-auto rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>User</TableHead>
+            <TableHead>Outcome</TableHead>
+            <TableHead>Amount</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Settled</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {settlements.map((settlement) => (
+            <TableRow key={settlement.id}>
+              <TableCell className="font-mono text-xs" title={settlement.user_id ?? undefined}>
+                {settlement.user_id ? truncateId(settlement.user_id) : "-"}
+              </TableCell>
+              <TableCell>{settlement.outcome ?? "-"}</TableCell>
+              <TableCell>{settlement.amount}</TableCell>
+              <TableCell>{settlement.status}</TableCell>
+              <TableCell className="text-muted-foreground">{formatDate(settlement.settled_at)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 
@@ -192,21 +195,23 @@ export function MarketResolutionPanel({ marketId }: { marketId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Resolution and settlements</CardTitle>
+        <CardTitle>Resolution & Settlements</CardTitle>
         <CardDescription>
-          Read-only backend state. This does not submit resolver evidence, execute
-          settlement, claim funds, or infer eligibility.
+          Resolution outcome and settlement records for this market.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-6">
         {state.status === "loading" ? (
-          <p className="text-sm text-muted-foreground">Loading resolution state...</p>
+          <div className="animate-pulse space-y-3">
+            <div className="h-4 w-1/3 rounded bg-muted" />
+            <div className="h-4 w-1/2 rounded bg-muted" />
+          </div>
         ) : null}
 
         {state.status === "error" ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
             <p className="text-sm font-medium text-destructive">
-              Unable to load resolution state
+              Unable to load resolution data
             </p>
             <p className="mt-1 text-sm text-muted-foreground">{state.message}</p>
             {state.requestId ? (
@@ -220,7 +225,7 @@ export function MarketResolutionPanel({ marketId }: { marketId: string }) {
         {state.status === "empty" ? (
           <div className="grid gap-6">
             <p className="text-sm text-muted-foreground">
-              No resolution row was returned for this market.
+              This market has not been resolved yet.
             </p>
             <SettlementsTable settlements={state.settlements} />
           </div>

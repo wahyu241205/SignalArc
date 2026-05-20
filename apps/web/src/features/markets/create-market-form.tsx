@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { FormEvent, useState } from "react"
+import { type FormEvent, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -75,6 +75,7 @@ function getErrorState(error: unknown): Extract<SubmitState, { status: "error" }
 
 export function CreateMarketForm() {
   const [state, setState] = useState<SubmitState>({ status: "idle" })
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -107,17 +108,22 @@ export function CreateMarketForm() {
 
   if (state.status === "success") {
     return (
-      <Card>
+      <Card className="border-green-500/20">
         <CardHeader>
-          <CardTitle>Market created</CardTitle>
+          <div className="flex items-center gap-2">
+            <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <CardTitle>Market Created</CardTitle>
+          </div>
           <CardDescription>{state.market.title}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row">
           <Button asChild>
-            <Link href={`/markets/${state.market.id}`}>View market</Link>
+            <Link href={`/markets/${state.market.id}`}>View Market</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/markets">Back to markets</Link>
+            <Link href="/markets">Back to Markets</Link>
           </Button>
         </CardContent>
       </Card>
@@ -127,83 +133,72 @@ export function CreateMarketForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Create market</CardTitle>
+        <CardTitle>Create a Market</CardTitle>
         <CardDescription>
-          Submit a local prototype market creation request to the backend API.
+          Launch a new USDC-settled prediction market on Arc Testnet.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="grid gap-5" onSubmit={handleSubmit}>
-          <div className="grid gap-2">
-            <Label htmlFor="creator_user_id">Creator user ID</Label>
-            <Input
-              id="creator_user_id"
-              name="creator_user_id"
-              defaultValue={localDemoUserId}
-              placeholder="UUID"
-              required
-            />
-          </div>
+          {/* Hidden creator ID — prefilled for demo */}
+          <input type="hidden" name="creator_user_id" value={localDemoUserId} />
 
           <div className="grid gap-2">
-            <Label htmlFor="title">Title</Label>
+            <Label htmlFor="title">Market Question</Label>
             <Input
               id="title"
               name="title"
-              defaultValue="Will the local SignalArc MVP create a usable test market?"
+              placeholder="Will ETH reach $5,000 by end of 2026?"
               required
             />
+            <p className="text-xs text-muted-foreground">
+              Frame as a yes/no question that can be resolved objectively.
+            </p>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea id="description" name="description" />
+            <Label htmlFor="description">Description (optional)</Label>
+            <Textarea
+              id="description"
+              name="description"
+              rows={3}
+              placeholder="Additional context, resolution criteria, or relevant links..."
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="category">Category</Label>
-              <Input id="category" name="category" defaultValue="Local MVP" />
+              <Input id="category" name="category" placeholder="Crypto, Politics, Sports..." />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="chain">Chain</Label>
-              <Input id="chain" name="chain" defaultValue="Arc Testnet" required />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="outcome_yes_label">YES label</Label>
-              <Input id="outcome_yes_label" name="outcome_yes_label" />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="outcome_no_label">NO label</Label>
-              <Input id="outcome_no_label" name="outcome_no_label" />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="collateral_asset">Collateral asset</Label>
-              <Input id="collateral_asset" name="collateral_asset" defaultValue="USDC" />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="resolution_source">Resolution source</Label>
+              <Label htmlFor="resolution_source">Resolution Source</Label>
               <Input
                 id="resolution_source"
                 name="resolution_source"
-                defaultValue="Local operator review"
+                placeholder="CoinGecko, AP News, Official announcement..."
               />
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="opens_at">Opens at</Label>
+              <Label htmlFor="outcome_yes_label">YES Label</Label>
+              <Input id="outcome_yes_label" name="outcome_yes_label" placeholder="Yes" />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="outcome_no_label">NO Label</Label>
+              <Input id="outcome_no_label" name="outcome_no_label" placeholder="No" />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="opens_at">Opens At (optional)</Label>
               <Input id="opens_at" name="opens_at" type="datetime-local" />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="closes_at">Closes at</Label>
+              <Label htmlFor="closes_at">Closes At</Label>
               <Input
                 id="closes_at"
                 name="closes_at"
@@ -212,6 +207,35 @@ export function CreateMarketForm() {
                 type="datetime-local"
               />
             </div>
+          </div>
+
+          {/* Advanced settings — collapsed by default */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showAdvanced ? "▾ Hide" : "▸ Show"} advanced settings
+            </button>
+
+            {showAdvanced ? (
+              <div className="mt-3 grid gap-4 rounded-lg border border-border/50 p-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="collateral_asset" className="text-xs">Collateral Asset</Label>
+                  <Input id="collateral_asset" name="collateral_asset" defaultValue="USDC" className="text-sm" />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="chain" className="text-xs">Chain</Label>
+                  <Input id="chain" name="chain" defaultValue="Arc Testnet" className="text-sm" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <input type="hidden" name="collateral_asset" value="USDC" />
+                <input type="hidden" name="chain" value="Arc Testnet" />
+              </>
+            )}
           </div>
 
           {state.status === "error" ? (
@@ -228,10 +252,10 @@ export function CreateMarketForm() {
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button disabled={state.status === "submitting"} type="submit">
-              {state.status === "submitting" ? "Creating..." : "Create market"}
+              {state.status === "submitting" ? "Creating..." : "Create Market"}
             </Button>
             <Button asChild variant="outline">
-              <Link href="/markets">Back to markets</Link>
+              <Link href="/markets">Cancel</Link>
             </Button>
           </div>
         </form>

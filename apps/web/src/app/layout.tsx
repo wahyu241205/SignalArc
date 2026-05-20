@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+import { NetworkWarning } from "@/components/layout/network-warning";
+import { SiteHeader } from "@/components/layout/site-header";
+import { TestnetBanner } from "@/components/layout/testnet-banner";
+
+import { Providers } from "./providers";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -13,8 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SignalArc Local MVP",
-  description: "Local Arc Testnet prototype interface for SignalArc.",
+  title: "SignalArc — Arc-Native Prediction Markets",
+  description:
+    "Prediction market infrastructure on Arc Testnet. Create, trade, and resolve USDC-settled event markets.",
 };
 
 export default function RootLayout({
@@ -25,9 +32,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <Providers>
+          <TestnetBanner />
+          <SiteHeader />
+          <NetworkWarning />
+          <main className="flex-1">{children}</main>
+        </Providers>
+      </body>
     </html>
   );
 }
