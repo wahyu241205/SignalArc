@@ -351,7 +351,7 @@ Not done:
 
 ## Phase 6 — Contracts / Settlement Prototype
 
-Status: Started, Phase 6.7 next.
+Status: COMPLETE.
 
 Done:
 
@@ -364,11 +364,12 @@ Done:
 - Added local binary position and trade prototype logic with test-only MockUSDC collateral accounting.
 - Added manual resolution and local claim/refund prototype logic with Foundry coverage.
 - Completed contract test coverage hardening and added `contracts/SECURITY_BOUNDARIES.md`.
+- Completed final Phase 6 review and added `contracts/PHASE_6_REVIEW.md`.
 
 Not done:
 
-- Deploy to testnet if supported.
-- Connect backend to contract flow.
+- Arc Testnet deployment is deferred to a later manual owner-run step with local-only secrets.
+- Backend/frontend contract integration is deferred to a later integration phase.
 
 ## Phase 7 — Live Deployment
 
@@ -434,11 +435,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Phase 6.6 contract coverage and security boundary review completed.
+- Phase 6 Contracts / Settlement Prototype completed.
 
 ## Next Recommended Step
 
-- Start Phase 6.7 final Phase 6 review by verifying local tests, reviewing contract boundaries, and updating PROJECT_STATE.md before any manual Arc Testnet deployment.
+- Prepare a manual Arc Testnet deployment checklist without exposing private keys, RPC secrets, `.env` files, or Circle credentials.
 
 Do not start unrelated coding before checking:
 
