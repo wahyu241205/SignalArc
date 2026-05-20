@@ -351,7 +351,7 @@ Not done:
 
 ## Phase 6 — Contracts / Settlement Prototype
 
-Status: Started, Phase 6.6 next.
+Status: Started, Phase 6.7 next.
 
 Done:
 
@@ -363,13 +363,12 @@ Done:
 - Added test-only `MockUSDC` collateral model and Foundry tests for market lifecycle and collateral assumptions.
 - Added local binary position and trade prototype logic with test-only MockUSDC collateral accounting.
 - Added manual resolution and local claim/refund prototype logic with Foundry coverage.
+- Completed contract test coverage hardening and added `contracts/SECURITY_BOUNDARIES.md`.
 
 Not done:
 
 - Deploy to testnet if supported.
 - Connect backend to contract flow.
-- Document security assumptions.
-- Avoid pretending production custody is solved before verified.
 
 ## Phase 7 — Live Deployment
 
@@ -435,11 +434,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Phase 6.5 manual resolution and local claim prototype completed.
+- Phase 6.6 contract coverage and security boundary review completed.
 
 ## Next Recommended Step
 
-- Start Phase 6.6 by completing contract test coverage and security boundary review before any Arc Testnet deployment.
+- Start Phase 6.7 final Phase 6 review by verifying local tests, reviewing contract boundaries, and updating PROJECT_STATE.md before any manual Arc Testnet deployment.
 
 Do not start unrelated coding before checking:
 
