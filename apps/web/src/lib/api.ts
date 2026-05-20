@@ -139,6 +139,17 @@ export type AgentMarket = {
   resolution_source: string | null
 }
 
+export type ArcContractStatus = {
+  network: string
+  chain_id: number
+  signal_arc_market: string
+  usdc_erc20_interface: string
+  explorer: string
+  prototype: boolean
+  production_approved: boolean
+  status: string
+}
+
 export type MarketsResponse = {
   markets: Market[]
 }
@@ -198,19 +209,30 @@ export type AgentMarketsResponse = {
   markets: AgentMarket[]
 }
 
+export type ArcContractResponse = ArcContractStatus
+
 type ApiRequestOptions = Omit<RequestInit, "body" | "method"> & {
   body?: unknown
   method?: RequestMethod
 }
 
+export const localDemoUserId = "10000000-0000-4000-8000-000000000001"
+export const localApiBaseUrl = "http://localhost:4000"
+
 function getApiBaseUrl() {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
 
   if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is required to call the SignalArc API")
+    return localApiBaseUrl
   }
 
-  return baseUrl.replace(/\/+$/, "")
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "")
+
+  if (normalizedBaseUrl === "http://127.0.0.1:4000") {
+    return localApiBaseUrl
+  }
+
+  return normalizedBaseUrl
 }
 
 function buildUrl(path: string) {
@@ -340,4 +362,8 @@ export function getMarketSettlements(marketId: string) {
 
 export function getAgentMarkets() {
   return apiRequest<AgentMarketsResponse>("/agent/markets")
+}
+
+export function getArcContract() {
+  return apiRequest<ArcContractResponse>("/arc/contract")
 }

@@ -38,6 +38,7 @@ type CreateMarketInput struct {
 	Title            string
 	Description      sql.NullString
 	Category         sql.NullString
+	Status           string
 	OutcomeYesLabel  string
 	OutcomeNoLabel   string
 	CollateralAsset  string
@@ -87,6 +88,7 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 			title,
 			description,
 			category,
+			status,
 			outcome_yes_label,
 			outcome_no_label,
 			collateral_asset,
@@ -95,7 +97,7 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 			opens_at,
 			closes_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING
 			id::text,
 			creator_user_id::text,
@@ -120,6 +122,7 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 		input.Title,
 		input.Description,
 		input.Category,
+		input.Status,
 		input.OutcomeYesLabel,
 		input.OutcomeNoLabel,
 		input.CollateralAsset,

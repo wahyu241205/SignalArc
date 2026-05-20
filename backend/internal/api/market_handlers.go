@@ -99,6 +99,7 @@ func (request createMarketRequest) toRepositoryInput(now time.Time) (repository.
 		Title:            title,
 		Description:      optionalString(request.Description),
 		Category:         optionalString(request.Category),
+		Status:           newMarketStatus(now, opensAt),
 		OutcomeYesLabel:  defaultString(request.OutcomeYesLabel, "YES"),
 		OutcomeNoLabel:   defaultString(request.OutcomeNoLabel, "NO"),
 		CollateralAsset:  defaultString(request.CollateralAsset, "USDC"),
@@ -107,6 +108,14 @@ func (request createMarketRequest) toRepositoryInput(now time.Time) (repository.
 		OpensAt:          opensAt,
 		ClosesAt:         closesAt,
 	}, nil
+}
+
+func newMarketStatus(now time.Time, opensAt sql.NullTime) string {
+	if opensAt.Valid && opensAt.Time.After(now) {
+		return "DRAFT"
+	}
+
+	return "OPEN"
 }
 
 func registerMarketRoutes(router chi.Router, marketsRepository *repository.MarketsRepository) {

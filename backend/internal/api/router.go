@@ -15,7 +15,7 @@ const (
 
 func NewRouter(db *database.DB) http.Handler {
 	router := chi.NewRouter()
-	router.Use(requestIDMiddleware, requestLoggingMiddleware, recovererMiddleware)
+	router.Use(requestIDMiddleware, localCORSMiddleware, requestLoggingMiddleware, recovererMiddleware)
 
 	marketsRepository := repository.NewMarketsRepository(db)
 	positionsRepository := repository.NewPositionsRepository(db)
@@ -24,6 +24,7 @@ func NewRouter(db *database.DB) http.Handler {
 	tradesRepository := repository.NewTradesRepository(db)
 
 	registerStatusRoutes(router, db)
+	registerArcRoutes(router)
 	registerMarketRoutes(router, marketsRepository)
 	registerTradeRoutes(router, tradesRepository, marketsRepository)
 	registerPositionRoutes(router, positionsRepository)

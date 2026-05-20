@@ -24,6 +24,7 @@ import {
   ApiError,
   getUserPositions,
   getUserSettlements,
+  localDemoUserId,
   type Position,
   type Settlement,
 } from "@/lib/api"
@@ -238,7 +239,7 @@ export function PortfolioView() {
           <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={handleSubmit}>
             <div className="grid flex-1 gap-2">
               <Label htmlFor="user_id">User ID</Label>
-              <Input id="user_id" name="user_id" placeholder="UUID" />
+              <Input id="user_id" name="user_id" defaultValue={localDemoUserId} placeholder="UUID" />
             </div>
             <Button disabled={state.status === "loading"} type="submit">
               {state.status === "loading" ? "Loading..." : "Load portfolio"}

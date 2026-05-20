@@ -1,65 +1,97 @@
-import Image from "next/image";
+import Link from "next/link"
+
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { ContractStatusCard } from "@/features/arc/contract-status-card"
+import { localApiBaseUrl } from "@/lib/api"
+
+const primaryLinks = [
+  { href: "/markets", label: "Markets", description: "Browse local market records." },
+  { href: "/markets/new", label: "Create market", description: "Create an OPEN local test market." },
+  { href: "/portfolio", label: "Portfolio", description: "Load read-only positions and settlements." },
+  { href: "/intelligence", label: "Intelligence", description: "Inspect agent-readable market data." },
+]
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+    <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-start">
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-muted-foreground">
+                Local Arc Testnet prototype
+              </p>
+              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
+                SignalArc local MVP
+              </h1>
+              <p className="max-w-2xl text-base leading-7 text-muted-foreground">
+                Create and inspect USDC-settled prediction market records through the
+                local Go API. This browser flow is prototype-only and does not execute
+                wallet transactions, Circle actions, or settlement writes.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button asChild>
+                <Link href="/markets">Open markets</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/markets/new">Create local market</Link>
+              </Button>
+            </div>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Local services</CardTitle>
+              <CardDescription>
+                Expected local development endpoints for this MVP.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-4 text-sm">
+                <div>
+                  <dt className="font-medium text-muted-foreground">Frontend</dt>
+                  <dd className="font-mono text-xs">http://localhost:3000</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-muted-foreground">Backend API</dt>
+                  <dd className="font-mono text-xs">{localApiBaseUrl}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-muted-foreground">Scope</dt>
+                  <dd>Local browser MVP, Arc Testnet reference, live use not approved.</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {primaryLinks.map((item) => (
+            <Card key={item.href}>
+              <CardHeader>
+                <CardTitle className="text-base">{item.label}</CardTitle>
+                <CardDescription>{item.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={item.href}>Open</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+
+        <ContractStatusCard />
+      </div>
+    </main>
+  )
 }

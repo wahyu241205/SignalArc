@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ApiError, createMarket, type Market } from "@/lib/api"
+import { ApiError, createMarket, localDemoUserId, type Market } from "@/lib/api"
 
 type SubmitState =
   | { status: "idle" }
@@ -39,6 +39,14 @@ function toRfc3339(value: string) {
   }
 
   return date.toISOString()
+}
+
+function defaultCloseValue() {
+  const date = new Date()
+  date.setDate(date.getDate() + 7)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+
+  return date.toISOString().slice(0, 16)
 }
 
 function getErrorState(error: unknown): Extract<SubmitState, { status: "error" }> {
@@ -121,7 +129,7 @@ export function CreateMarketForm() {
       <CardHeader>
         <CardTitle>Create market</CardTitle>
         <CardDescription>
-          Submit a market creation request to the Phase 3 backend API.
+          Submit a local prototype market creation request to the backend API.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -131,6 +139,7 @@ export function CreateMarketForm() {
             <Input
               id="creator_user_id"
               name="creator_user_id"
+              defaultValue={localDemoUserId}
               placeholder="UUID"
               required
             />
@@ -138,7 +147,12 @@ export function CreateMarketForm() {
 
           <div className="grid gap-2">
             <Label htmlFor="title">Title</Label>
-            <Input id="title" name="title" required />
+            <Input
+              id="title"
+              name="title"
+              defaultValue="Will the local SignalArc MVP create a usable test market?"
+              required
+            />
           </div>
 
           <div className="grid gap-2">
@@ -149,11 +163,11 @@ export function CreateMarketForm() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="category">Category</Label>
-              <Input id="category" name="category" />
+              <Input id="category" name="category" defaultValue="Local MVP" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="chain">Chain</Label>
-              <Input id="chain" name="chain" required />
+              <Input id="chain" name="chain" defaultValue="Arc Testnet" required />
             </div>
           </div>
 
@@ -171,11 +185,15 @@ export function CreateMarketForm() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="collateral_asset">Collateral asset</Label>
-              <Input id="collateral_asset" name="collateral_asset" />
+              <Input id="collateral_asset" name="collateral_asset" defaultValue="USDC" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="resolution_source">Resolution source</Label>
-              <Input id="resolution_source" name="resolution_source" />
+              <Input
+                id="resolution_source"
+                name="resolution_source"
+                defaultValue="Local operator review"
+              />
             </div>
           </div>
 
@@ -186,7 +204,13 @@ export function CreateMarketForm() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="closes_at">Closes at</Label>
-              <Input id="closes_at" name="closes_at" required type="datetime-local" />
+              <Input
+                id="closes_at"
+                name="closes_at"
+                defaultValue={defaultCloseValue()}
+                required
+                type="datetime-local"
+              />
             </div>
           </div>
 

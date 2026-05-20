@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import {
   ApiError,
   createTradeIntent,
+  localDemoUserId,
   type CreateTradeIntentRequest,
   type TradeIntentResponse,
 } from "@/lib/api"
@@ -153,7 +154,13 @@ export function TradeIntentPanel({ marketId }: { marketId: string }) {
         <form className="grid gap-5" onSubmit={handleSubmit}>
           <div className="grid gap-2">
             <Label htmlFor="user_id">User ID</Label>
-            <Input id="user_id" name="user_id" placeholder="UUID" required />
+            <Input
+              id="user_id"
+              name="user_id"
+              defaultValue={localDemoUserId}
+              placeholder="UUID"
+              required
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -186,11 +193,11 @@ export function TradeIntentPanel({ marketId }: { marketId: string }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="quantity">Quantity</Label>
-              <Input id="quantity" inputMode="decimal" name="quantity" required />
+              <Input id="quantity" inputMode="decimal" name="quantity" defaultValue="1" required />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="price">Price</Label>
-              <Input id="price" inputMode="decimal" name="price" required />
+              <Input id="price" inputMode="decimal" name="price" defaultValue="0.5" required />
             </div>
           </div>
 

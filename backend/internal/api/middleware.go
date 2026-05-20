@@ -19,6 +19,11 @@ type responseRecorder struct {
 	statusCode int
 }
 
+var localFrontendOrigins = map[string]struct{}{
+	"http://localhost:3000": {},
+	"http://127.0.0.1:3000": {},
+}
+
 func (recorder *responseRecorder) WriteHeader(statusCode int) {
 	recorder.statusCode = statusCode
 	recorder.ResponseWriter.WriteHeader(statusCode)
@@ -42,6 +47,26 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", requestID)
 		ctx := context.WithValue(r.Context(), requestIDContextKey{}, requestID)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func localCORSMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if _, ok := localFrontendOrigins[origin]; ok {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID")
+			w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
+			w.Header().Add("Vary", "Origin")
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
 

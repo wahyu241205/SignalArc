@@ -23,9 +23,9 @@ This file is the handoff source of truth for continuing SignalArc work in a new 
 
 ## Current Overall Status
 
-Foundation complete. Backend and database baseline started. Product MVP is not live yet.
+Foundation complete. Backend and frontend local MVP integration verified. Product MVP is not live yet.
 
-Estimated progress toward live grant submission: 20-25%.
+Estimated progress toward live grant submission: 30-35%.
 
 ## Phase 1 — Foundation Repo and Local Infra
 
@@ -434,13 +434,43 @@ Do not submit yet until:
 - Arc + Circle relevance is clear.
 - README explains why SignalArc exists.
 
+## Local MVP Integration Fix
+
+Status: COMPLETE.
+
+Done:
+
+- Local frontend/backend MVP usability smoke test completed.
+- Backend local CORS added for the local Next.js frontend.
+- Backend read-only `GET /arc/contract` endpoint added.
+- Frontend root page now shows SignalArc local MVP instead of the default Next.js template.
+- Frontend can load markets from backend without "Failed to fetch".
+- Local browser flow passed:
+  - `/` — landing page renders
+  - `/markets` — market list loads from backend
+  - `/markets/new` — create market form renders
+  - Created one test market successfully
+  - Opened market detail page
+  - Submitted one trade intent with status `not_executed`
+  - `/portfolio` — portfolio page renders
+  - `/intelligence` — intelligence dashboard renders
+- Arc Testnet contract reference visible as prototype/testnet metadata only.
+- No wallet/onchain write execution added.
+- No Circle integration added.
+- No production deployment approved.
+- No contract redeploy performed.
+- Temporary demo domain purchased: `signalarc.fun`.
+- DNS/live deployment remains pending and not approved.
+
 ## Current Last Completed Step
 
-- Manual Arc Testnet deployment and onchain smoke tests completed for the Phase 6 contract prototype.
+- Local frontend/backend MVP integration fix and usability smoke test completed.
 
 ## Next Recommended Step
 
-- Start the next integration planning step by deciding how backend/frontend should reference the verified Arc Testnet contract without exposing private keys, RPC secrets, `.env` files, or Circle credentials.
+- Add the backend API service to local Docker Compose so local development runs PostgreSQL and backend through Docker, while the frontend remains a manual Next.js dev server.
+- Do not start DNS or live deployment yet.
+- Do not redeploy contracts or add mainnet configuration.
 
 Do not start unrelated coding before checking:
 
