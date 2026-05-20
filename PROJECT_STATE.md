@@ -365,11 +365,12 @@ Done:
 - Added manual resolution and local claim/refund prototype logic with Foundry coverage.
 - Completed contract test coverage hardening and added `contracts/SECURITY_BOUNDARIES.md`.
 - Completed final Phase 6 review and added `contracts/PHASE_6_REVIEW.md`.
+- Completed manual Arc Testnet deployment, source verification, and onchain smoke tests; recorded results in `contracts/ARC_TESTNET_DEPLOYMENT.md`.
 
 Not done:
 
-- Arc Testnet deployment is deferred to a later manual owner-run step with local-only secrets.
 - Backend/frontend contract integration is deferred to a later integration phase.
+- Production deployment remains not approved.
 
 ## Phase 7 — Live Deployment
 
@@ -435,11 +436,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Phase 6 Contracts / Settlement Prototype completed.
+- Manual Arc Testnet deployment and onchain smoke tests completed for the Phase 6 contract prototype.
 
 ## Next Recommended Step
 
-- Prepare a manual Arc Testnet deployment checklist without exposing private keys, RPC secrets, `.env` files, or Circle credentials.
+- Start the next integration planning step by deciding how backend/frontend should reference the verified Arc Testnet contract without exposing private keys, RPC secrets, `.env` files, or Circle credentials.
 
 Do not start unrelated coding before checking:
 
