@@ -351,7 +351,7 @@ Not done:
 
 ## Phase 6 — Contracts / Settlement Prototype
 
-Status: Started, Phase 6.3 next.
+Status: Started, Phase 6.4 next.
 
 Done:
 
@@ -360,13 +360,12 @@ Done:
 - Added minimal Foundry workspace config at `contracts/foundry.toml`.
 - Added `contracts/README.md` with prototype boundaries.
 - Added minimal `SignalArcMarket` contract scope for binary market lifecycle without collateral, settlement, or claim logic.
+- Added test-only `MockUSDC` collateral model and Foundry tests for market lifecycle and collateral assumptions.
 
 Not done:
 
 - Define settlement contract scope.
-- Define custody/collateral assumptions.
 - Write minimal contract prototype.
-- Add unit tests.
 - Deploy to testnet if supported.
 - Connect backend to contract flow.
 - Document security assumptions.
@@ -436,11 +435,11 @@ Do not submit yet until:
 
 ## Current Last Completed Step
 
-- Phase 6.2 minimal binary market contract scope completed.
+- Phase 6.3 test-only mock USDC and collateral unit tests completed.
 
 ## Next Recommended Step
 
-- Start Phase 6.3 by adding a test-only mock USDC / collateral model and unit tests for collateral assumptions, without implementing production custody or settlement behavior.
+- Start Phase 6.4 by adding binary position and trade prototype logic locally, without implementing settlement, payout, claim flow, production custody, Circle integration, Arc runtime config, or testnet deployment.
 
 Do not start unrelated coding before checking:
 
