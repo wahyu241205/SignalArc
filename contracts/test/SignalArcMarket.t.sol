@@ -323,6 +323,177 @@ contract SignalArcMarketTest {
         market.openPosition(SignalArcMarket.Outcome.No, 100);
     }
 
+    function testClaimableAmountReturnsZeroBeforeResolution() external {
+        (SignalArcMarket market,) = createFundedMarket();
+
+        assertEq(market.claimableAmount(USER), 0);
+    }
+
+    function testClaimableAmountReturnsYesPositionAfterYesResolution() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        assertEq(market.claimableAmount(USER), 100);
+    }
+
+    function testClaimableAmountReturnsNoPositionAfterNoResolution() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.No, 150);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.No);
+
+        assertEq(market.claimableAmount(USER), 150);
+    }
+
+    function testClaimableAmountReturnsZeroForLosingSide() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.No, 200);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        assertEq(market.claimableAmount(USER), 0);
+    }
+
+    function testClaimRevertsBeforeResolutionOrCancellation() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+
+        vm.prank(USER);
+        vm.expectRevert(SignalArcMarket.MarketNotResolved.selector);
+        market.claim();
+    }
+
+    function testWinningYesUserCanClaimAfterYesResolution() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        vm.prank(USER);
+        market.claim();
+
+        assertEq(token.balanceOf(USER), 1_000);
+    }
+
+    function testWinningNoUserCanClaimAfterNoResolution() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.No, 100);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.No);
+
+        vm.prank(USER);
+        market.claim();
+
+        assertEq(token.balanceOf(USER), 1_000);
+    }
+
+    function testLosingUserCannotClaim() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.No, 100);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        vm.prank(USER);
+        vm.expectRevert(SignalArcMarket.NothingToClaim.selector);
+        market.claim();
+    }
+
+    function testUserCannotClaimTwice() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        vm.prank(USER);
+        market.claim();
+
+        vm.prank(USER);
+        vm.expectRevert(SignalArcMarket.AlreadyClaimed.selector);
+        market.claim();
+    }
+
+    function testClaimTransfersMockUSDCFromMarketToUser() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 250);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        assertEq(token.balanceOf(address(market)), 250);
+
+        vm.prank(USER);
+        market.claim();
+
+        assertEq(token.balanceOf(USER), 1_000);
+        assertEq(token.balanceOf(address(market)), 0);
+    }
+
+    function testClaimMarksHasClaimedTrue() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        vm.prank(USER);
+        market.claim();
+
+        assertTrue(market.hasClaimed(USER));
+    }
+
+    function testCancelledMarketRefundsYesPosition() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+
+        vm.prank(RESOLVER);
+        market.cancelMarket();
+
+        vm.prank(USER);
+        market.claim();
+
+        assertEq(token.balanceOf(USER), 1_000);
+    }
+
+    function testCancelledMarketRefundsNoPosition() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.No, 100);
+
+        vm.prank(RESOLVER);
+        market.cancelMarket();
+
+        vm.prank(USER);
+        market.claim();
+
+        assertEq(token.balanceOf(USER), 1_000);
+    }
+
+    function testCancelledMarketRefundsCombinedYesAndNoPosition() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.No, 200);
+
+        vm.prank(RESOLVER);
+        market.cancelMarket();
+
+        vm.prank(USER);
+        market.claim();
+
+        assertEq(token.balanceOf(USER), 1_000);
+    }
+
+    function testUserWithoutPositionCannotClaimAfterResolution() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+        closeAndResolveMarket(market, SignalArcMarket.Outcome.Yes);
+
+        vm.prank(SPENDER);
+        vm.expectRevert(SignalArcMarket.NothingToClaim.selector);
+        market.claim();
+    }
+
+    function testUserWithoutPositionCannotClaimAfterCancellation() external {
+        (SignalArcMarket market, MockUSDC token) = createFundedMarket();
+        openPositionAs(token, market, USER, SignalArcMarket.Outcome.Yes, 100);
+
+        vm.prank(RESOLVER);
+        market.cancelMarket();
+
+        vm.prank(SPENDER);
+        vm.expectRevert(SignalArcMarket.NothingToClaim.selector);
+        market.claim();
+    }
+
     function testMockUSDCDecimalsIsSix() external {
         MockUSDC token = new MockUSDC();
 
@@ -416,6 +587,7 @@ contract SignalArcMarketTest {
         MockUSDC token = new MockUSDC();
         SignalArcMarket market = new SignalArcMarket(QUESTION, block.timestamp + 1 days, RESOLVER, address(token));
         token.mint(USER, 1_000);
+        token.mint(SPENDER, 1_000);
 
         return (market, token);
     }
@@ -423,6 +595,20 @@ contract SignalArcMarketTest {
     function approveMarket(MockUSDC token, SignalArcMarket market, uint256 amount) private {
         vm.prank(USER);
         token.approve(address(market), amount);
+    }
+
+    function openPositionAs(
+        MockUSDC token,
+        SignalArcMarket market,
+        address user,
+        SignalArcMarket.Outcome side,
+        uint256 amount
+    ) private {
+        vm.prank(user);
+        token.approve(address(market), amount);
+
+        vm.prank(user);
+        market.openPosition(side, amount);
     }
 
     function closeAndResolveMarket(SignalArcMarket market, SignalArcMarket.Outcome outcome) private {

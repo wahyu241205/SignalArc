@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 interface IERC20Like {
+    function transfer(address to, uint256 amount) external returns (bool);
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 }
 
@@ -28,6 +29,7 @@ contract SignalArcMarket {
     Outcome public winningOutcome;
     mapping(address user => uint256 amount) public yesPositions;
     mapping(address user => uint256 amount) public noPositions;
+    mapping(address user => bool claimed) public hasClaimed;
     uint256 public totalYes;
     uint256 public totalNo;
     uint256 public totalCollateral;
@@ -37,6 +39,8 @@ contract SignalArcMarket {
     event MarketCancelled();
     event MarketResolved(Outcome winningOutcome);
     event PositionOpened(address indexed user, Outcome indexed side, uint256 amount);
+    event PayoutClaimed(address indexed user, uint256 amount);
+    event RefundClaimed(address indexed user, uint256 amount);
 
     error EmptyQuestion();
     error InvalidCloseTimestamp();
@@ -49,6 +53,10 @@ contract SignalArcMarket {
     error InvalidAmount();
     error InvalidSide();
     error CollateralTransferFailed();
+    error MarketNotResolved();
+    error NothingToClaim();
+    error AlreadyClaimed();
+    error PayoutTransferFailed();
 
     constructor(string memory question_, uint256 closeTimestamp_, address resolver_, address collateralToken_) {
         if (bytes(question_).length == 0) {
@@ -110,6 +118,54 @@ contract SignalArcMarket {
         totalCollateral += amount;
 
         emit PositionOpened(msg.sender, side, amount);
+    }
+
+    function claimableAmount(address user) public view returns (uint256) {
+        if (status == MarketStatus.Resolved) {
+            if (winningOutcome == Outcome.Yes) {
+                return yesPositions[user];
+            }
+
+            if (winningOutcome == Outcome.No) {
+                return noPositions[user];
+            }
+
+            return 0;
+        }
+
+        if (status == MarketStatus.Cancelled) {
+            return yesPositions[user] + noPositions[user];
+        }
+
+        return 0;
+    }
+
+    function claim() external {
+        if (status != MarketStatus.Resolved && status != MarketStatus.Cancelled) {
+            revert MarketNotResolved();
+        }
+
+        if (hasClaimed[msg.sender]) {
+            revert AlreadyClaimed();
+        }
+
+        uint256 amount = claimableAmount(msg.sender);
+        if (amount == 0) {
+            revert NothingToClaim();
+        }
+
+        hasClaimed[msg.sender] = true;
+
+        bool transferred = collateralToken.transfer(msg.sender, amount);
+        if (!transferred) {
+            revert PayoutTransferFailed();
+        }
+
+        if (status == MarketStatus.Cancelled) {
+            emit RefundClaimed(msg.sender, amount);
+        } else {
+            emit PayoutClaimed(msg.sender, amount);
+        }
     }
 
     function closeMarket() external {
