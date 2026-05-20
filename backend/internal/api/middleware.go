@@ -5,6 +5,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -19,9 +20,42 @@ type responseRecorder struct {
 	statusCode int
 }
 
-var localFrontendOrigins = map[string]struct{}{
+var defaultFrontendOrigins = map[string]struct{}{
 	"http://localhost:3000": {},
 	"http://127.0.0.1:3000": {},
+}
+
+func isCORSOriginAllowed(origin string) bool {
+	if _, ok := defaultFrontendOrigins[origin]; ok {
+		return true
+	}
+
+	for _, allowedOrigin := range strings.Split(corsAllowedOriginsEnv(), ",") {
+		trimmedAllowedOrigin := strings.TrimSpace(allowedOrigin)
+		if trimmedAllowedOrigin == "" || trimmedAllowedOrigin == "*" {
+			continue
+		}
+		if origin == trimmedAllowedOrigin {
+			return true
+		}
+	}
+
+	return false
+}
+
+func corsAllowedOriginsEnv() string {
+	if value := os.Getenv("CORS_ALLOWED_ORIGINS"); value != "" {
+		return value
+	}
+
+	for _, env := range os.Environ() {
+		key, value, ok := strings.Cut(env, "=")
+		if ok && key == "CORS_ALLOWED_ORIGINS" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func (recorder *responseRecorder) WriteHeader(statusCode int) {
@@ -53,7 +87,7 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 func localCORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
-		if _, ok := localFrontendOrigins[origin]; ok {
+		if isCORSOriginAllowed(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID")
