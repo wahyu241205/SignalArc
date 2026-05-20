@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/wahyu241205/SignalArc/backend/internal/httpjson"
@@ -25,7 +26,7 @@ func registerArcRoutes(router chi.Router) {
 			Network:                "Arc Testnet",
 			ChainID:                5042002,
 			SignalArcMarket:        "0xf4ccc11A9e24fb996679F946C23C04AFd2797F26",
-			SignalArcMarketFactory: "",
+			SignalArcMarketFactory: os.Getenv("SIGNAL_ARC_MARKET_FACTORY_ADDRESS"),
 			USDCErc20Interface:     "0x3600000000000000000000000000000000000000",
 			Explorer:               "https://testnet.arcscan.app",
 			Prototype:              true,
