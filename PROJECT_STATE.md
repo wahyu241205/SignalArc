@@ -434,6 +434,31 @@ Do not submit yet until:
 - Arc + Circle relevance is clear.
 - README explains why SignalArc exists.
 
+## Local Docker Backend Step
+
+Status: COMPLETE.
+
+Done:
+
+- Added `backend/Dockerfile` for local backend container builds.
+- Added `backend/.dockerignore` to exclude local env and unnecessary files.
+- Added `signalarc-backend` service to `docker-compose.yml`.
+- Local Docker Compose now runs PostgreSQL and backend API.
+- Backend container connects to PostgreSQL through Docker network using `signalarc-postgres:5432`.
+- Backend is exposed only on host loopback at `127.0.0.1:4000`.
+- Frontend remains a manual Next.js dev server.
+- Smart contract is not Dockerized.
+- No production deployment, DNS change, contract redeploy, or mainnet config added.
+
+Validation:
+
+- `docker compose build signalarc-backend` passed.
+- `docker compose up -d signalarc-postgres signalarc-backend` passed.
+- `GET /health` passed.
+- `GET /readyz` passed.
+- `GET /arc/contract` passed.
+- `GET /markets` passed.
+
 ## Local MVP Integration Fix
 
 Status: COMPLETE.
@@ -468,7 +493,7 @@ Done:
 
 ## Next Recommended Step
 
-- Add the backend API service to local Docker Compose so local development runs PostgreSQL and backend through Docker, while the frontend remains a manual Next.js dev server.
+- Run final local browser smoke test with PostgreSQL and backend running through Docker, while frontend runs manually through `pnpm dev:web`.
 - Do not start DNS or live deployment yet.
 - Do not redeploy contracts or add mainnet configuration.
 
