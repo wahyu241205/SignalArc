@@ -75,7 +75,9 @@ func registerResolutionRoutes(router chi.Router, resolutionsRepository *reposito
 		resolution, err := resolutionsRepository.GetResolutionByMarketID(r.Context(), marketID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				httpjson.WriteError(w, http.StatusNotFound, "resolution_not_found", "resolution not found")
+				httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+					"resolution": nil,
+				})
 				return
 			}
 

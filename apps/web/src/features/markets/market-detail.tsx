@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { MarketResolutionPanel } from "@/features/markets/market-resolution-panel"
+import { OnchainMarketLifecyclePanel } from "@/features/markets/onchain-market-lifecycle-panel"
 import { TradeIntentPanel } from "@/features/markets/trade-intent-panel"
 import { ApiError, getMarket, type Market } from "@/lib/api"
 
@@ -130,6 +131,10 @@ function MarketDetailCard({ market }: { market: Market }) {
             <DetailItem label="Winning Outcome" value={market.winning_outcome} />
           ) : null}
           <DetailItem label="Created" value={formatDate(market.created_at)} />
+          <DetailItem label="Onchain Status" value={market.onchain_deployment_status} />
+          {market.market_contract_address ? (
+            <DetailItem label="Market Contract" value={market.market_contract_address} />
+          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -209,7 +214,12 @@ export function MarketDetail({ marketId }: { marketId: string }) {
   return (
     <div className="grid gap-6">
       <MarketDetailCard market={state.market} />
-      <TradeIntentPanel marketId={state.market.id} marketStatus={state.market.status} />
+      <TradeIntentPanel
+        marketId={state.market.id}
+        marketStatus={state.market.status}
+        marketContractAddress={state.market.market_contract_address}
+      />
+      <OnchainMarketLifecyclePanel marketContractAddress={state.market.market_contract_address} />
       <MarketResolutionPanel marketId={state.market.id} />
     </div>
   )

@@ -12,6 +12,8 @@ import (
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 var decimalPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]{1,18})?$`)
+var evmAddressPattern = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
+var evmTxHashPattern = regexp.MustCompile(`^0x[0-9a-fA-F]{64}$`)
 
 func parseDecimal(value string) (*big.Rat, bool) {
 	trimmed := strings.TrimSpace(value)
@@ -80,6 +82,14 @@ func isUUIDShape(value string) bool {
 	return uuidPattern.MatchString(value)
 }
 
+func isEVMAddressShape(value string) bool {
+	return evmAddressPattern.MatchString(value)
+}
+
+func isEVMTxHashShape(value string) bool {
+	return evmTxHashPattern.MatchString(value)
+}
+
 func optionalString(value *string) sql.NullString {
 	if value == nil {
 		return sql.NullString{}
@@ -109,4 +119,9 @@ func defaultString(value *string, fallback string) string {
 func isForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

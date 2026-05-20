@@ -1,7 +1,12 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { type FormEvent, useState } from "react"
+import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react"
+import { decodeEventLog, type Address, type Hash, type TransactionReceipt } from "viem"
+import { waitForTransactionReceipt, writeContract } from "wagmi/actions"
+import { useAccount, useChainId, useConfig, useSwitchChain } from "wagmi"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -14,13 +19,33 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ApiError, createMarket, localDemoUserId, type Market } from "@/lib/api"
+import {
+  ApiError,
+  attachMarketContract,
+  createMarket,
+  localDemoUserId,
+  type Market,
+} from "@/lib/api"
+import {
+  ARC_TESTNET_CHAIN_ID,
+  ARC_TESTNET_USDC_ADDRESS,
+  SIGNAL_ARC_MARKET_FACTORY_ABI,
+  SIGNAL_ARC_MARKET_FACTORY_ADDRESS,
+  getArcscanTxUrl,
+} from "@/lib/contracts"
+import { arcTestnet } from "@/lib/wagmi"
 
 type SubmitState =
   | { status: "idle" }
   | { status: "submitting" }
   | { status: "success"; market: Market }
   | { status: "error"; message: string; requestId: string | null }
+
+type DeployState =
+  | { status: "idle" }
+  | { status: "deploying"; hash?: Hash }
+  | { status: "success"; hash: Hash; marketAddress: Address }
+  | { status: "error"; message: string; hash?: Hash }
 
 function optionalText(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim()
@@ -39,6 +64,16 @@ function toRfc3339(value: string) {
   }
 
   return date.toISOString()
+}
+
+function closeTimestampSeconds(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Close date must be valid.")
+  }
+
+  return BigInt(Math.floor(date.getTime() / 1000))
 }
 
 function defaultCloseValue() {
@@ -73,13 +108,74 @@ function getErrorState(error: unknown): Extract<SubmitState, { status: "error" }
   }
 }
 
+function getDeployErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+    if (
+      message.includes("user rejected") ||
+      message.includes("user denied") ||
+      message.includes("rejected the request") ||
+      message.includes("request rejected")
+    ) {
+      return "Wallet transaction was rejected. The backend market remains NOT_DEPLOYED."
+    }
+
+    return error.message
+  }
+
+  return "Unable to deploy the Arc Testnet market contract."
+}
+
+function TxLink({ hash }: { hash: Hash }) {
+  return (
+    <a
+      className="inline-flex items-center gap-1 font-mono text-xs text-green-200 underline underline-offset-4 hover:text-green-100"
+      href={getArcscanTxUrl(hash)}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {hash.slice(0, 10)}...{hash.slice(-8)}
+      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+    </a>
+  )
+}
+
+function getDeployedMarketAddress(receipt: TransactionReceipt): Address {
+  for (const log of receipt.logs) {
+    try {
+      const decoded = decodeEventLog({
+        abi: SIGNAL_ARC_MARKET_FACTORY_ABI,
+        data: log.data,
+        topics: log.topics,
+      })
+
+      if (decoded.eventName === "MarketDeployed") {
+        return decoded.args.market
+      }
+    } catch {
+      // Ignore logs from contracts other than the factory.
+    }
+  }
+
+  throw new Error("MarketDeployed event was not found in the factory receipt.")
+}
+
 export function CreateMarketForm() {
+  const router = useRouter()
+  const config = useConfig()
+  const { address, isConnected } = useAccount()
+  const chainId = useChainId()
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
   const [state, setState] = useState<SubmitState>({ status: "idle" })
+  const [deployState, setDeployState] = useState<DeployState>({ status: "idle" })
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const isArcTestnet = chainId === ARC_TESTNET_CHAIN_ID
+  const isDeploying = deployState.status === "deploying"
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setState({ status: "submitting" })
+    setDeployState({ status: "idle" })
 
     const formData = new FormData(event.currentTarget)
     const opensAt = optionalText(formData, "opens_at")
@@ -106,25 +202,142 @@ export function CreateMarketForm() {
     }
   }
 
+  async function handleDeploy(market: Market) {
+    if (!address || !SIGNAL_ARC_MARKET_FACTORY_ADDRESS) return
+
+    let hash: Hash | undefined
+    try {
+      setDeployState({ status: "deploying" })
+      hash = await writeContract(config, {
+        address: SIGNAL_ARC_MARKET_FACTORY_ADDRESS,
+        abi: SIGNAL_ARC_MARKET_FACTORY_ABI,
+        functionName: "createMarket",
+        args: [
+          market.id,
+          market.title,
+          closeTimestampSeconds(market.closes_at),
+          address,
+          ARC_TESTNET_USDC_ADDRESS,
+        ],
+        chainId: ARC_TESTNET_CHAIN_ID,
+        account: address,
+      })
+      setDeployState({ status: "deploying", hash })
+
+      const receipt = await waitForTransactionReceipt(config, {
+        hash,
+        chainId: ARC_TESTNET_CHAIN_ID,
+      })
+      const marketAddress = getDeployedMarketAddress(receipt)
+
+      await attachMarketContract(market.id, {
+        market_contract_address: marketAddress,
+        market_deployment_tx_hash: hash,
+        market_factory_address: SIGNAL_ARC_MARKET_FACTORY_ADDRESS,
+        resolver_address: address,
+      })
+
+      setDeployState({ status: "success", hash, marketAddress })
+      router.push(`/markets/${market.id}`)
+    } catch (error) {
+      setDeployState({
+        status: "error",
+        message: getDeployErrorMessage(error),
+        hash,
+      })
+    }
+  }
+
   if (state.status === "success") {
+    const canDeploy = Boolean(isConnected && isArcTestnet && SIGNAL_ARC_MARKET_FACTORY_ADDRESS && !isDeploying)
+
     return (
       <Card className="border-green-500/20">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
+            <CheckCircle2 className="h-5 w-5 text-green-400" aria-hidden="true" />
             <CardTitle>Market Created</CardTitle>
           </div>
           <CardDescription>{state.market.title}</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild>
-            <Link href={`/markets/${state.market.id}`}>View Market</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/markets">Back to Markets</Link>
-          </Button>
+        <CardContent className="grid gap-4">
+          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
+            <p className="text-sm font-medium text-yellow-300">Onchain contract not deployed.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your connected wallet will be the resolver for this testnet market.
+            </p>
+            {SIGNAL_ARC_MARKET_FACTORY_ADDRESS ? (
+              <p className="mt-2 font-mono text-xs text-muted-foreground">
+                Factory: {SIGNAL_ARC_MARKET_FACTORY_ADDRESS}
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-muted-foreground">Factory address not configured.</p>
+            )}
+          </div>
+
+          {!isConnected ? (
+            <p className="text-sm text-muted-foreground">Connect a wallet to deploy the Arc Testnet market contract.</p>
+          ) : null}
+
+          {isConnected && !isArcTestnet ? (
+            <Button
+              disabled={isSwitchingChain}
+              onClick={() => switchChain({ chainId: arcTestnet.id })}
+              type="button"
+              variant="outline"
+              className="w-full sm:w-fit"
+            >
+              {isSwitchingChain ? "Switching..." : "Switch to Arc Testnet"}
+            </Button>
+          ) : null}
+
+          {deployState.status === "deploying" ? (
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-300" aria-hidden="true" />
+                <p className="text-sm font-medium text-blue-200">Deploying market contract</p>
+              </div>
+              {deployState.hash ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Transaction: <TxLink hash={deployState.hash} />
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {deployState.status === "error" ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm font-medium text-destructive">Unable to deploy onchain market</p>
+              <p className="mt-1 text-sm text-muted-foreground">{deployState.message}</p>
+              {deployState.hash ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Transaction: <TxLink hash={deployState.hash} />
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {deployState.status === "success" ? (
+            <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4">
+              <p className="text-sm font-medium text-green-300">Market contract deployed on Arc Testnet.</p>
+              <p className="mt-2 font-mono text-xs text-muted-foreground">{deployState.marketAddress}</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Transaction: <TxLink hash={deployState.hash} />
+              </p>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button disabled={!canDeploy} onClick={() => handleDeploy(state.market)} type="button">
+              {isDeploying ? "Deploying..." : "Deploy on Arc Testnet"}
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/markets/${state.market.id}`}>View Market</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/markets">Back to Markets</Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     )
@@ -140,7 +353,6 @@ export function CreateMarketForm() {
       </CardHeader>
       <CardContent>
         <form className="grid gap-5" onSubmit={handleSubmit}>
-          {/* Hidden creator ID — prefilled for demo */}
           <input type="hidden" name="creator_user_id" value={localDemoUserId} />
 
           <div className="grid gap-2">
@@ -209,14 +421,13 @@ export function CreateMarketForm() {
             </div>
           </div>
 
-          {/* Advanced settings — collapsed by default */}
           <div>
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
-              {showAdvanced ? "▾ Hide" : "▸ Show"} advanced settings
+              {showAdvanced ? "Hide" : "Show"} advanced settings
             </button>
 
             {showAdvanced ? (

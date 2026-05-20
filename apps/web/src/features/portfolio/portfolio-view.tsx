@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 import { useAccount } from "wagmi"
 
 import { Button } from "@/components/ui/button"
@@ -23,9 +23,11 @@ import {
 } from "@/components/ui/table"
 import {
   ApiError,
+  getMarkets,
   getUserPositions,
   getUserSettlements,
   localDemoUserId,
+  type Market,
   type Position,
   type Settlement,
 } from "@/lib/api"
@@ -41,6 +43,11 @@ type PortfolioState =
   | { status: "empty"; userId: string }
   | { status: "loaded"; userId: string; data: PortfolioData }
   | { status: "error"; userId: string; message: string; requestId: string | null }
+
+type MarketsState =
+  | { status: "loading" }
+  | { status: "loaded"; markets: Market[] }
+  | { status: "error"; message: string; requestId: string | null }
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -198,6 +205,61 @@ function PortfolioTables({ data }: { data: PortfolioData }) {
   )
 }
 
+function OnchainMarketsCard({ state }: { state: MarketsState }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Onchain Markets</CardTitle>
+        <CardDescription>
+          Arc Testnet deployment status for listed markets.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {state.status === "loading" ? (
+          <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+        ) : null}
+
+        {state.status === "error" ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <p className="text-sm font-medium text-destructive">Unable to load onchain market status</p>
+            <p className="mt-1 text-sm text-muted-foreground">{state.message}</p>
+            {state.requestId ? (
+              <p className="mt-2 font-mono text-xs text-muted-foreground">Request ID: {state.requestId}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {state.status === "loaded" ? (
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Market</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Contract</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {state.markets.map((market) => (
+                  <TableRow key={market.id}>
+                    <TableCell className="max-w-[260px] truncate" title={market.title}>
+                      {market.title}
+                    </TableCell>
+                    <TableCell>{market.onchain_deployment_status}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {market.market_contract_address ? truncateId(market.market_contract_address) : "Not deployed"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}
+
 function WalletIdentityCard({ address }: { address: string }) {
   return (
     <Card className="border-indigo-500/20">
@@ -219,7 +281,38 @@ function WalletIdentityCard({ address }: { address: string }) {
 export function PortfolioView() {
   const { address, isConnected } = useAccount()
   const [state, setState] = useState<PortfolioState>({ status: "idle" })
+  const [marketsState, setMarketsState] = useState<MarketsState>({ status: "loading" })
   const [showAdvanced, setShowAdvanced] = useState(false)
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadMarkets() {
+      try {
+        const response = await getMarkets()
+        if (isActive) {
+          setMarketsState({ status: "loaded", markets: response.data.markets })
+        }
+      } catch (error) {
+        if (!isActive) return
+        if (error instanceof ApiError) {
+          setMarketsState({ status: "error", message: error.message, requestId: error.requestId })
+          return
+        }
+        setMarketsState({
+          status: "error",
+          message: error instanceof Error ? error.message : "Unable to load markets.",
+          requestId: null,
+        })
+      }
+    }
+
+    void loadMarkets()
+
+    return () => {
+      isActive = false
+    }
+  }, [])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -282,6 +375,8 @@ export function PortfolioView() {
           </CardContent>
         </Card>
       )}
+
+      <OnchainMarketsCard state={marketsState} />
 
       {/* Advanced: manual user ID lookup */}
       <div>

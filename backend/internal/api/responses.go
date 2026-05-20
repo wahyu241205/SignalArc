@@ -62,24 +62,29 @@ type settlementResponse struct {
 }
 
 type marketResponse struct {
-	ID               string     `json:"id"`
-	CreatorUserID    string     `json:"creator_user_id"`
-	Title            string     `json:"title"`
-	Description      *string    `json:"description"`
-	Category         *string    `json:"category"`
-	Status           string     `json:"status"`
-	OutcomeYesLabel  string     `json:"outcome_yes_label"`
-	OutcomeNoLabel   string     `json:"outcome_no_label"`
-	CollateralAsset  string     `json:"collateral_asset"`
-	Chain            string     `json:"chain"`
-	ResolutionSource *string    `json:"resolution_source"`
-	OpensAt          *time.Time `json:"opens_at"`
-	ClosesAt         time.Time  `json:"closes_at"`
-	ResolvedAt       *time.Time `json:"resolved_at"`
-	SettledAt        *time.Time `json:"settled_at"`
-	WinningOutcome   *string    `json:"winning_outcome"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID                      string     `json:"id"`
+	CreatorUserID           string     `json:"creator_user_id"`
+	Title                   string     `json:"title"`
+	Description             *string    `json:"description"`
+	Category                *string    `json:"category"`
+	Status                  string     `json:"status"`
+	OutcomeYesLabel         string     `json:"outcome_yes_label"`
+	OutcomeNoLabel          string     `json:"outcome_no_label"`
+	CollateralAsset         string     `json:"collateral_asset"`
+	Chain                   string     `json:"chain"`
+	ResolutionSource        *string    `json:"resolution_source"`
+	OpensAt                 *time.Time `json:"opens_at"`
+	ClosesAt                time.Time  `json:"closes_at"`
+	ResolvedAt              *time.Time `json:"resolved_at"`
+	SettledAt               *time.Time `json:"settled_at"`
+	WinningOutcome          *string    `json:"winning_outcome"`
+	MarketContractAddress   *string    `json:"market_contract_address"`
+	MarketDeploymentTxHash  *string    `json:"market_deployment_tx_hash"`
+	MarketFactoryAddress    *string    `json:"market_factory_address"`
+	ResolverAddress         *string    `json:"resolver_address"`
+	OnchainDeploymentStatus string     `json:"onchain_deployment_status"`
+	CreatedAt               time.Time  `json:"created_at"`
+	UpdatedAt               time.Time  `json:"updated_at"`
 }
 
 type agentMarketResponse struct {
@@ -194,24 +199,29 @@ func newMarketResponses(markets []repository.Market) []marketResponse {
 
 func newMarketResponse(market repository.Market) marketResponse {
 	return marketResponse{
-		ID:               market.ID,
-		CreatorUserID:    market.CreatorUserID,
-		Title:            market.Title,
-		Description:      nullStringPtr(market.Description),
-		Category:         nullStringPtr(market.Category),
-		Status:           market.Status,
-		OutcomeYesLabel:  market.OutcomeYesLabel,
-		OutcomeNoLabel:   market.OutcomeNoLabel,
-		CollateralAsset:  market.CollateralAsset,
-		Chain:            market.Chain,
-		ResolutionSource: nullStringPtr(market.ResolutionSource),
-		OpensAt:          nullTimePtr(market.OpensAt),
-		ClosesAt:         market.ClosesAt,
-		ResolvedAt:       nullTimePtr(market.ResolvedAt),
-		SettledAt:        nullTimePtr(market.SettledAt),
-		WinningOutcome:   nullStringPtr(market.WinningOutcome),
-		CreatedAt:        market.CreatedAt,
-		UpdatedAt:        market.UpdatedAt,
+		ID:                      market.ID,
+		CreatorUserID:           market.CreatorUserID,
+		Title:                   market.Title,
+		Description:             nullStringPtr(market.Description),
+		Category:                nullStringPtr(market.Category),
+		Status:                  market.Status,
+		OutcomeYesLabel:         market.OutcomeYesLabel,
+		OutcomeNoLabel:          market.OutcomeNoLabel,
+		CollateralAsset:         market.CollateralAsset,
+		Chain:                   market.Chain,
+		ResolutionSource:        nullStringPtr(market.ResolutionSource),
+		OpensAt:                 nullTimePtr(market.OpensAt),
+		ClosesAt:                market.ClosesAt,
+		ResolvedAt:              nullTimePtr(market.ResolvedAt),
+		SettledAt:               nullTimePtr(market.SettledAt),
+		WinningOutcome:          nullStringPtr(market.WinningOutcome),
+		MarketContractAddress:   nullStringPtr(market.MarketContractAddress),
+		MarketDeploymentTxHash:  nullStringPtr(market.MarketDeploymentTxHash),
+		MarketFactoryAddress:    nullStringPtr(market.MarketFactoryAddress),
+		ResolverAddress:         nullStringPtr(market.ResolverAddress),
+		OnchainDeploymentStatus: market.OnchainDeploymentStatus,
+		CreatedAt:               market.CreatedAt,
+		UpdatedAt:               market.UpdatedAt,
 	}
 }
 

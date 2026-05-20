@@ -29,6 +29,13 @@ type createMarketRequest struct {
 	hasForbiddenKeys bool
 }
 
+type attachMarketContractRequest struct {
+	MarketContractAddress  string `json:"market_contract_address"`
+	MarketDeploymentTxHash string `json:"market_deployment_tx_hash"`
+	MarketFactoryAddress   string `json:"market_factory_address"`
+	ResolverAddress        string `json:"resolver_address"`
+}
+
 func (request *createMarketRequest) UnmarshalJSON(data []byte) error {
 	type createMarketRequestAlias createMarketRequest
 	var raw map[string]json.RawMessage
@@ -45,9 +52,22 @@ func (request *createMarketRequest) UnmarshalJSON(data []byte) error {
 	_, hasWinningOutcome := raw["winning_outcome"]
 	_, hasResolvedAt := raw["resolved_at"]
 	_, hasSettledAt := raw["settled_at"]
+	_, hasMarketContractAddress := raw["market_contract_address"]
+	_, hasMarketDeploymentTxHash := raw["market_deployment_tx_hash"]
+	_, hasMarketFactoryAddress := raw["market_factory_address"]
+	_, hasResolverAddress := raw["resolver_address"]
+	_, hasOnchainDeploymentStatus := raw["onchain_deployment_status"]
 
 	*request = createMarketRequest(alias)
-	request.hasForbiddenKeys = hasStatus || hasWinningOutcome || hasResolvedAt || hasSettledAt
+	request.hasForbiddenKeys = hasStatus ||
+		hasWinningOutcome ||
+		hasResolvedAt ||
+		hasSettledAt ||
+		hasMarketContractAddress ||
+		hasMarketDeploymentTxHash ||
+		hasMarketFactoryAddress ||
+		hasResolverAddress ||
+		hasOnchainDeploymentStatus
 	return nil
 }
 
@@ -118,6 +138,33 @@ func newMarketStatus(now time.Time, opensAt sql.NullTime) string {
 	return "OPEN"
 }
 
+func (request attachMarketContractRequest) toRepositoryInput() (repository.AttachMarketContractInput, error) {
+	marketContractAddress := strings.TrimSpace(request.MarketContractAddress)
+	marketDeploymentTxHash := strings.TrimSpace(request.MarketDeploymentTxHash)
+	marketFactoryAddress := strings.TrimSpace(request.MarketFactoryAddress)
+	resolverAddress := strings.TrimSpace(request.ResolverAddress)
+
+	if !isEVMAddressShape(marketContractAddress) {
+		return repository.AttachMarketContractInput{}, errors.New("market_contract_address must be an EVM address")
+	}
+	if !isEVMTxHashShape(marketDeploymentTxHash) {
+		return repository.AttachMarketContractInput{}, errors.New("market_deployment_tx_hash must be an EVM transaction hash")
+	}
+	if !isEVMAddressShape(marketFactoryAddress) {
+		return repository.AttachMarketContractInput{}, errors.New("market_factory_address must be an EVM address")
+	}
+	if !isEVMAddressShape(resolverAddress) {
+		return repository.AttachMarketContractInput{}, errors.New("resolver_address must be an EVM address")
+	}
+
+	return repository.AttachMarketContractInput{
+		MarketContractAddress:  strings.ToLower(marketContractAddress),
+		MarketDeploymentTxHash: strings.ToLower(marketDeploymentTxHash),
+		MarketFactoryAddress:   strings.ToLower(marketFactoryAddress),
+		ResolverAddress:        strings.ToLower(resolverAddress),
+	}, nil
+}
+
 func registerMarketRoutes(router chi.Router, marketsRepository *repository.MarketsRepository) {
 	router.Get("/markets", func(w http.ResponseWriter, r *http.Request) {
 		markets, err := marketsRepository.ListMarkets(r.Context(), defaultMarketsLimit)
@@ -167,6 +214,45 @@ func registerMarketRoutes(router chi.Router, marketsRepository *repository.Marke
 		}
 
 		httpjson.WriteJSON(w, http.StatusCreated, map[string]any{
+			"market": newMarketResponse(market),
+		})
+	})
+
+	router.Patch("/markets/{id}/contract", func(w http.ResponseWriter, r *http.Request) {
+		marketID := chi.URLParam(r, "id")
+		if !isUUIDShape(marketID) {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_market_id", "market id is invalid")
+			return
+		}
+
+		var request attachMarketContractRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+			return
+		}
+
+		input, err := request.toRepositoryInput()
+		if err != nil {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_contract_attachment", "invalid contract attachment")
+			return
+		}
+
+		market, err := marketsRepository.AttachMarketContract(r.Context(), marketID, input)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "market_not_found", "market not found")
+				return
+			}
+			if isUniqueViolation(err) {
+				httpjson.WriteError(w, http.StatusConflict, "market_contract_already_attached", "market contract address is already attached")
+				return
+			}
+
+			httpjson.WriteError(w, http.StatusInternalServerError, "market_contract_attach_failed", "failed to attach market contract")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
 			"market": newMarketResponse(market),
 		})
 	})

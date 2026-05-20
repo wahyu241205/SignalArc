@@ -1,12 +1,17 @@
-import type { Address } from "viem"
+import { isAddress, type Address } from "viem"
 
 export const ARC_TESTNET_CHAIN_ID = 5042002
 export const ARC_TESTNET_EXPLORER_URL = "https://testnet.arcscan.app"
-export const SIGNAL_ARC_MARKET_ADDRESS =
-  "0xf4ccc11A9e24fb996679F946C23C04AFd2797F26" as Address
 export const ARC_TESTNET_USDC_ADDRESS =
   "0x3600000000000000000000000000000000000000" as Address
 export const USDC_ERC20_DECIMALS = 6
+
+const configuredFactoryAddress = process.env.NEXT_PUBLIC_SIGNAL_ARC_MARKET_FACTORY_ADDRESS?.trim()
+
+export const SIGNAL_ARC_MARKET_FACTORY_ADDRESS =
+  configuredFactoryAddress && isAddress(configuredFactoryAddress)
+    ? (configuredFactoryAddress as Address)
+    : null
 
 export const SIGNAL_ARC_MARKET_ABI = [
   {
@@ -25,6 +30,155 @@ export const SIGNAL_ARC_MARKET_ABI = [
       { name: "amount", type: "uint256" },
     ],
     outputs: [],
+  },
+  {
+    type: "function",
+    name: "closeMarket",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "resolve",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "winningOutcome", type: "uint8" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "cancelMarket",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "claim",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "claimableAmount",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "resolver",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "status",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "winningOutcome",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "yesPositions",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "noPositions",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "hasClaimed",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "totalYes",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "totalNo",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "totalCollateral",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "question",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
+  },
+  {
+    type: "function",
+    name: "closeTimestamp",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "collateralToken",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+] as const
+
+export const SIGNAL_ARC_MARKET_FACTORY_ABI = [
+  {
+    type: "function",
+    name: "createMarket",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "marketId", type: "string" },
+      { name: "question", type: "string" },
+      { name: "closeTimestamp", type: "uint256" },
+      { name: "resolver", type: "address" },
+      { name: "collateralToken", type: "address" },
+    ],
+    outputs: [{ name: "market", type: "address" }],
+  },
+  {
+    type: "event",
+    name: "MarketDeployed",
+    inputs: [
+      { name: "marketId", type: "string", indexed: true },
+      { name: "market", type: "address", indexed: true },
+      { name: "creator", type: "address", indexed: true },
+      { name: "resolver", type: "address", indexed: false },
+      { name: "collateralToken", type: "address", indexed: false },
+      { name: "closeTimestamp", type: "uint256", indexed: false },
+      { name: "question", type: "string", indexed: false },
+    ],
+    anonymous: false,
   },
 ] as const
 

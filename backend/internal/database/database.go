@@ -20,6 +20,7 @@ type SchemaValidation struct {
 	MigrationVersion int      `json:"migration_version"`
 	Dirty            bool     `json:"dirty"`
 	MissingTables    []string `json:"missing_tables"`
+	MissingColumns   []string `json:"missing_columns"`
 }
 
 var expectedPhase2Tables = []string{
@@ -36,6 +37,14 @@ var expectedPhase2Tables = []string{
 	"api_keys",
 	"webhooks",
 	"agent_access",
+}
+
+var expectedMarketOnchainColumns = []string{
+	"market_contract_address",
+	"market_deployment_tx_hash",
+	"market_factory_address",
+	"resolver_address",
+	"onchain_deployment_status",
 }
 
 func Connect(ctx context.Context, databaseURL string) (*DB, error) {
@@ -81,8 +90,9 @@ func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {
 	defer cancel()
 
 	result := SchemaValidation{
-		Status:        "error",
-		MissingTables: []string{},
+		Status:         "error",
+		MissingTables:  []string{},
+		MissingColumns: []string{},
 	}
 
 	var migrationsExists bool
@@ -135,7 +145,37 @@ func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {
 		}
 	}
 
-	if result.MigrationVersion == 13 && !result.Dirty && len(result.MissingTables) == 0 {
+	columnRows, err := db.pool.Query(ctx, `
+		SELECT column_name
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+			AND table_name = 'markets'
+			AND column_name = ANY($1)
+	`, expectedMarketOnchainColumns)
+	if err != nil {
+		return result, fmt.Errorf("read market onchain columns: %w", err)
+	}
+	defer columnRows.Close()
+
+	existingColumns := make(map[string]bool, len(expectedMarketOnchainColumns))
+	for columnRows.Next() {
+		var columnName string
+		if err := columnRows.Scan(&columnName); err != nil {
+			return result, fmt.Errorf("scan market onchain column: %w", err)
+		}
+		existingColumns[columnName] = true
+	}
+	if err := columnRows.Err(); err != nil {
+		return result, fmt.Errorf("iterate market onchain columns: %w", err)
+	}
+
+	for _, columnName := range expectedMarketOnchainColumns {
+		if !existingColumns[columnName] {
+			result.MissingColumns = append(result.MissingColumns, "markets."+columnName)
+		}
+	}
+
+	if result.MigrationVersion == 14 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
 		result.Status = "ok"
 	}
 

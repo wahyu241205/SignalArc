@@ -51,6 +51,7 @@ export type SchemaValidationResponse = {
   migration_version: number
   dirty: boolean
   missing_tables: string[]
+  missing_columns: string[]
 }
 
 export type Market = {
@@ -70,6 +71,11 @@ export type Market = {
   resolved_at: string | null
   settled_at: string | null
   winning_outcome: string | null
+  market_contract_address: string | null
+  market_deployment_tx_hash: string | null
+  market_factory_address: string | null
+  resolver_address: string | null
+  onchain_deployment_status: "NOT_DEPLOYED" | "DEPLOYED" | "FAILED"
   created_at: string
   updated_at: string
 }
@@ -143,6 +149,7 @@ export type ArcContractStatus = {
   network: string
   chain_id: number
   signal_arc_market: string
+  signal_arc_market_factory: string
   usdc_erc20_interface: string
   explorer: string
   prototype: boolean
@@ -181,6 +188,13 @@ export type CreateTradeIntentRequest = {
   price: string
 }
 
+export type AttachMarketContractRequest = {
+  market_contract_address: string
+  market_deployment_tx_hash: string
+  market_factory_address: string
+  resolver_address: string
+}
+
 export type TradeIntentResponse = {
   trade: Trade
   execution: {
@@ -198,7 +212,7 @@ export type UserSettlementsResponse = {
 }
 
 export type MarketResolutionResponse = {
-  resolution: Resolution
+  resolution: Resolution | null
 }
 
 export type MarketSettlementsResponse = {
@@ -329,6 +343,13 @@ export function getMarket(id: string) {
 export function createMarket(input: CreateMarketRequest) {
   return apiRequest<MarketResponse>("/markets", {
     method: "POST",
+    body: input,
+  })
+}
+
+export function attachMarketContract(marketId: string, input: AttachMarketContractRequest) {
+  return apiRequest<MarketResponse>(`/markets/${encodeURIComponent(marketId)}/contract`, {
+    method: "PATCH",
     body: input,
   })
 }

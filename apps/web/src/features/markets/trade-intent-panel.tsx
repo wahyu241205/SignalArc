@@ -1,8 +1,8 @@
 "use client"
 
-import { type FormEvent, useMemo, useState } from "react"
+import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { AlertCircle, CheckCircle2, ExternalLink, Loader2 } from "lucide-react"
-import { parseUnits, type Hash } from "viem"
+import { isAddress, parseUnits, type Address, type Hash } from "viem"
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions"
 import { useAccount, useChainId, useConfig, useReadContract, useSwitchChain } from "wagmi"
 
@@ -22,7 +22,6 @@ import {
   ARC_TESTNET_USDC_ADDRESS,
   ERC20_APPROVE_ABI,
   SIGNAL_ARC_MARKET_ABI,
-  SIGNAL_ARC_MARKET_ADDRESS,
   USDC_ERC20_DECIMALS,
   getArcscanTxUrl,
 } from "@/lib/contracts"
@@ -41,6 +40,8 @@ const outcomeSide: Record<Outcome, 1 | 2> = {
   YES: 1,
   NO: 2,
 }
+
+const MARKET_STATUS_OPEN = 1
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -147,7 +148,15 @@ function PendingState({ state }: { state: Extract<SubmitState, { status: "approv
   )
 }
 
-export function TradeIntentPanel({ marketId, marketStatus }: { marketId: string; marketStatus: string }) {
+export function TradeIntentPanel({
+  marketId,
+  marketStatus,
+  marketContractAddress,
+}: {
+  marketId: string
+  marketStatus: string
+  marketContractAddress: string | null
+}) {
   const config = useConfig()
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
@@ -155,9 +164,14 @@ export function TradeIntentPanel({ marketId, marketStatus }: { marketId: string;
   const [outcome, setOutcome] = useState<Outcome>("YES")
   const [amount, setAmount] = useState("1")
   const [state, setState] = useState<SubmitState>({ status: "idle" })
+  const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000))
   const isTradingOpen = marketStatus.toUpperCase() === "OPEN"
   const isArcTestnet = chainId === ARC_TESTNET_CHAIN_ID
   const isPending = state.status === "approving" || state.status === "opening"
+  const contractAddress =
+    marketContractAddress && isAddress(marketContractAddress)
+      ? (marketContractAddress as Address)
+      : null
   const parsedAmount = useMemo(() => {
     try {
       return parseUsdcAmount(amount)
@@ -166,20 +180,51 @@ export function TradeIntentPanel({ marketId, marketStatus }: { marketId: string;
     }
   }, [amount])
   const { data: isContractOpen } = useReadContract({
-    address: SIGNAL_ARC_MARKET_ADDRESS,
+    address: contractAddress ?? undefined,
     abi: SIGNAL_ARC_MARKET_ABI,
     functionName: "isOpen",
     chainId: ARC_TESTNET_CHAIN_ID,
     query: {
-      enabled: isConnected && isArcTestnet,
+      enabled: Boolean(contractAddress),
     },
   })
+  const { data: contractStatus } = useReadContract({
+    address: contractAddress ?? undefined,
+    abi: SIGNAL_ARC_MARKET_ABI,
+    functionName: "status",
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: {
+      enabled: Boolean(contractAddress),
+    },
+  })
+  const { data: closeTimestamp } = useReadContract({
+    address: contractAddress ?? undefined,
+    abi: SIGNAL_ARC_MARKET_ABI,
+    functionName: "closeTimestamp",
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: {
+      enabled: Boolean(contractAddress),
+    },
+  })
+  const hasReachedCloseTime = closeTimestamp !== undefined && BigInt(nowSeconds) >= closeTimestamp
+  const isContractTradingClosed =
+    contractStatus !== undefined && contractStatus !== MARKET_STATUS_OPEN
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNowSeconds(Math.floor(Date.now() / 1000))
+    }, 30_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   const disabledReason = (() => {
+    if (!contractAddress) return "Onchain contract not deployed for this market."
+    if (isContractTradingClosed || hasReachedCloseTime) return "Trading is closed for this market."
     if (!isConnected) return "Connect wallet to trade."
     if (!isArcTestnet) return "Switch to Arc Testnet."
     if (!isTradingOpen) return "Trading is not open for this market."
-    if (isContractOpen === false) return "The Arc Testnet market contract is not open."
+    if (isContractOpen === false) return "Trading is closed for this market."
     if (!parsedAmount) return "Enter a valid USDC amount."
     return null
   })()
@@ -187,7 +232,7 @@ export function TradeIntentPanel({ marketId, marketStatus }: { marketId: string;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!canSubmit || !address) return
+    if (!canSubmit || !address || !contractAddress) return
 
     let approveHash: Hash | undefined
     let openHash: Hash | undefined
@@ -199,7 +244,7 @@ export function TradeIntentPanel({ marketId, marketStatus }: { marketId: string;
         address: ARC_TESTNET_USDC_ADDRESS,
         abi: ERC20_APPROVE_ABI,
         functionName: "approve",
-        args: [SIGNAL_ARC_MARKET_ADDRESS, usdcAmount],
+        args: [contractAddress, usdcAmount],
         chainId: ARC_TESTNET_CHAIN_ID,
         account: address,
       })
@@ -211,7 +256,7 @@ export function TradeIntentPanel({ marketId, marketStatus }: { marketId: string;
 
       setState({ status: "opening", approveHash })
       openHash = await writeContract(config, {
-        address: SIGNAL_ARC_MARKET_ADDRESS,
+        address: contractAddress,
         abi: SIGNAL_ARC_MARKET_ABI,
         functionName: "openPosition",
         args: [outcomeSide[outcome], usdcAmount],
@@ -252,7 +297,7 @@ export function TradeIntentPanel({ marketId, marketStatus }: { marketId: string;
         <form className="grid gap-5" onSubmit={handleSubmit}>
           <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
             <p>
-              Contract: <span className="font-mono text-xs text-foreground">{SIGNAL_ARC_MARKET_ADDRESS}</span>
+              Contract: <span className="font-mono text-xs text-foreground">{contractAddress ?? "Not deployed"}</span>
             </p>
             <p className="mt-2">
               Market ID: <span className="font-mono text-xs text-foreground">{marketId}</span>
