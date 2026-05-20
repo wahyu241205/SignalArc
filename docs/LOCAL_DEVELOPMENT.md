@@ -17,16 +17,16 @@ This guide is for running SignalArc locally. Localhost URLs are intentionally us
 docker compose up -d signalarc-postgres signalarc-backend
 ```
 
-The local backend listens on `127.0.0.1:4000`. PostgreSQL is exposed on `127.0.0.1:15433`.
+The local backend listens on `localhost:4000`. PostgreSQL is exposed on `localhost:15433`.
 
 ## Check Backend
 
 ```bash
 docker compose ps
-curl http://127.0.0.1:4000/health
-curl http://127.0.0.1:4000/readyz
-curl http://127.0.0.1:4000/markets
-curl http://127.0.0.1:4000/arc/contract
+curl http://localhost:4000/health
+curl http://localhost:4000/readyz
+curl http://localhost:4000/markets
+curl http://localhost:4000/arc/contract
 ```
 
 Expected health response:
@@ -60,7 +60,7 @@ Backend local examples are documented in `backend/.env.example`. Do not print or
 
 | Access path | Host | Port |
 | --- | --- | --- |
-| Host machine | `127.0.0.1` | `15433` |
+| Host machine | `localhost` | `15433` |
 | Docker network | `signalarc-postgres` | `5432` |
 
 The Docker Compose development database uses local-only credentials suitable for development, not production.
@@ -106,7 +106,7 @@ docker compose logs signalarc-postgres
 Then retry:
 
 ```bash
-curl http://127.0.0.1:4000/readyz
+curl http://localhost:4000/readyz
 ```
 
 ### WalletConnect Project ID Missing

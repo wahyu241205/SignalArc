@@ -59,8 +59,8 @@ docker compose up -d signalarc-postgres signalarc-backend
 Check backend health:
 
 ```bash
-curl http://127.0.0.1:4000/health
-curl http://127.0.0.1:4000/readyz
+curl http://localhost:4000/health
+curl http://localhost:4000/readyz
 ```
 
 Start the frontend:

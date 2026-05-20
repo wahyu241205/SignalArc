@@ -89,8 +89,8 @@ The contract is an Arc Testnet prototype. It is not audited and is not productio
 
 ```mermaid
 flowchart LR
-  Frontend["Manual frontend<br/>pnpm dev:web"] --> Backend["signalarc-backend<br/>127.0.0.1:4000"]
-  Backend --> DB["signalarc-postgres<br/>container:5432<br/>host:127.0.0.1:15433"]
+  Frontend["Manual frontend<br/>pnpm dev:web"] --> Backend["signalarc-backend<br/>localhost:4000"]
+  Backend --> DB["signalarc-postgres<br/>container:5432<br/>host:localhost:15433"]
 ```
 
 Local Docker currently runs:
