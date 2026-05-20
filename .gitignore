@@ -54,3 +54,8 @@ next-env.d.ts
 
 # Local-only internal planning notes
 docs/internal/
+
+# Foundry generated files
+contracts/cache/
+contracts/out/
+contracts/broadcast/
