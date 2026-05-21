@@ -166,6 +166,27 @@ Real buyYes / buyNo validation:
   - `USDC.balanceOf(0xd76c5633c3D8C1761F7edae46506B44cDeEe43a7) == 2000000`
   - `USDC.allowance(deployer, market) == 0`
 
+Real cancel / refund lifecycle validation:
+- Pre-cancel read validation:
+  - `status() == 0`
+  - `claimableRefund(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 0`
+  - `USDC.balanceOf(0xd76c5633c3D8C1761F7edae46506B44cDeEe43a7) == 2000000`
+  - `USDC.balanceOf(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 32622253`
+- `cancelMarket()` transaction: `0x93df5450fcfc50054b7cbc4f260fafc876a29d339d3923807cdb3d4f6323274d`
+- Cancel receipt status: `1 (success)`
+- Post-cancel read validation:
+  - `status() == 3`
+  - `claimableRefund(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 2000000`
+  - `USDC.balanceOf(0xd76c5633c3D8C1761F7edae46506B44cDeEe43a7) == 2000000`
+- `claimRefund()` transaction: `0x54bb3939995f613212531e45345d42c31d57e0ce61eccb26eb5d526921ce4453`
+- Claim refund receipt status: `1 (success)`
+- Post-refund read validation:
+  - `hasClaimed(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == true`
+  - `USDC.balanceOf(0xd76c5633c3D8C1761F7edae46506B44cDeEe43a7) == 0`
+  - `USDC.balanceOf(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 34619899`
+  - `claimableRefund(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 2000000`
+- Note: `claimableRefund` reports the cancelled position amount and does not check `hasClaimed`; refund completion is proven by `hasClaimed == true`, market USDC balance `0`, and the successful USDC transfer in the claim transaction.
+
 ## Non-Claims
 
 Not implemented yet:
