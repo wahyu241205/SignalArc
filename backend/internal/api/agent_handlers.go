@@ -57,6 +57,24 @@ type agentExecutionPlanResponse struct {
 	Warnings            []string                   `json:"warnings"`
 }
 
+type agentExecutionResponse struct {
+	IntentID            string                `json:"intent_id"`
+	Action              string                `json:"action"`
+	Status              string                `json:"status"`
+	ExecutionMode       string                `json:"execution_mode"`
+	Network             string                `json:"network"`
+	AgentFactoryAddress string                `json:"agent_factory_address"`
+	BroadcastPerformed  bool                  `json:"broadcast_performed"`
+	TransactionHash     string                `json:"transaction_hash"`
+	Readback            agentReadbackResponse `json:"readback"`
+}
+
+type agentReadbackResponse struct {
+	MarketCount   string `json:"market_count"`
+	CreatedMarket string `json:"created_market,omitempty"`
+	IsMarket      *bool  `json:"is_market,omitempty"`
+}
+
 type transactionRequestResponse struct {
 	To                 string   `json:"to"`
 	Contract           string   `json:"contract"`
@@ -67,7 +85,7 @@ type transactionRequestResponse struct {
 	BroadcastPerformed bool     `json:"broadcast_performed"`
 }
 
-func registerAgentIntentRoutes(router chi.Router, store *agent.Store) {
+func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor agent.Executor) {
 	router.Post("/agent/intents", func(w http.ResponseWriter, r *http.Request) {
 		var request createAgentIntentRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -143,6 +161,69 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store) {
 			"execution_plan": newAgentExecutionPlanResponse(executionPlan),
 		})
 	})
+
+	router.Post("/agent/intents/{id}/execute", func(w http.ResponseWriter, r *http.Request) {
+		intentID := chi.URLParam(r, "id")
+		intent, err := store.GetIntent(intentID)
+		if err != nil {
+			if errors.Is(err, agent.ErrIntentNotFound) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_intent_not_found", "agent intent not found")
+				return
+			}
+
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_get_failed", "failed to get agent intent")
+			return
+		}
+
+		if intent.Status != agent.StatusConfirmed {
+			httpjson.WriteError(w, http.StatusConflict, "agent_intent_not_confirmed", "agent intent must be confirmed before execution")
+			return
+		}
+		if !intent.ValidationResult.Valid {
+			httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
+			return
+		}
+		if intent.Action != agent.ActionCreateMarket {
+			httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market execution is implemented")
+			return
+		}
+
+		activeExecutor := executor
+		if activeExecutor == nil {
+			activeExecutor, err = agent.NewArcExecutorFromEnv()
+			if err != nil {
+				httpjson.WriteError(w, http.StatusServiceUnavailable, "agent_execution_config_invalid", "agent execution environment is not configured")
+				return
+			}
+		}
+
+		result, err := activeExecutor.ExecuteCreateMarket(r.Context(), intent)
+		if err != nil {
+			if errors.Is(err, agent.ErrExecutionNotImplemented) {
+				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market execution is implemented")
+				return
+			}
+			if errors.Is(err, agent.ErrIntentInvalid) {
+				httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
+				return
+			}
+			if errors.Is(err, agent.ErrIntentNotConfirmed) {
+				httpjson.WriteError(w, http.StatusConflict, "agent_intent_not_confirmed", "agent intent must be confirmed before execution")
+				return
+			}
+			if errors.Is(err, agent.ErrExecutionConfigInvalid) {
+				httpjson.WriteError(w, http.StatusServiceUnavailable, "agent_execution_config_invalid", "agent execution environment is not configured")
+				return
+			}
+
+			httpjson.WriteError(w, http.StatusBadGateway, "agent_execution_failed", "agent create_market execution failed")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"execution": newAgentExecutionResponse(result),
+		})
+	})
 }
 
 func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {
@@ -192,5 +273,23 @@ func newTransactionRequestResponse(transactionRequest agent.TransactionRequest) 
 		Value:              transactionRequest.Value,
 		Chain:              transactionRequest.Chain,
 		BroadcastPerformed: transactionRequest.BroadcastPerformed,
+	}
+}
+
+func newAgentExecutionResponse(result agent.ExecutionResult) agentExecutionResponse {
+	return agentExecutionResponse{
+		IntentID:            result.IntentID,
+		Action:              result.Action,
+		Status:              result.Status,
+		ExecutionMode:       result.ExecutionMode,
+		Network:             result.Network,
+		AgentFactoryAddress: result.AgentFactoryAddress,
+		BroadcastPerformed:  result.BroadcastPerformed,
+		TransactionHash:     result.TransactionHash,
+		Readback: agentReadbackResponse{
+			MarketCount:   result.Readback.MarketCount,
+			CreatedMarket: result.Readback.CreatedMarket,
+			IsMarket:      result.Readback.IsMarket,
+		},
 	}
 }

@@ -32,7 +32,7 @@ func NewRouter(db *database.DB) http.Handler {
 	registerPositionRoutes(router, positionsRepository)
 	registerResolutionRoutes(router, resolutionsRepository)
 	registerSettlementRoutes(router, settlementsRepository)
-	registerAgentIntentRoutes(router, agentIntentStore)
+	registerAgentIntentRoutes(router, agentIntentStore, nil)
 
 	return router
 }

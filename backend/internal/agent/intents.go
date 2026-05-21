@@ -22,6 +22,7 @@ const (
 
 	StatusPreview   = "preview"
 	StatusConfirmed = "confirmed"
+	StatusExecuted  = "executed"
 
 	ExecutionModeAgentContract = "agent_contract"
 	NetworkArcTestnet          = "arc_testnet"

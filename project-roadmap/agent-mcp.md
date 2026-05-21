@@ -241,6 +241,49 @@ Real close / resolve / payout lifecycle validation:
   - `USDC.allowance(deployer, market) == 0`
 - Note: `claimablePayout` reports the winning position amount and does not check `hasClaimed`; payout completion is proven by `hasClaimed == true`, market USDC balance `0`, and the successful USDC transfer in the claim transaction.
 
+## Backend Agent create_market Execution Endpoint
+
+Status: DONE.
+
+This validates the backend `POST /agent/intents/{id}/execute` path for `action=create_market` with a real Arc Testnet transaction, not a mock, fake smoke, dry run, or local simulation.
+
+Implementation boundary:
+- Implemented action: `create_market`
+- Other actions: return `501 not_implemented`
+- Runtime env names:
+  - `ARC_TESTNET_RPC_URL`
+  - `AGENT_EXECUTOR_PRIVATE_KEY`
+  - `AGENT_FACTORY_ADDRESS`
+- Private key is read from env only and is not logged or returned.
+
+Backend local validation:
+- Backend route: `POST /agent/intents/{id}/execute`
+- Local validation port: `4107`
+- Intent id: `agent_intent_4e6c6445c3d542cd6b6cf2dff24611d9`
+- Market id: `backend-create-market-1779358755`
+- Question: `Will SignalArc backend execute create_market on Arc Testnet?`
+- Close timestamp: `1779445152`
+- Resolver: `0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC`
+- Collateral token: `0x3600000000000000000000000000000000000000`
+
+Execution result:
+- Transaction: `0x0f89ff6e50e31769c0708d3f725c86c4612ba553f7e2bdab7721f8e6dd2674c4`
+- Created agent market: `0x0d4aF15Bee1Caf6FB61F55668c2Cd8CB7a051e81`
+- Backend response readback:
+  - `status == executed`
+  - `broadcast_performed == true`
+  - `transaction_hash == 0x0f89ff6e50e31769c0708d3f725c86c4612ba553f7e2bdab7721f8e6dd2674c4`
+  - `network == arc_testnet`
+  - `readback.market_count == 5`
+  - `readback.created_market == 0x0d4aF15Bee1Caf6FB61F55668c2Cd8CB7a051e81`
+  - `readback.is_market == true`
+
+Independent onchain readback:
+- Receipt status: `1 (success)`
+- Factory `marketCount() == 5`
+- Factory `isMarket(0x0d4aF15Bee1Caf6FB61F55668c2Cd8CB7a051e81) == true`
+- Created market `collateralToken() == 0x3600000000000000000000000000000000000000`
+
 ## Non-Claims
 
 Not implemented yet:

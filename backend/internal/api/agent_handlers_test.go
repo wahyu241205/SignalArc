@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,9 +13,25 @@ import (
 	"github.com/wahyu241205/SignalArc/backend/internal/agent"
 )
 
+type stubAgentExecutor struct {
+	result agent.ExecutionResult
+	err    error
+	intent agent.Intent
+	called bool
+}
+
+func (executor *stubAgentExecutor) ExecuteCreateMarket(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
+	executor.called = true
+	executor.intent = intent
+	if executor.err != nil {
+		return agent.ExecutionResult{}, executor.err
+	}
+	return executor.result, nil
+}
+
 func TestCreateAgentIntentPreview(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
@@ -63,7 +81,7 @@ func TestCreateAgentIntentPreview(t *testing.T) {
 func TestGetAgentIntentPreview(t *testing.T) {
 	store := agent.NewStore()
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, store)
+	registerAgentIntentRoutes(router, store, nil)
 
 	createResponse := httptest.NewRecorder()
 	createRequest := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
@@ -107,7 +125,7 @@ func TestGetAgentIntentPreview(t *testing.T) {
 
 func TestCreateAgentIntentValidationErrors(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
@@ -140,7 +158,7 @@ func TestCreateAgentIntentValidationErrors(t *testing.T) {
 
 func TestGetAgentIntentNotFound(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/agent/intents/missing", nil)
@@ -154,7 +172,7 @@ func TestGetAgentIntentNotFound(t *testing.T) {
 func TestConfirmValidAgentIntent(t *testing.T) {
 	store := agent.NewStore()
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, store)
+	registerAgentIntentRoutes(router, store, nil)
 	intentID := createValidAgentIntent(t, router)
 
 	response := httptest.NewRecorder()
@@ -203,7 +221,7 @@ func TestConfirmValidAgentIntent(t *testing.T) {
 
 func TestConfirmMissingAgentIntentReturnsNotFound(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/intents/missing/confirm", nil)
@@ -216,7 +234,7 @@ func TestConfirmMissingAgentIntentReturnsNotFound(t *testing.T) {
 
 func TestConfirmInvalidAgentIntentReturnsBadRequest(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 
 	createResponse := httptest.NewRecorder()
 	createRequest := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
@@ -249,7 +267,7 @@ func TestConfirmInvalidAgentIntentReturnsBadRequest(t *testing.T) {
 func TestConfirmAgentIntentIsIdempotent(t *testing.T) {
 	store := agent.NewStore()
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, store)
+	registerAgentIntentRoutes(router, store, nil)
 	intentID := createValidAgentIntent(t, router)
 
 	firstResponse := httptest.NewRecorder()
@@ -292,7 +310,7 @@ func TestConfirmAgentIntentIsIdempotent(t *testing.T) {
 func TestConfirmAgentIntentResponseSaysBroadcastNotPerformed(t *testing.T) {
 	store := agent.NewStore()
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, store)
+	registerAgentIntentRoutes(router, store, nil)
 	intentID := createValidAgentIntent(t, router)
 
 	response := httptest.NewRecorder()
@@ -319,7 +337,7 @@ func TestConfirmAgentIntentResponseSaysBroadcastNotPerformed(t *testing.T) {
 
 func TestConfirmCreateMarketReturnsFactoryTransactionRequest(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 
 	intentID := createAgentIntent(t, router, `{
 		"action": "create_market",
@@ -353,9 +371,221 @@ func TestConfirmCreateMarketReturnsFactoryTransactionRequest(t *testing.T) {
 	assertNoExecutionClaim(t, executionPlan)
 }
 
+func TestExecuteConfirmedCreateMarketReturnsRealExecutionShape(t *testing.T) {
+	store := agent.NewStore()
+	isMarket := true
+	executor := &stubAgentExecutor{
+		result: agent.ExecutionResult{
+			IntentID:            "set-by-test",
+			Action:              agent.ActionCreateMarket,
+			Status:              agent.StatusExecuted,
+			ExecutionMode:       agent.ExecutionModeAgentContract,
+			Network:             agent.NetworkArcTestnet,
+			AgentFactoryAddress: "0x69aE770e8b2F96297101FeC4dc123B3801dA7d80",
+			BroadcastPerformed:  true,
+			TransactionHash:     "0x1111111111111111111111111111111111111111111111111111111111111111",
+			Readback: agent.ExecutionReadback{
+				MarketCount:   "5",
+				CreatedMarket: "0x2222222222222222222222222222222222222222",
+				IsMarket:      &isMarket,
+			},
+		},
+	}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "create_market",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "agent-market-execute-1",
+		"question": "Will SignalArc execute an agent market?",
+		"close_timestamp": "1767225600",
+		"resolver": "0x2222222222222222222222222222222222222222",
+		"collateral_token": "0x3333333333333333333333333333333333333333"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+	executor.result.IntentID = intentID
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !executor.called {
+		t.Fatal("expected executor to be called")
+	}
+	if executor.intent.ID != intentID {
+		t.Fatalf("expected executor intent %q, got %q", intentID, executor.intent.ID)
+	}
+
+	var body struct {
+		Execution agentExecutionResponse `json:"execution"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode execute response: %v", err)
+	}
+
+	if body.Execution.Status != agent.StatusExecuted {
+		t.Fatalf("expected executed status, got %q", body.Execution.Status)
+	}
+	if !body.Execution.BroadcastPerformed {
+		t.Fatal("expected broadcast_performed true")
+	}
+	if body.Execution.TransactionHash != executor.result.TransactionHash {
+		t.Fatalf("unexpected transaction hash %q", body.Execution.TransactionHash)
+	}
+	if body.Execution.Network != agent.NetworkArcTestnet {
+		t.Fatalf("expected arc_testnet network, got %q", body.Execution.Network)
+	}
+	if body.Execution.Readback.MarketCount != "5" {
+		t.Fatalf("expected market count 5, got %q", body.Execution.Readback.MarketCount)
+	}
+	if body.Execution.Readback.CreatedMarket != "0x2222222222222222222222222222222222222222" {
+		t.Fatalf("unexpected created market %q", body.Execution.Readback.CreatedMarket)
+	}
+	if body.Execution.Readback.IsMarket == nil || !*body.Execution.Readback.IsMarket {
+		t.Fatalf("expected is_market true, got %#v", body.Execution.Readback.IsMarket)
+	}
+}
+
+func TestExecuteUnconfirmedIntentReturnsConflict(t *testing.T) {
+	store := agent.NewStore()
+	executor := &stubAgentExecutor{}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "create_market",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "agent-market-execute-2",
+		"question": "Will SignalArc reject unconfirmed execution?",
+		"close_timestamp": "1767225600",
+		"resolver": "0x2222222222222222222222222222222222222222",
+		"collateral_token": "0x3333333333333333333333333333333333333333"
+	}`)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusConflict, response.Code, response.Body.String())
+	}
+	if executor.called {
+		t.Fatal("executor should not be called for unconfirmed intent")
+	}
+}
+
+func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
+	store := agent.NewStore()
+	executor := &stubAgentExecutor{}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createValidAgentIntent(t, router)
+	confirmAgentIntent(t, router, intentID)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotImplemented {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusNotImplemented, response.Code, response.Body.String())
+	}
+	if executor.called {
+		t.Fatal("executor should not be called for unsupported action")
+	}
+}
+
+func TestExecuteReportsConfigErrorWithoutSecretDetails(t *testing.T) {
+	store := agent.NewStore()
+	executor := &stubAgentExecutor{err: agent.ErrExecutionConfigInvalid}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "create_market",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "agent-market-execute-3",
+		"question": "Will SignalArc hide execution config details?",
+		"close_timestamp": "1767225600",
+		"resolver": "0x2222222222222222222222222222222222222222",
+		"collateral_token": "0x3333333333333333333333333333333333333333"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusServiceUnavailable, response.Code, response.Body.String())
+	}
+	if !executor.called {
+		t.Fatal("expected executor to be called")
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("private")) {
+		t.Fatalf("response should not expose private-key details: %s", response.Body.String())
+	}
+}
+
+func TestExecuteMapsExecutorNotImplemented(t *testing.T) {
+	store := agent.NewStore()
+	executor := &stubAgentExecutor{err: agent.ErrExecutionNotImplemented}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "create_market",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "agent-market-execute-4",
+		"question": "Will SignalArc map executor not implemented?",
+		"close_timestamp": "1767225600",
+		"resolver": "0x2222222222222222222222222222222222222222",
+		"collateral_token": "0x3333333333333333333333333333333333333333"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotImplemented {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusNotImplemented, response.Code, response.Body.String())
+	}
+}
+
+func TestExecuteMapsUnexpectedExecutorError(t *testing.T) {
+	store := agent.NewStore()
+	executor := &stubAgentExecutor{err: errors.New("rpc unavailable")}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "create_market",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "agent-market-execute-5",
+		"question": "Will SignalArc map executor errors?",
+		"close_timestamp": "1767225600",
+		"resolver": "0x2222222222222222222222222222222222222222",
+		"collateral_token": "0x3333333333333333333333333333333333333333"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusBadGateway, response.Code, response.Body.String())
+	}
+}
+
 func TestConfirmBuyYesReturnsMarketTransactionRequest(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 	marketAddress := "0x4444444444444444444444444444444444444444"
 
 	intentID := createAgentIntent(t, router, `{
@@ -383,7 +613,7 @@ func TestConfirmBuyYesReturnsMarketTransactionRequest(t *testing.T) {
 
 func TestConfirmClaimRefundReturnsMarketTransactionRequest(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 	marketAddress := "0x5555555555555555555555555555555555555555"
 
 	intentID := createAgentIntent(t, router, `{
@@ -410,7 +640,7 @@ func TestConfirmClaimRefundReturnsMarketTransactionRequest(t *testing.T) {
 
 func TestBuyYesMissingMarketContractAddressFailsValidation(t *testing.T) {
 	router := chi.NewRouter()
-	registerAgentIntentRoutes(router, agent.NewStore())
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
