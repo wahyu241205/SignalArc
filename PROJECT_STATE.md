@@ -526,7 +526,7 @@ Done:
 
 ## Live AI Agent Transaction MVP
 
-Status: IN PROGRESS - boundary/discovery only; blocked before live onchain validation.
+Status: IN PROGRESS - backend Circle Agent Wallet provider core trading flow validated on Arc Testnet; external client trigger, lifecycle actions, Docker/Cloud Run runtime strategy, production readiness, and mainnet readiness remain pending.
 
 Current checkpoint state:
 
@@ -562,22 +562,60 @@ Current checkpoint state:
 - Provider supports `create_market`, `buy_yes`, and `buy_no` only.
 - Provider uses Circle CLI `wallet execute` for writes and `contract query` for readbacks, with JSON-only parsing and sanitized errors.
 - Provider never calls Circle login, never accepts OTP, and never stores Circle tokens, session files, private keys, or deployer keys.
+- Runtime validation was performed from the host shell backend on port `4001`, not the Docker backend container, because the Docker backend container does not have Circle CLI installed.
+- Host Circle Agent Wallet session was valid for the recorded backend provider run.
+- DB migration was advanced to version `15`, `dirty=false`.
+- Agent wallet was registered through DB-backed `POST /agent/wallets`.
+- Registered agent:
+  - `agent_id`: `agent_desi_001`
+  - `user_email`: `desi33905@gmail.com`
+  - `user_wallet`: `0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC`
+  - `agent_wallet_address`: `0x96d5051a005547eba149f71604ccf58ae1a7c950`
+  - `wallet_provider`: `circle_agent_wallet`
+  - `chain`: `ARC-TESTNET`
+  - `allowed_actions`: `create_market`, `buy_yes`, `buy_no`
+  - `source_client`: `manual_backend_runtime`
+- Backend provider `create_market` evidence:
+  - `intent_id`: `agent_intent_f76bd9653e9ce3f6269023a25e7c6b8c`
+  - `execution_mode`: `circle_agent_wallet_cli`
+  - Transaction: `0x7aa51a0d19b163a3a88ae16ac4a88a1cdbb3090cad5d0ccc54f828b166f74e5d`
+  - Created market: `0x38aE7E0133e9594F597F913884cbDa619A950523`
+  - Readback: `market_count == 9`, `is_market == true`
+- Backend provider `buy_yes` evidence:
+  - `intent_id`: `agent_intent_d6f9cd78896886f954a05a164c17c067`
+  - `execution_mode`: `circle_agent_wallet_cli`
+  - Market: `0x38aE7E0133e9594F597F913884cbDa619A950523`
+  - Approve transaction: `0x09d0a418c34b0e54a31bc3a2a7bfba85218eba27e84becdcbd89e5b63b8bb387`
+  - `buyYes` transaction: `0xa1fadb400aa8b4babca0c936698e686eeaac3ae408b22d1e37960901a5c48ade`
+  - Readback: `yes_positions == 1000000`, `total_yes == 1000000`, `total_collateral == 1000000`, `USDC.balanceOf(market) == 1000000`
+- Backend provider `buy_no` evidence:
+  - `intent_id`: `agent_intent_ed7050305f62798d8472b7f48e538ff8`
+  - `execution_mode`: `circle_agent_wallet_cli`
+  - Market: `0x38aE7E0133e9594F597F913884cbDa619A950523`
+  - Approve transaction: `0x40ba807e24e2fcfeba22f21575920d3dfe5389f7f00320ab5a74fb46f06c6dc8`
+  - `buyNo` transaction: `0xb36288fc40a69765d62679982fdd3319d09b27c010e2eb9caafa9c6508d03e9c`
+  - Readback: `no_positions == 1000000`, `total_no == 1000000`, `total_collateral == 2000000`, `USDC.balanceOf(market) == 2000000`
+- Current proven status:
+  - Backend Circle provider `create_market` validated with a real Arc Testnet transaction.
+  - Backend Circle provider `buy_yes` validated with a real Arc Testnet transaction.
+  - Backend Circle provider `buy_no` validated with a real Arc Testnet transaction.
+  - Backend-to-Circle-to-Arc path is proven for the core trading flow.
 - No secrets, `.env` files, frontend code, production deployment config, commits, pushes, or deploys were changed.
 
 Current non-claims:
 
-- No live external ChatGPT/Claude/Telegram client has triggered the backend.
-- Payout lifecycle from the Circle Agent Wallet is not complete yet.
-- Cancel/refund lifecycle from the Circle Agent Wallet is not complete yet.
-- Backend Circle Agent Wallet execution is implemented as an explicitly enabled Circle CLI adapter only; real backend execution still requires an operator-authenticated Circle CLI session in the backend runtime.
-- External AI client integrations are not implemented yet.
+- WhatsApp, Telegram, ChatGPT, and Claude live client triggers have not been tested yet.
+- Lifecycle actions are still not implemented or tested: `close_market`, `resolve_market`, `claim_payout`, `cancel_market`, `claim_refund`.
+- Docker/Cloud Run runtime does not yet include a Circle CLI/session strategy.
+- No production readiness claim.
+- No mainnet claim.
+- No Circle policy limit claim on `ARC-TESTNET`.
 - Circle CLI command shapes in `project-roadmap/agent-mcp.md` are official-doc/help-discovery shapes only unless accompanied by exact authenticated output and onchain evidence.
-- SignalArc does not claim production policy-limited execution on ARC-TESTNET; Circle CLI help says `wallet limit` is mainnet only.
 - The phase is not complete.
 
 ## Next Recommended Step
 
-- Validate the guarded backend Circle CLI provider in an operator-controlled backend runtime with an authenticated Circle Agent Wallet session, then record tx hash and onchain readback. Do not capture OTP or store Circle session material in SignalArc.
+- Design and validate the Docker/Cloud Run Circle CLI/session strategy before treating the backend provider as deployable. Do not capture OTP or store Circle session material in SignalArc.
 - Do not add Circle API keys, deployer/user private keys, DNS, live deployment, contract redeploy, frontend execution UI, or mainnet configuration yet.
 
 Do not start unrelated coding before checking:
