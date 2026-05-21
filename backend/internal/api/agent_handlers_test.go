@@ -38,6 +38,15 @@ func (executor *stubAgentExecutor) ExecuteBuyYes(_ context.Context, intent agent
 	return executor.result, nil
 }
 
+func (executor *stubAgentExecutor) ExecuteBuyNo(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
+	executor.called = true
+	executor.intent = intent
+	if executor.err != nil {
+		return agent.ExecutionResult{}, executor.err
+	}
+	return executor.result, nil
+}
+
 func TestCreateAgentIntentPreview(t *testing.T) {
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, agent.NewStore(), nil)
@@ -568,9 +577,28 @@ func TestExecuteConfirmedBuyYesReturnsRealExecutionShape(t *testing.T) {
 	}
 }
 
-func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
+func TestExecuteConfirmedBuyNoReturnsRealExecutionShape(t *testing.T) {
 	store := agent.NewStore()
-	executor := &stubAgentExecutor{}
+	executor := &stubAgentExecutor{
+		result: agent.ExecutionResult{
+			IntentID:               "set-by-test",
+			Action:                 agent.ActionBuyNo,
+			Status:                 agent.StatusExecuted,
+			ExecutionMode:          agent.ExecutionModeAgentContract,
+			Network:                agent.NetworkArcTestnet,
+			MarketContractAddress:  "0x3333333333333333333333333333333333333333",
+			BroadcastPerformed:     true,
+			ApproveTransactionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			TransactionHash:        "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			Readback: agent.ExecutionReadback{
+				NoPositions:     "1000000",
+				TotalNo:         "1000000",
+				TotalCollateral: "1000000",
+				USDCBalance:     "1000000",
+				USDCAllowance:   "0",
+			},
+		},
+	}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, executor)
 
@@ -580,6 +608,77 @@ func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
 		"market_id": "market-1",
 		"market_contract_address": "0x3333333333333333333333333333333333333333",
 		"amount": "1000000"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+	executor.result.IntentID = intentID
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !executor.called {
+		t.Fatal("expected executor to be called")
+	}
+	if executor.intent.Action != agent.ActionBuyNo {
+		t.Fatalf("expected buy_no intent, got %q", executor.intent.Action)
+	}
+
+	var body struct {
+		Execution agentExecutionResponse `json:"execution"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode execute response: %v", err)
+	}
+
+	if body.Execution.Action != agent.ActionBuyNo {
+		t.Fatalf("expected buy_no action, got %q", body.Execution.Action)
+	}
+	if body.Execution.Status != agent.StatusExecuted {
+		t.Fatalf("expected executed status, got %q", body.Execution.Status)
+	}
+	if !body.Execution.BroadcastPerformed {
+		t.Fatal("expected broadcast_performed true")
+	}
+	if body.Execution.ApproveTransactionHash != executor.result.ApproveTransactionHash {
+		t.Fatalf("unexpected approve transaction hash %q", body.Execution.ApproveTransactionHash)
+	}
+	if body.Execution.TransactionHash != executor.result.TransactionHash {
+		t.Fatalf("unexpected buyNo transaction hash %q", body.Execution.TransactionHash)
+	}
+	if body.Execution.MarketContractAddress != executor.result.MarketContractAddress {
+		t.Fatalf("unexpected market address %q", body.Execution.MarketContractAddress)
+	}
+	if body.Execution.Readback.NoPositions != "1000000" {
+		t.Fatalf("expected no positions 1000000, got %q", body.Execution.Readback.NoPositions)
+	}
+	if body.Execution.Readback.TotalNo != "1000000" {
+		t.Fatalf("expected total no 1000000, got %q", body.Execution.Readback.TotalNo)
+	}
+	if body.Execution.Readback.TotalCollateral != "1000000" {
+		t.Fatalf("expected total collateral 1000000, got %q", body.Execution.Readback.TotalCollateral)
+	}
+	if body.Execution.Readback.USDCBalance != "1000000" {
+		t.Fatalf("expected usdc balance 1000000, got %q", body.Execution.Readback.USDCBalance)
+	}
+	if body.Execution.Readback.USDCAllowance != "0" {
+		t.Fatalf("expected usdc allowance 0, got %q", body.Execution.Readback.USDCAllowance)
+	}
+}
+
+func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
+	store := agent.NewStore()
+	executor := &stubAgentExecutor{}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "cancel_market",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333"
 	}`)
 	confirmAgentIntent(t, router, intentID)
 

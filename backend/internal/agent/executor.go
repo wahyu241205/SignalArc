@@ -26,14 +26,18 @@ const agentFactoryABIJSON = `[
 
 const agentMarketABIJSON = `[
 	{"type":"function","name":"buyYes","inputs":[{"name":"amount","type":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},
+	{"type":"function","name":"buyNo","inputs":[{"name":"amount","type":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},
 	{"type":"function","name":"yesPositions","inputs":[{"name":"user","type":"address"}],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"},
+	{"type":"function","name":"noPositions","inputs":[{"name":"user","type":"address"}],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"},
 	{"type":"function","name":"totalYes","inputs":[],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"},
+	{"type":"function","name":"totalNo","inputs":[],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"},
 	{"type":"function","name":"totalCollateral","inputs":[],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"}
 ]`
 
 const erc20ABIJSON = `[
 	{"type":"function","name":"approve","inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable"},
-	{"type":"function","name":"balanceOf","inputs":[{"name":"account","type":"address"}],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"}
+	{"type":"function","name":"balanceOf","inputs":[{"name":"account","type":"address"}],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"},
+	{"type":"function","name":"allowance","inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"}
 ]`
 
 const ArcTestnetUSDCAddress = "0x3600000000000000000000000000000000000000"
@@ -47,6 +51,7 @@ var (
 type Executor interface {
 	ExecuteCreateMarket(context.Context, Intent) (ExecutionResult, error)
 	ExecuteBuyYes(context.Context, Intent) (ExecutionResult, error)
+	ExecuteBuyNo(context.Context, Intent) (ExecutionResult, error)
 }
 
 type ExecutionResult struct {
@@ -68,9 +73,12 @@ type ExecutionReadback struct {
 	CreatedMarket   string
 	IsMarket        *bool
 	YesPositions    string
+	NoPositions     string
 	TotalYes        string
+	TotalNo         string
 	TotalCollateral string
 	USDCBalance     string
+	USDCAllowance   string
 }
 
 type ArcExecutorConfig struct {
@@ -194,13 +202,21 @@ func (executor *ArcExecutor) ExecuteCreateMarket(ctx context.Context, intent Int
 }
 
 func (executor *ArcExecutor) ExecuteBuyYes(ctx context.Context, intent Intent) (ExecutionResult, error) {
+	return executor.executeBuyPosition(ctx, intent, ActionBuyYes, "buyYes", "yesPositions", "totalYes")
+}
+
+func (executor *ArcExecutor) ExecuteBuyNo(ctx context.Context, intent Intent) (ExecutionResult, error) {
+	return executor.executeBuyPosition(ctx, intent, ActionBuyNo, "buyNo", "noPositions", "totalNo")
+}
+
+func (executor *ArcExecutor) executeBuyPosition(ctx context.Context, intent Intent, expectedAction string, buyMethod string, positionMethod string, totalMethod string) (ExecutionResult, error) {
 	if intent.Status != StatusConfirmed {
 		return ExecutionResult{}, ErrIntentNotConfirmed
 	}
 	if !intent.ValidationResult.Valid {
 		return ExecutionResult{}, ErrIntentInvalid
 	}
-	if intent.Action != ActionBuyYes {
+	if intent.Action != expectedAction {
 		return ExecutionResult{}, ErrExecutionNotImplemented
 	}
 	if err := executor.validateConfig(); err != nil {
@@ -263,23 +279,23 @@ func (executor *ArcExecutor) ExecuteBuyYes(ctx context.Context, intent Intent) (
 	}
 
 	market := bind.NewBoundContract(marketAddress, marketABI, client, client, client)
-	buyTx, err := market.Transact(auth, "buyYes", amount)
+	buyTx, err := market.Transact(auth, buyMethod, amount)
 	if err != nil {
-		return ExecutionResult{}, fmt.Errorf("broadcast buyYes: %w", err)
+		return ExecutionResult{}, fmt.Errorf("broadcast %s: %w", buyMethod, err)
 	}
 	buyReceipt, err := bind.WaitMined(ctx, client, buyTx)
 	if err != nil {
-		return ExecutionResult{}, fmt.Errorf("wait for buyYes receipt: %w", err)
+		return ExecutionResult{}, fmt.Errorf("wait for %s receipt: %w", buyMethod, err)
 	}
 	if buyReceipt.Status != types.ReceiptStatusSuccessful {
-		return ExecutionResult{}, fmt.Errorf("buyYes transaction failed with receipt status %d", buyReceipt.Status)
+		return ExecutionResult{}, fmt.Errorf("%s transaction failed with receipt status %d", buyMethod, buyReceipt.Status)
 	}
 
-	yesPositions, err := readUint256(ctx, client, marketABI, marketAddress, "yesPositions", executorAddress)
+	positions, err := readUint256(ctx, client, marketABI, marketAddress, positionMethod, executorAddress)
 	if err != nil {
 		return ExecutionResult{}, err
 	}
-	totalYes, err := readUint256(ctx, client, marketABI, marketAddress, "totalYes")
+	total, err := readUint256(ctx, client, marketABI, marketAddress, totalMethod)
 	if err != nil {
 		return ExecutionResult{}, err
 	}
@@ -290,6 +306,23 @@ func (executor *ArcExecutor) ExecuteBuyYes(ctx context.Context, intent Intent) (
 	usdcBalance, err := readUint256(ctx, client, tokenABI, tokenAddress, "balanceOf", marketAddress)
 	if err != nil {
 		return ExecutionResult{}, err
+	}
+	usdcAllowance, err := readUint256(ctx, client, tokenABI, tokenAddress, "allowance", executorAddress, marketAddress)
+	if err != nil {
+		return ExecutionResult{}, err
+	}
+
+	readback := ExecutionReadback{
+		TotalCollateral: totalCollateral.String(),
+		USDCBalance:     usdcBalance.String(),
+		USDCAllowance:   usdcAllowance.String(),
+	}
+	if expectedAction == ActionBuyYes {
+		readback.YesPositions = positions.String()
+		readback.TotalYes = total.String()
+	} else {
+		readback.NoPositions = positions.String()
+		readback.TotalNo = total.String()
 	}
 
 	return ExecutionResult{
@@ -303,12 +336,7 @@ func (executor *ArcExecutor) ExecuteBuyYes(ctx context.Context, intent Intent) (
 		BroadcastPerformed:     true,
 		ApproveTransactionHash: approveTx.Hash().Hex(),
 		TransactionHash:        buyTx.Hash().Hex(),
-		Readback: ExecutionReadback{
-			YesPositions:    yesPositions.String(),
-			TotalYes:        totalYes.String(),
-			TotalCollateral: totalCollateral.String(),
-			USDCBalance:     usdcBalance.String(),
-		},
+		Readback:               readback,
 	}, nil
 }
 

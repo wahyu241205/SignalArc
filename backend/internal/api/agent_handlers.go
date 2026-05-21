@@ -76,9 +76,12 @@ type agentReadbackResponse struct {
 	CreatedMarket   string `json:"created_market,omitempty"`
 	IsMarket        *bool  `json:"is_market,omitempty"`
 	YesPositions    string `json:"yes_positions,omitempty"`
+	NoPositions     string `json:"no_positions,omitempty"`
 	TotalYes        string `json:"total_yes,omitempty"`
+	TotalNo         string `json:"total_no,omitempty"`
 	TotalCollateral string `json:"total_collateral,omitempty"`
 	USDCBalance     string `json:"usdc_balance,omitempty"`
+	USDCAllowance   string `json:"usdc_allowance,omitempty"`
 }
 
 type transactionRequestResponse struct {
@@ -189,8 +192,8 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 			httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
 			return
 		}
-		if intent.Action != agent.ActionCreateMarket && intent.Action != agent.ActionBuyYes {
-			httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market and buy_yes execution are implemented")
+		if intent.Action != agent.ActionCreateMarket && intent.Action != agent.ActionBuyYes && intent.Action != agent.ActionBuyNo {
+			httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market, buy_yes, and buy_no execution are implemented")
 			return
 		}
 
@@ -209,12 +212,14 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 			result, err = activeExecutor.ExecuteCreateMarket(r.Context(), intent)
 		case agent.ActionBuyYes:
 			result, err = activeExecutor.ExecuteBuyYes(r.Context(), intent)
+		case agent.ActionBuyNo:
+			result, err = activeExecutor.ExecuteBuyNo(r.Context(), intent)
 		default:
 			err = agent.ErrExecutionNotImplemented
 		}
 		if err != nil {
 			if errors.Is(err, agent.ErrExecutionNotImplemented) {
-				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market and buy_yes execution are implemented")
+				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market, buy_yes, and buy_no execution are implemented")
 				return
 			}
 			if errors.Is(err, agent.ErrIntentInvalid) {
@@ -307,9 +312,12 @@ func newAgentExecutionResponse(result agent.ExecutionResult) agentExecutionRespo
 			CreatedMarket:   result.Readback.CreatedMarket,
 			IsMarket:        result.Readback.IsMarket,
 			YesPositions:    result.Readback.YesPositions,
+			NoPositions:     result.Readback.NoPositions,
 			TotalYes:        result.Readback.TotalYes,
+			TotalNo:         result.Readback.TotalNo,
 			TotalCollateral: result.Readback.TotalCollateral,
 			USDCBalance:     result.Readback.USDCBalance,
+			USDCAllowance:   result.Readback.USDCAllowance,
 		},
 	}
 }
