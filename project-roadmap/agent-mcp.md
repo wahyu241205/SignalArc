@@ -284,6 +284,60 @@ Independent onchain readback:
 - Factory `isMarket(0x0d4aF15Bee1Caf6FB61F55668c2Cd8CB7a051e81) == true`
 - Created market `collateralToken() == 0x3600000000000000000000000000000000000000`
 
+## Backend Agent buy_yes Execution Endpoint
+
+Status: DONE.
+
+This validates the backend `POST /agent/intents/{id}/execute` path for `action=buy_yes` with real Arc Testnet transactions, not a mock, fake smoke, dry run, or local simulation.
+
+Implementation boundary:
+- Implemented additional action: `buy_yes`
+- Still not implemented in this phase: `buy_no`, `cancel_market`, `close_market`, `resolve_market`, `claim_refund`, `claim_payout`
+- Runtime env names:
+  - `ARC_TESTNET_RPC_URL`
+  - `AGENT_EXECUTOR_PRIVATE_KEY`
+  - `AGENT_FACTORY_ADDRESS`
+- Private key is read from env only and is not logged or returned.
+- Execution uses Arc Testnet USDC: `0x3600000000000000000000000000000000000000`
+
+Fresh market for backend buy_yes validation:
+- Created through backend `create_market` execution endpoint.
+- Intent id: `agent_intent_3c7ccaed030100b61eb3818aec277883`
+- Market id: `backend-buy-yes-market-1779359535`
+- Create transaction: `0xb7acd12fe390c1f3cc59543938710cd549855d4636682f9a841fd16fa500f8f3`
+- Created agent market: `0xCB8D34fFdA32a3b58f355b92c3e720deCCF1C437`
+- Backend create readback:
+  - `readback.market_count == 6`
+  - `readback.created_market == 0xCB8D34fFdA32a3b58f355b92c3e720deCCF1C437`
+  - `readback.is_market == true`
+
+Backend buy_yes validation:
+- Intent id: `agent_intent_296671404fb958240b433ea31c79f0b5`
+- Market contract address: `0xCB8D34fFdA32a3b58f355b92c3e720deCCF1C437`
+- Amount: `1000000`
+- USDC approve transaction: `0x5b3668792b391a7ec5fa892168569c26cf690e939ee8afa333ce54396871c1aa`
+- `buyYes(1000000)` transaction: `0xc5d455a6f31bee34c443045575c2dedc5e62dfa53576d52b05916206a5fa8825`
+- Backend response readback:
+  - `status == executed`
+  - `action == buy_yes`
+  - `network == arc_testnet`
+  - `broadcast_performed == true`
+  - `approve_transaction_hash == 0x5b3668792b391a7ec5fa892168569c26cf690e939ee8afa333ce54396871c1aa`
+  - `transaction_hash == 0xc5d455a6f31bee34c443045575c2dedc5e62dfa53576d52b05916206a5fa8825`
+  - `readback.yes_positions == 1000000`
+  - `readback.total_yes == 1000000`
+  - `readback.total_collateral == 1000000`
+  - `readback.usdc_balance == 1000000`
+
+Independent onchain readback:
+- Approve receipt status: `1 (success)`
+- Buy YES receipt status: `1 (success)`
+- `yesPositions(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 1000000`
+- `totalYes() == 1000000`
+- `totalCollateral() == 1000000`
+- `USDC.balanceOf(0xCB8D34fFdA32a3b58f355b92c3e720deCCF1C437) == 1000000`
+- `USDC.allowance(deployer, market) == 0`
+
 ## Non-Claims
 
 Not implemented yet:

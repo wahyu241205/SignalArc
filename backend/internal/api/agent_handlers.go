@@ -58,21 +58,27 @@ type agentExecutionPlanResponse struct {
 }
 
 type agentExecutionResponse struct {
-	IntentID            string                `json:"intent_id"`
-	Action              string                `json:"action"`
-	Status              string                `json:"status"`
-	ExecutionMode       string                `json:"execution_mode"`
-	Network             string                `json:"network"`
-	AgentFactoryAddress string                `json:"agent_factory_address"`
-	BroadcastPerformed  bool                  `json:"broadcast_performed"`
-	TransactionHash     string                `json:"transaction_hash"`
-	Readback            agentReadbackResponse `json:"readback"`
+	IntentID               string                `json:"intent_id"`
+	Action                 string                `json:"action"`
+	Status                 string                `json:"status"`
+	ExecutionMode          string                `json:"execution_mode"`
+	Network                string                `json:"network"`
+	AgentFactoryAddress    string                `json:"agent_factory_address"`
+	MarketContractAddress  string                `json:"market_contract_address,omitempty"`
+	BroadcastPerformed     bool                  `json:"broadcast_performed"`
+	ApproveTransactionHash string                `json:"approve_transaction_hash,omitempty"`
+	TransactionHash        string                `json:"transaction_hash"`
+	Readback               agentReadbackResponse `json:"readback"`
 }
 
 type agentReadbackResponse struct {
-	MarketCount   string `json:"market_count"`
-	CreatedMarket string `json:"created_market,omitempty"`
-	IsMarket      *bool  `json:"is_market,omitempty"`
+	MarketCount     string `json:"market_count"`
+	CreatedMarket   string `json:"created_market,omitempty"`
+	IsMarket        *bool  `json:"is_market,omitempty"`
+	YesPositions    string `json:"yes_positions,omitempty"`
+	TotalYes        string `json:"total_yes,omitempty"`
+	TotalCollateral string `json:"total_collateral,omitempty"`
+	USDCBalance     string `json:"usdc_balance,omitempty"`
 }
 
 type transactionRequestResponse struct {
@@ -183,8 +189,8 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 			httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
 			return
 		}
-		if intent.Action != agent.ActionCreateMarket {
-			httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market execution is implemented")
+		if intent.Action != agent.ActionCreateMarket && intent.Action != agent.ActionBuyYes {
+			httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market and buy_yes execution are implemented")
 			return
 		}
 
@@ -197,10 +203,18 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 			}
 		}
 
-		result, err := activeExecutor.ExecuteCreateMarket(r.Context(), intent)
+		var result agent.ExecutionResult
+		switch intent.Action {
+		case agent.ActionCreateMarket:
+			result, err = activeExecutor.ExecuteCreateMarket(r.Context(), intent)
+		case agent.ActionBuyYes:
+			result, err = activeExecutor.ExecuteBuyYes(r.Context(), intent)
+		default:
+			err = agent.ErrExecutionNotImplemented
+		}
 		if err != nil {
 			if errors.Is(err, agent.ErrExecutionNotImplemented) {
-				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market execution is implemented")
+				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market and buy_yes execution are implemented")
 				return
 			}
 			if errors.Is(err, agent.ErrIntentInvalid) {
@@ -216,7 +230,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 				return
 			}
 
-			httpjson.WriteError(w, http.StatusBadGateway, "agent_execution_failed", "agent create_market execution failed")
+			httpjson.WriteError(w, http.StatusBadGateway, "agent_execution_failed", "agent execution failed")
 			return
 		}
 
@@ -278,18 +292,24 @@ func newTransactionRequestResponse(transactionRequest agent.TransactionRequest) 
 
 func newAgentExecutionResponse(result agent.ExecutionResult) agentExecutionResponse {
 	return agentExecutionResponse{
-		IntentID:            result.IntentID,
-		Action:              result.Action,
-		Status:              result.Status,
-		ExecutionMode:       result.ExecutionMode,
-		Network:             result.Network,
-		AgentFactoryAddress: result.AgentFactoryAddress,
-		BroadcastPerformed:  result.BroadcastPerformed,
-		TransactionHash:     result.TransactionHash,
+		IntentID:               result.IntentID,
+		Action:                 result.Action,
+		Status:                 result.Status,
+		ExecutionMode:          result.ExecutionMode,
+		Network:                result.Network,
+		AgentFactoryAddress:    result.AgentFactoryAddress,
+		MarketContractAddress:  result.MarketContractAddress,
+		BroadcastPerformed:     result.BroadcastPerformed,
+		ApproveTransactionHash: result.ApproveTransactionHash,
+		TransactionHash:        result.TransactionHash,
 		Readback: agentReadbackResponse{
-			MarketCount:   result.Readback.MarketCount,
-			CreatedMarket: result.Readback.CreatedMarket,
-			IsMarket:      result.Readback.IsMarket,
+			MarketCount:     result.Readback.MarketCount,
+			CreatedMarket:   result.Readback.CreatedMarket,
+			IsMarket:        result.Readback.IsMarket,
+			YesPositions:    result.Readback.YesPositions,
+			TotalYes:        result.Readback.TotalYes,
+			TotalCollateral: result.Readback.TotalCollateral,
+			USDCBalance:     result.Readback.USDCBalance,
 		},
 	}
 }

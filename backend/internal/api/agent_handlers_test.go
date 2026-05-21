@@ -29,6 +29,15 @@ func (executor *stubAgentExecutor) ExecuteCreateMarket(_ context.Context, intent
 	return executor.result, nil
 }
 
+func (executor *stubAgentExecutor) ExecuteBuyYes(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
+	executor.called = true
+	executor.intent = intent
+	if executor.err != nil {
+		return agent.ExecutionResult{}, executor.err
+	}
+	return executor.result, nil
+}
+
 func TestCreateAgentIntentPreview(t *testing.T) {
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, agent.NewStore(), nil)
@@ -478,13 +487,100 @@ func TestExecuteUnconfirmedIntentReturnsConflict(t *testing.T) {
 	}
 }
 
+func TestExecuteConfirmedBuyYesReturnsRealExecutionShape(t *testing.T) {
+	store := agent.NewStore()
+	executor := &stubAgentExecutor{
+		result: agent.ExecutionResult{
+			IntentID:               "set-by-test",
+			Action:                 agent.ActionBuyYes,
+			Status:                 agent.StatusExecuted,
+			ExecutionMode:          agent.ExecutionModeAgentContract,
+			Network:                agent.NetworkArcTestnet,
+			MarketContractAddress:  "0x3333333333333333333333333333333333333333",
+			BroadcastPerformed:     true,
+			ApproveTransactionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			TransactionHash:        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Readback: agent.ExecutionReadback{
+				YesPositions:    "1000000",
+				TotalYes:        "1000000",
+				TotalCollateral: "1000000",
+				USDCBalance:     "1000000",
+			},
+		},
+	}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createValidAgentIntent(t, router)
+	confirmAgentIntent(t, router, intentID)
+	executor.result.IntentID = intentID
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !executor.called {
+		t.Fatal("expected executor to be called")
+	}
+	if executor.intent.Action != agent.ActionBuyYes {
+		t.Fatalf("expected buy_yes intent, got %q", executor.intent.Action)
+	}
+
+	var body struct {
+		Execution agentExecutionResponse `json:"execution"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode execute response: %v", err)
+	}
+
+	if body.Execution.Action != agent.ActionBuyYes {
+		t.Fatalf("expected buy_yes action, got %q", body.Execution.Action)
+	}
+	if body.Execution.Status != agent.StatusExecuted {
+		t.Fatalf("expected executed status, got %q", body.Execution.Status)
+	}
+	if !body.Execution.BroadcastPerformed {
+		t.Fatal("expected broadcast_performed true")
+	}
+	if body.Execution.ApproveTransactionHash != executor.result.ApproveTransactionHash {
+		t.Fatalf("unexpected approve transaction hash %q", body.Execution.ApproveTransactionHash)
+	}
+	if body.Execution.TransactionHash != executor.result.TransactionHash {
+		t.Fatalf("unexpected buyYes transaction hash %q", body.Execution.TransactionHash)
+	}
+	if body.Execution.MarketContractAddress != executor.result.MarketContractAddress {
+		t.Fatalf("unexpected market address %q", body.Execution.MarketContractAddress)
+	}
+	if body.Execution.Readback.YesPositions != "1000000" {
+		t.Fatalf("expected yes positions 1000000, got %q", body.Execution.Readback.YesPositions)
+	}
+	if body.Execution.Readback.TotalYes != "1000000" {
+		t.Fatalf("expected total yes 1000000, got %q", body.Execution.Readback.TotalYes)
+	}
+	if body.Execution.Readback.TotalCollateral != "1000000" {
+		t.Fatalf("expected total collateral 1000000, got %q", body.Execution.Readback.TotalCollateral)
+	}
+	if body.Execution.Readback.USDCBalance != "1000000" {
+		t.Fatalf("expected usdc balance 1000000, got %q", body.Execution.Readback.USDCBalance)
+	}
+}
+
 func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
 	store := agent.NewStore()
 	executor := &stubAgentExecutor{}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, executor)
 
-	intentID := createValidAgentIntent(t, router)
+	intentID := createAgentIntent(t, router, `{
+		"action": "buy_no",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "1000000"
+	}`)
 	confirmAgentIntent(t, router, intentID)
 
 	response := httptest.NewRecorder()

@@ -24,6 +24,20 @@ const agentFactoryABIJSON = `[
 	{"type":"event","name":"AgentMarketDeployed","inputs":[{"name":"marketId","type":"string","indexed":true},{"name":"market","type":"address","indexed":true},{"name":"admin","type":"address","indexed":true},{"name":"resolver","type":"address","indexed":false},{"name":"collateralToken","type":"address","indexed":false},{"name":"closeTimestamp","type":"uint256","indexed":false},{"name":"question","type":"string","indexed":false}],"anonymous":false}
 ]`
 
+const agentMarketABIJSON = `[
+	{"type":"function","name":"buyYes","inputs":[{"name":"amount","type":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},
+	{"type":"function","name":"yesPositions","inputs":[{"name":"user","type":"address"}],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"},
+	{"type":"function","name":"totalYes","inputs":[],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"},
+	{"type":"function","name":"totalCollateral","inputs":[],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"}
+]`
+
+const erc20ABIJSON = `[
+	{"type":"function","name":"approve","inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"outputs":[{"name":"","type":"bool"}],"stateMutability":"nonpayable"},
+	{"type":"function","name":"balanceOf","inputs":[{"name":"account","type":"address"}],"outputs":[{"name":"","type":"uint256"}],"stateMutability":"view"}
+]`
+
+const ArcTestnetUSDCAddress = "0x3600000000000000000000000000000000000000"
+
 var (
 	ErrExecutionNotImplemented = errors.New("agent execution action is not implemented")
 	ErrIntentNotConfirmed      = errors.New("agent intent is not confirmed")
@@ -32,24 +46,31 @@ var (
 
 type Executor interface {
 	ExecuteCreateMarket(context.Context, Intent) (ExecutionResult, error)
+	ExecuteBuyYes(context.Context, Intent) (ExecutionResult, error)
 }
 
 type ExecutionResult struct {
-	IntentID            string
-	Action              string
-	Status              string
-	ExecutionMode       string
-	Network             string
-	AgentFactoryAddress string
-	BroadcastPerformed  bool
-	TransactionHash     string
-	Readback            ExecutionReadback
+	IntentID               string
+	Action                 string
+	Status                 string
+	ExecutionMode          string
+	Network                string
+	AgentFactoryAddress    string
+	MarketContractAddress  string
+	BroadcastPerformed     bool
+	ApproveTransactionHash string
+	TransactionHash        string
+	Readback               ExecutionReadback
 }
 
 type ExecutionReadback struct {
-	MarketCount   string
-	CreatedMarket string
-	IsMarket      *bool
+	MarketCount     string
+	CreatedMarket   string
+	IsMarket        *bool
+	YesPositions    string
+	TotalYes        string
+	TotalCollateral string
+	USDCBalance     string
 }
 
 type ArcExecutorConfig struct {
@@ -172,6 +193,125 @@ func (executor *ArcExecutor) ExecuteCreateMarket(ctx context.Context, intent Int
 	}, nil
 }
 
+func (executor *ArcExecutor) ExecuteBuyYes(ctx context.Context, intent Intent) (ExecutionResult, error) {
+	if intent.Status != StatusConfirmed {
+		return ExecutionResult{}, ErrIntentNotConfirmed
+	}
+	if !intent.ValidationResult.Valid {
+		return ExecutionResult{}, ErrIntentInvalid
+	}
+	if intent.Action != ActionBuyYes {
+		return ExecutionResult{}, ErrExecutionNotImplemented
+	}
+	if err := executor.validateConfig(); err != nil {
+		return ExecutionResult{}, err
+	}
+	if intent.UserWallet == "" || intent.MarketContractAddress == "" || intent.Amount == "" {
+		return ExecutionResult{}, ErrIntentInvalid
+	}
+
+	amount, ok := new(big.Int).SetString(intent.Amount, 10)
+	if !ok || amount.Sign() <= 0 {
+		return ExecutionResult{}, fmt.Errorf("%w: amount must be a positive integer base-unit value", ErrIntentInvalid)
+	}
+
+	marketABI, err := abi.JSON(strings.NewReader(agentMarketABIJSON))
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("parse agent market abi: %w", err)
+	}
+	tokenABI, err := abi.JSON(strings.NewReader(erc20ABIJSON))
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("parse erc20 abi: %w", err)
+	}
+
+	client, err := ethclient.DialContext(ctx, executor.cfg.RPCURL)
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("connect arc testnet rpc: %w", err)
+	}
+	defer client.Close()
+
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(executor.cfg.ExecutorPrivateKey, "0x"))
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("%w: AGENT_EXECUTOR_PRIVATE_KEY is invalid", ErrExecutionConfigInvalid)
+	}
+
+	chainID, err := client.ChainID(ctx)
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("read chain id: %w", err)
+	}
+
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("create transactor: %w", err)
+	}
+	auth.Context = ctx
+	executorAddress := auth.From
+
+	marketAddress := common.HexToAddress(intent.MarketContractAddress)
+	tokenAddress := common.HexToAddress(ArcTestnetUSDCAddress)
+	token := bind.NewBoundContract(tokenAddress, tokenABI, client, client, client)
+	approveTx, err := token.Transact(auth, "approve", marketAddress, amount)
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("broadcast USDC approve: %w", err)
+	}
+	approveReceipt, err := bind.WaitMined(ctx, client, approveTx)
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("wait for USDC approve receipt: %w", err)
+	}
+	if approveReceipt.Status != types.ReceiptStatusSuccessful {
+		return ExecutionResult{}, fmt.Errorf("USDC approve transaction failed with receipt status %d", approveReceipt.Status)
+	}
+
+	market := bind.NewBoundContract(marketAddress, marketABI, client, client, client)
+	buyTx, err := market.Transact(auth, "buyYes", amount)
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("broadcast buyYes: %w", err)
+	}
+	buyReceipt, err := bind.WaitMined(ctx, client, buyTx)
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("wait for buyYes receipt: %w", err)
+	}
+	if buyReceipt.Status != types.ReceiptStatusSuccessful {
+		return ExecutionResult{}, fmt.Errorf("buyYes transaction failed with receipt status %d", buyReceipt.Status)
+	}
+
+	yesPositions, err := readUint256(ctx, client, marketABI, marketAddress, "yesPositions", executorAddress)
+	if err != nil {
+		return ExecutionResult{}, err
+	}
+	totalYes, err := readUint256(ctx, client, marketABI, marketAddress, "totalYes")
+	if err != nil {
+		return ExecutionResult{}, err
+	}
+	totalCollateral, err := readUint256(ctx, client, marketABI, marketAddress, "totalCollateral")
+	if err != nil {
+		return ExecutionResult{}, err
+	}
+	usdcBalance, err := readUint256(ctx, client, tokenABI, tokenAddress, "balanceOf", marketAddress)
+	if err != nil {
+		return ExecutionResult{}, err
+	}
+
+	return ExecutionResult{
+		IntentID:               intent.ID,
+		Action:                 intent.Action,
+		Status:                 StatusExecuted,
+		ExecutionMode:          ExecutionModeAgentContract,
+		Network:                NetworkArcTestnet,
+		AgentFactoryAddress:    common.HexToAddress(executor.cfg.AgentFactory).Hex(),
+		MarketContractAddress:  marketAddress.Hex(),
+		BroadcastPerformed:     true,
+		ApproveTransactionHash: approveTx.Hash().Hex(),
+		TransactionHash:        buyTx.Hash().Hex(),
+		Readback: ExecutionReadback{
+			YesPositions:    yesPositions.String(),
+			TotalYes:        totalYes.String(),
+			TotalCollateral: totalCollateral.String(),
+			USDCBalance:     usdcBalance.String(),
+		},
+	}, nil
+}
+
 func (executor *ArcExecutor) validateConfig() error {
 	if executor == nil {
 		return ErrExecutionConfigInvalid
@@ -251,4 +391,31 @@ func readIsMarket(ctx context.Context, client *ethclient.Client, parsedABI abi.A
 	}
 
 	return isMarket, nil
+}
+
+func readUint256(ctx context.Context, client *ethclient.Client, parsedABI abi.ABI, contractAddress common.Address, method string, args ...any) (*big.Int, error) {
+	data, err := parsedABI.Pack(method, args...)
+	if err != nil {
+		return nil, fmt.Errorf("pack %s call: %w", method, err)
+	}
+
+	output, err := client.CallContract(ctx, ethereum.CallMsg{To: &contractAddress, Data: data}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", method, err)
+	}
+
+	values, err := parsedABI.Unpack(method, output)
+	if err != nil {
+		return nil, fmt.Errorf("unpack %s: %w", method, err)
+	}
+	if len(values) != 1 {
+		return nil, fmt.Errorf("%s returned unexpected value count", method)
+	}
+
+	value, ok := values[0].(*big.Int)
+	if !ok {
+		return nil, fmt.Errorf("%s returned unexpected value type", method)
+	}
+
+	return value, nil
 }
