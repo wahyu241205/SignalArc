@@ -103,6 +103,24 @@ Status: DONE.
 - Deploy transaction: `0x8e4dfa481a2863a08a749fe4add30c4f030f178a4d6ba4658419df6730ebf10b`
 - Read validation: `marketCount() == 0`
 
+
+## Real Arc Testnet Agent Market Smoke
+
+Status: DONE.
+
+This is a real Arc Testnet transaction, not a mock or local simulation.
+
+- Action: `SignalArcAgentMarketFactory.createMarket`
+- Factory: `0x69aE770e8b2F96297101FeC4dc123B3801dA7d80`
+- Transaction: `0xff4d6eb644792a1c064992704ba767b6712b7cc02c1b44635859e199efdfc69d`
+- Created agent market: `0x4e26143A63457cf06A34112b8B9044F3760d3007`
+- Read validation:
+  - `marketCount() == 1`
+  - `allMarkets(0) == 0x4e26143A63457cf06A34112b8B9044F3760d3007`
+  - `isMarket(0x4e26143A63457cf06A34112b8B9044F3760d3007) == true`
+
+Note: this validates real factory lifecycle only. Trading validation still requires a valid Arc Testnet collateral token.
+
 ## Non-Claims
 
 Not implemented yet:
