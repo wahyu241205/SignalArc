@@ -17,7 +17,7 @@
       {
         "group": "Overview",
         "pages": [
-          "README",
+          "index",
           "ARCHITECTURE",
           "LOCAL_DEVELOPMENT"
         ]
@@ -45,5 +45,12 @@
         ]
       }
     ]
-  }
+  },
+  "redirects": [
+    {
+      "source": "/README",
+      "destination": "/",
+      "permanent": false
+    }
+  ]
 }
