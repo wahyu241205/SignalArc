@@ -547,8 +547,13 @@ Current checkpoint state:
 - User-provided buy YES evidence recorded approve tx `0xeb7304b0a1be9f5dc575f62fb705dfaf384bc720da13f7e4ffe9563442c036ca`, buy tx `0xe311d999e15e6f34fa6f623a8f27bc724c665d7c3296632460339326b6094b16`, and readback `yesPositions(agent wallet) == 1000000`, `totalYes == 1000000`, `totalCollateral == 1000000`.
 - User-provided buy NO evidence recorded approve tx `0x6ea6a10293a4df5d7ed50e077821115571787d8e9d6b9507a984ebf33fc52a9b`, buy tx `0xaefe8bcdcec794c811d615517f0dfa800b9e263631200a74c85d000374aa8f24`, and readback `noPositions(agent wallet) == 1000000`, `totalNo == 1000000`, `totalCollateral == 2000000`, `USDC.balanceOf(market) == 2000000`.
 - Continuation from this Codex shell is blocked because Circle CLI returns `AUTH_REQUIRED` or no active agent session for status/list/balance, even when `CIRCLE_ACCEPT_TERMS=1` is set for the process.
-- Backend now has temporary in-memory development agent wallet registration through `POST /agent/wallets`; this is not final production persistence.
+- Added persistent `agent_wallets` migration for user-owned Circle Agent Wallet onboarding.
+- Backend now registers agent wallets through DB-backed `POST /agent/wallets` in production routing.
+- Backend now returns registered wallet metadata through `GET /agent/wallets/{agent_id}`.
+- Backend now disables registered wallets through `POST /agent/wallets/{agent_id}/disable`.
+- Test handlers use an in-memory registry only as a test double; production registration is no longer the temporary in-memory development path.
 - Backend agent intents now carry `agent_id` and optional `agent_wallet_address`.
+- Backend agent intents now carry `source_client` and optional `client_request_id` so WhatsApp, Telegram, ChatGPT, Claude, and web clients can share one channel-agnostic API contract.
 - Backend execution now rejects missing agent wallets, deployer/resolver wallet reuse, user-wallet reuse, disallowed actions, wrong chain, inactive wallet, mismatched wallet address, and unsupported provider execution.
 - No secrets, `.env` files, frontend code, production deployment config, commits, pushes, or deploys were changed.
 
@@ -557,13 +562,15 @@ Current non-claims:
 - No live external ChatGPT/Claude/Telegram client has triggered the backend.
 - Payout lifecycle from the Circle Agent Wallet is not complete yet.
 - Cancel/refund lifecycle from the Circle Agent Wallet is not complete yet.
+- Backend Circle Agent Wallet execution automation is not implemented yet; backend remains fail-closed for `circle_agent_wallet` execution until safe server-side Circle auth/session handling is designed from official docs.
+- External AI client integrations are not implemented yet.
 - Circle CLI command shapes in `project-roadmap/agent-mcp.md` are official-doc/help-discovery shapes only unless accompanied by exact authenticated output and onchain evidence.
 - SignalArc does not claim production policy-limited execution on ARC-TESTNET; Circle CLI help says `wallet limit` is mainnet only.
 - The phase is not complete.
 
 ## Next Recommended Step
 
-- Install/authenticate Circle CLI for testnet under user control, list or create an `ARC-TESTNET` Circle Agent Wallet, fund it, prove the wallet address is not the deployer/resolver/user wallet, then wire only that proven provider path into backend execution.
+- Design the safe backend Circle Agent Wallet execution provider from official Circle documentation without relying on user-local CLI sessions, OTP capture, private keys, or deployer wallet reuse.
 - Do not add Circle API keys, deployer/user private keys, DNS, live deployment, contract redeploy, frontend execution UI, or mainnet configuration yet.
 
 Do not start unrelated coding before checking:

@@ -18,7 +18,7 @@ Agent can later:
 
 ## Live AI Agent Transaction MVP
 
-Status: IN PROGRESS - blocked on Circle Agent Wallet CLI setup/authentication and a real ARC-TESTNET agent wallet transaction.
+Status: IN PROGRESS - Circle Agent Wallet createMarket, buyYes, and buyNo are validated by user-provided Circle CLI evidence; payout/refund lifecycle, backend Circle execution automation, and external client trigger are pending.
 
 Primary objective:
 - A user owns or controls an agent.
@@ -123,27 +123,60 @@ Note: official Circle docs show `circle wallet login you@example.com --testnet`;
 
 ### Backend Agent Wallet Model
 
-Backend model added for:
+Persistent backend model added for:
 - `agent_id`
 - `user_wallet`
+- `user_email`
 - `agent_wallet_address`
 - `wallet_provider`
 - `chain`
 - `allowed_actions`
 - `status`
 - `policy_metadata`
+- `source_client`
 - `created_at`
 - `updated_at`
 
-Current implementation uses temporary in-memory development registration through `POST /agent/wallets`. It is not final production persistence. This avoids storing private keys, Circle OTPs, secret tokens, or undocumented Circle policy state before the real Circle Agent Wallet path is proven.
+Current implementation uses the DB-backed `agent_wallets` table for production routing. Test code uses an in-memory registry with the same interface for handler coverage only.
 
-Persistent migration is deferred until the Circle Agent Wallet proof of concept provides a real provider payload and policy shape to store.
+No private keys, Circle OTPs, secret tokens, or undocumented Circle session material are stored.
+
+### Agent Wallet Onboarding API
+
+`POST /agent/wallets`
+- Registers an already-created user-owned Circle Agent Wallet with SignalArc.
+- Does not create the Circle Agent Wallet.
+- Does not authenticate Circle.
+- Does not store secrets.
+- Rejects deployer/resolver wallet reuse.
+- Rejects agent wallet reuse of `user_wallet` until a documented custody-link model exists.
+- Requires `wallet_provider == circle_agent_wallet`.
+- Requires `chain == ARC-TESTNET`.
+- Requires non-empty `allowed_actions`.
+
+`GET /agent/wallets/{agent_id}`
+- Returns registered wallet metadata only.
+- Does not return secrets.
+
+`POST /agent/wallets/{agent_id}/disable`
+- Marks a registered agent wallet disabled.
+- Disabled wallets cannot execute.
+
+Onboarding flow:
+1. User controls email and Circle Agent Wallet setup.
+2. User completes Circle CLI login/OTP outside SignalArc backend.
+3. User obtains Circle Agent Wallet address on `ARC-TESTNET`.
+4. Client registers wallet metadata with SignalArc through `POST /agent/wallets`.
+5. Any external client can submit intents by `agent_id`.
+6. Backend validates wallet status, chain, provider, action allowlist, and wallet boundary before execution readiness.
 
 ### Backend Execution Guardrails
 
 `POST /agent/intents` now accepts:
 - `agent_id`
 - `agent_wallet_address`
+- `source_client`
+- `client_request_id`
 - existing action, market, and amount fields
 
 `POST /agent/intents/{id}/execute` rejects execution when:
@@ -158,17 +191,47 @@ Persistent migration is deferred until the Circle Agent Wallet proof of concept 
 - provider is `circle_agent_wallet` but Circle CLI authentication and live wallet proof are not complete.
 - provider is `temporary_testnet_agent_eoa`; this is only a documented fallback name and is not enabled.
 
-### External Agent Interface MVP
+### Channel-Agnostic Client Contract
 
-Chosen MVP client: ChatGPT custom action / API-call style client.
+External clients can include:
+- WhatsApp agent
+- Telegram bot
+- ChatGPT custom action
+- Claude tool
+- Web client
 
-Current definition only:
-- External client calls SignalArc Backend Agent API.
-- External client does not hold private keys.
-- External client does not call contracts directly.
-- Backend remains the execution gate.
+Client responsibilities:
+- Call SignalArc Backend Agent API.
+- Reference a registered `agent_id`.
+- Provide `source_client` and optional `client_request_id` for auditability.
+- Never hold private keys.
+- Never receive OTPs or Circle session tokens from SignalArc.
+- Never execute contracts directly.
+
+Backend responsibilities:
+- Maintain the user/agent wallet registry.
+- Validate intent shape and registered wallet state.
+- Enforce provider, chain, status, and action allowlist checks.
+- Return an execution plan or execution readiness failure.
+- Keep Circle Agent Wallet execution fail-closed until a safe server-side Circle auth/session strategy is designed and proven.
+
+Chosen MVP client remains: ChatGPT custom action / API-call style client.
 
 Live external agent validation is not complete until a real client submits an intent and the registered agent wallet executes the onchain transaction through the backend-approved path.
+
+### Backend Circle Provider Decision
+
+Do not automate Circle CLI execution in backend by relying on a user's local interactive CLI session.
+
+Current backend behavior:
+- `circle_agent_wallet` execution remains fail-closed.
+- Registered wallet metadata and intent validation are DB-backed.
+- Onchain Circle Agent Wallet transactions are proven manually through Circle CLI evidence only.
+
+Next checkpoint:
+- Design a safe server-side Circle Agent Wallet execution strategy using official Circle documentation.
+- Document auth/session handling without storing OTPs, private keys, Circle tokens in plaintext, or user-local CLI state.
+- Only then wire automated provider execution.
 
 ### Current Non-Claims
 

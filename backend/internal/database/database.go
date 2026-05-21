@@ -37,6 +37,7 @@ var expectedPhase2Tables = []string{
 	"api_keys",
 	"webhooks",
 	"agent_access",
+	"agent_wallets",
 }
 
 var expectedMarketOnchainColumns = []string{
@@ -175,7 +176,7 @@ func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {
 		}
 	}
 
-	if result.MigrationVersion == 14 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
+	if result.MigrationVersion == 15 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
 		result.Status = "ok"
 	}
 

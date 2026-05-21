@@ -44,6 +44,10 @@ var (
 type CreateIntentInput struct {
 	AgentID               string
 	AgentWalletAddress    string
+	WalletProvider        string
+	AllowedActions        []string
+	SourceClient          string
+	ClientRequestID       string
 	Action                string
 	UserWallet            string
 	MarketID              string
@@ -75,6 +79,8 @@ type Intent struct {
 	AgentWalletAddress    string
 	WalletProvider        string
 	AllowedActions        []string
+	SourceClient          string
+	ClientRequestID       string
 	Action                string
 	Status                string
 	RequiresConfirmation  bool
@@ -173,12 +179,16 @@ func (store *Store) GetAgentWallet(agentID string) (AgentWallet, error) {
 func (store *Store) CreateIntent(input CreateIntentInput) (Intent, error) {
 	normalized := normalizeInput(input)
 	validationResult := validateIntent(normalized)
-	var agentWallet AgentWallet
 	if normalized.AgentID != "" {
 		if wallet, err := store.GetAgentWallet(normalized.AgentID); err == nil {
-			agentWallet = wallet
 			if normalized.AgentWalletAddress == "" {
 				normalized.AgentWalletAddress = wallet.AgentWalletAddress
+			}
+			if normalized.WalletProvider == "" {
+				normalized.WalletProvider = wallet.WalletProvider
+			}
+			if len(normalized.AllowedActions) == 0 {
+				normalized.AllowedActions = append([]string{}, wallet.AllowedActions...)
 			}
 		}
 	}
@@ -191,8 +201,10 @@ func (store *Store) CreateIntent(input CreateIntentInput) (Intent, error) {
 		ID:                    intentID,
 		AgentID:               normalized.AgentID,
 		AgentWalletAddress:    normalized.AgentWalletAddress,
-		WalletProvider:        agentWallet.WalletProvider,
-		AllowedActions:        append([]string{}, agentWallet.AllowedActions...),
+		WalletProvider:        normalized.WalletProvider,
+		AllowedActions:        append([]string{}, normalized.AllowedActions...),
+		SourceClient:          normalized.SourceClient,
+		ClientRequestID:       normalized.ClientRequestID,
 		Action:                normalized.Action,
 		Status:                StatusPreview,
 		RequiresConfirmation:  true,
@@ -335,6 +347,10 @@ func normalizeInput(input CreateIntentInput) CreateIntentInput {
 	return CreateIntentInput{
 		AgentID:               strings.TrimSpace(input.AgentID),
 		AgentWalletAddress:    strings.TrimSpace(input.AgentWalletAddress),
+		WalletProvider:        strings.TrimSpace(input.WalletProvider),
+		AllowedActions:        normalizeStringSlice(input.AllowedActions),
+		SourceClient:          strings.TrimSpace(input.SourceClient),
+		ClientRequestID:       strings.TrimSpace(input.ClientRequestID),
 		Action:                strings.TrimSpace(input.Action),
 		UserWallet:            strings.TrimSpace(input.UserWallet),
 		MarketID:              strings.TrimSpace(input.MarketID),
@@ -346,6 +362,17 @@ func normalizeInput(input CreateIntentInput) CreateIntentInput {
 		CloseTimestamp:        strings.TrimSpace(input.CloseTimestamp),
 		Question:              strings.TrimSpace(input.Question),
 	}
+}
+
+func normalizeStringSlice(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			normalized = append(normalized, value)
+		}
+	}
+	return normalized
 }
 
 func validateIntent(input CreateIntentInput) ValidationResult {

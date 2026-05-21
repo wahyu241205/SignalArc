@@ -23,6 +23,7 @@ func NewRouter(db *database.DB) http.Handler {
 	resolutionsRepository := repository.NewResolutionsRepository(db)
 	settlementsRepository := repository.NewSettlementsRepository(db)
 	tradesRepository := repository.NewTradesRepository(db)
+	agentWalletsRepository := repository.NewAgentWalletsRepository(db)
 	agentIntentStore := agent.NewStore()
 
 	registerStatusRoutes(router, db)
@@ -32,7 +33,7 @@ func NewRouter(db *database.DB) http.Handler {
 	registerPositionRoutes(router, positionsRepository)
 	registerResolutionRoutes(router, resolutionsRepository)
 	registerSettlementRoutes(router, settlementsRepository)
-	registerAgentIntentRoutes(router, agentIntentStore, nil)
+	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, nil)
 
 	return router
 }

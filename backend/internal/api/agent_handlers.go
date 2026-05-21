@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,11 +12,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/wahyu241205/SignalArc/backend/internal/agent"
 	"github.com/wahyu241205/SignalArc/backend/internal/httpjson"
+	"github.com/wahyu241205/SignalArc/backend/internal/repository"
 )
 
 type createAgentIntentRequest struct {
 	AgentID               string `json:"agent_id"`
 	AgentWalletAddress    string `json:"agent_wallet_address"`
+	SourceClient          string `json:"source_client"`
+	ClientRequestID       string `json:"client_request_id"`
 	Action                string `json:"action"`
 	UserWallet            string `json:"user_wallet"`
 	MarketID              string `json:"market_id"`
@@ -30,23 +35,34 @@ type createAgentIntentRequest struct {
 type registerAgentWalletRequest struct {
 	AgentID            string            `json:"agent_id"`
 	UserWallet         string            `json:"user_wallet"`
+	UserEmail          string            `json:"user_email"`
 	AgentWalletAddress string            `json:"agent_wallet_address"`
 	WalletProvider     string            `json:"wallet_provider"`
 	Chain              string            `json:"chain"`
 	AllowedActions     []string          `json:"allowed_actions"`
 	Status             string            `json:"status"`
 	PolicyMetadata     map[string]string `json:"policy_metadata"`
+	SourceClient       string            `json:"source_client"`
+}
+
+type agentWalletRegistry interface {
+	RegisterAgentWallet(context.Context, repository.UpsertAgentWalletInput) (repository.AgentWallet, error)
+	GetAgentWalletByAgentID(context.Context, string) (repository.AgentWallet, error)
+	DisableAgentWallet(context.Context, string) (repository.AgentWallet, error)
 }
 
 type agentWalletResponse struct {
+	ID                 string            `json:"id"`
 	AgentID            string            `json:"agent_id"`
 	UserWallet         string            `json:"user_wallet"`
+	UserEmail          string            `json:"user_email,omitempty"`
 	AgentWalletAddress string            `json:"agent_wallet_address"`
 	WalletProvider     string            `json:"wallet_provider"`
 	Chain              string            `json:"chain"`
 	AllowedActions     []string          `json:"allowed_actions"`
 	Status             string            `json:"status"`
 	PolicyMetadata     map[string]string `json:"policy_metadata,omitempty"`
+	SourceClient       string            `json:"source_client,omitempty"`
 	CreatedAt          string            `json:"created_at"`
 	UpdatedAt          string            `json:"updated_at"`
 }
@@ -57,6 +73,8 @@ type agentIntentResponse struct {
 	AgentWalletAddress    string                 `json:"agent_wallet_address,omitempty"`
 	WalletProvider        string                 `json:"wallet_provider,omitempty"`
 	AllowedActions        []string               `json:"allowed_actions,omitempty"`
+	SourceClient          string                 `json:"source_client,omitempty"`
+	ClientRequestID       string                 `json:"client_request_id,omitempty"`
 	Action                string                 `json:"action"`
 	Status                string                 `json:"status"`
 	RequiresConfirmation  bool                   `json:"requires_confirmation"`
@@ -129,7 +147,7 @@ type transactionRequestResponse struct {
 	BroadcastPerformed bool     `json:"broadcast_performed"`
 }
 
-func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor agent.Executor) {
+func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegistry agentWalletRegistry, executor agent.Executor) {
 	router.Post("/agent/wallets", func(w http.ResponseWriter, r *http.Request) {
 		var request registerAgentWalletRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -137,26 +155,57 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 			return
 		}
 
-		wallet, err := store.RegisterAgentWallet(agent.AgentWallet{
-			AgentID:            request.AgentID,
-			UserWallet:         request.UserWallet,
-			AgentWalletAddress: request.AgentWalletAddress,
-			WalletProvider:     request.WalletProvider,
-			Chain:              request.Chain,
-			AllowedActions:     request.AllowedActions,
-			Status:             request.Status,
-			PolicyMetadata:     request.PolicyMetadata,
-		})
+		input, validationErrors := newAgentWalletRegistrationInput(request)
+		if len(validationErrors) > 0 {
+			httpjson.WriteJSON(w, http.StatusBadRequest, map[string]any{
+				"error": map[string]any{
+					"code":    "agent_wallet_invalid",
+					"message": "agent wallet registration validation failed",
+					"details": validationErrors,
+				},
+			})
+			return
+		}
+
+		wallet, err := walletRegistry.RegisterAgentWallet(r.Context(), input)
 		if err != nil {
-			if errors.Is(err, agent.ErrIntentInvalid) {
-				httpjson.WriteError(w, http.StatusBadRequest, "agent_wallet_invalid", "agent wallet registration validation failed")
-				return
-			}
 			httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_register_failed", "failed to register agent wallet")
 			return
 		}
 
 		httpjson.WriteJSON(w, http.StatusCreated, map[string]any{
+			"agent_wallet": newAgentWalletResponse(wallet),
+		})
+	})
+
+	router.Get("/agent/wallets/{agent_id}", func(w http.ResponseWriter, r *http.Request) {
+		wallet, err := walletRegistry.GetAgentWalletByAgentID(r.Context(), chi.URLParam(r, "agent_id"))
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_wallet_not_found", "agent wallet not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_get_failed", "failed to get agent wallet")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"agent_wallet": newAgentWalletResponse(wallet),
+		})
+	})
+
+	router.Post("/agent/wallets/{agent_id}/disable", func(w http.ResponseWriter, r *http.Request) {
+		wallet, err := walletRegistry.DisableAgentWallet(r.Context(), chi.URLParam(r, "agent_id"))
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_wallet_not_found", "agent wallet not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_disable_failed", "failed to disable agent wallet")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
 			"agent_wallet": newAgentWalletResponse(wallet),
 		})
 	})
@@ -168,9 +217,25 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 			return
 		}
 
+		var registeredWallet repository.AgentWallet
+		if strings.TrimSpace(request.AgentID) != "" {
+			var err error
+			registeredWallet, err = walletRegistry.GetAgentWalletByAgentID(r.Context(), request.AgentID)
+			if err != nil {
+				if !errors.Is(err, sql.ErrNoRows) {
+					httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_get_failed", "failed to get agent wallet")
+					return
+				}
+			}
+		}
+
 		intent, err := store.CreateIntent(agent.CreateIntentInput{
 			AgentID:               request.AgentID,
-			AgentWalletAddress:    request.AgentWalletAddress,
+			AgentWalletAddress:    firstNonEmpty(request.AgentWalletAddress, registeredWallet.AgentWalletAddress),
+			WalletProvider:        registeredWallet.WalletProvider,
+			AllowedActions:        registeredWallet.AllowedActions,
+			SourceClient:          request.SourceClient,
+			ClientRequestID:       request.ClientRequestID,
 			Action:                request.Action,
 			UserWallet:            request.UserWallet,
 			MarketID:              request.MarketID,
@@ -265,7 +330,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 			return
 		}
 
-		agentWallet, err := store.GetAgentWallet(intent.AgentID)
+		agentWallet, err := walletRegistry.GetAgentWalletByAgentID(r.Context(), intent.AgentID)
 		if err != nil {
 			httpjson.WriteError(w, http.StatusBadRequest, "agent_wallet_missing", "agent wallet must be registered before execution")
 			return
@@ -331,16 +396,131 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, executor a
 	})
 }
 
-func newAgentWalletResponse(wallet agent.AgentWallet) agentWalletResponse {
+func newAgentWalletRegistrationInput(request registerAgentWalletRequest) (repository.UpsertAgentWalletInput, []string) {
+	input := repository.UpsertAgentWalletInput{
+		AgentID:            strings.TrimSpace(request.AgentID),
+		UserWallet:         strings.TrimSpace(request.UserWallet),
+		UserEmail:          nullableString(request.UserEmail),
+		AgentWalletAddress: strings.TrimSpace(request.AgentWalletAddress),
+		WalletProvider:     strings.TrimSpace(request.WalletProvider),
+		Chain:              strings.TrimSpace(request.Chain),
+		Status:             strings.TrimSpace(request.Status),
+		AllowedActions:     normalizeActions(request.AllowedActions),
+		SourceClient:       nullableString(request.SourceClient),
+	}
+	if input.Chain == "" {
+		input.Chain = agent.ChainArcTestnet
+	}
+	if input.Status == "" {
+		input.Status = agent.WalletStatusActive
+	}
+	if request.PolicyMetadata != nil {
+		if bytes, err := json.Marshal(request.PolicyMetadata); err == nil {
+			input.PolicyMetadata = bytes
+		}
+	}
+
+	errors := validateAgentWalletRegistrationInput(input)
+	return input, errors
+}
+
+func validateAgentWalletRegistrationInput(input repository.UpsertAgentWalletInput) []string {
+	errors := []string{}
+	if input.AgentID == "" {
+		errors = append(errors, "agent_id is required")
+	}
+	if input.UserWallet == "" {
+		errors = append(errors, "user_wallet is required")
+	}
+	if input.AgentWalletAddress == "" {
+		errors = append(errors, "agent_wallet_address is required")
+	}
+	if input.WalletProvider != agent.WalletProviderCircleAgentWallet {
+		errors = append(errors, "wallet_provider must be circle_agent_wallet")
+	}
+	if input.Chain != agent.ChainArcTestnet {
+		errors = append(errors, "chain must be ARC-TESTNET")
+	}
+	if input.Status != agent.WalletStatusActive && input.Status != "disabled" {
+		errors = append(errors, "status must be active or disabled")
+	}
+	if len(input.AllowedActions) == 0 {
+		errors = append(errors, "allowed_actions is required")
+	}
+	for _, action := range input.AllowedActions {
+		if !isAllowedAgentAction(action) {
+			errors = append(errors, "allowed_actions contains unsupported action")
+		}
+	}
+	if equalAddress(input.AgentWalletAddress, knownDeployerResolverWallet()) {
+		errors = append(errors, "agent_wallet_address must not equal the deployer/resolver wallet")
+	}
+	if equalAddress(input.AgentWalletAddress, input.UserWallet) {
+		errors = append(errors, "agent_wallet_address must not equal user_wallet unless a documented user-controlled custody link is implemented")
+	}
+	return errors
+}
+
+func nullableString(value string) sql.NullString {
+	value = strings.TrimSpace(value)
+	return sql.NullString{String: value, Valid: value != ""}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func normalizeActions(values []string) []string {
+	actions := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			actions = append(actions, value)
+		}
+	}
+	return actions
+}
+
+func isAllowedAgentAction(action string) bool {
+	switch action {
+	case agent.ActionCreateMarket,
+		agent.ActionBuyYes,
+		agent.ActionBuyNo,
+		agent.ActionCancelMarket,
+		agent.ActionCloseMarket,
+		agent.ActionResolveMarket,
+		agent.ActionClaimRefund,
+		agent.ActionClaimPayout:
+		return true
+	default:
+		return false
+	}
+}
+
+func newAgentWalletResponse(wallet repository.AgentWallet) agentWalletResponse {
+	policyMetadata := map[string]string{}
+	if len(wallet.PolicyMetadata) > 0 {
+		_ = json.Unmarshal(wallet.PolicyMetadata, &policyMetadata)
+	}
+
 	return agentWalletResponse{
+		ID:                 wallet.ID,
 		AgentID:            wallet.AgentID,
 		UserWallet:         wallet.UserWallet,
+		UserEmail:          wallet.UserEmail.String,
 		AgentWalletAddress: wallet.AgentWalletAddress,
 		WalletProvider:     wallet.WalletProvider,
 		Chain:              wallet.Chain,
 		AllowedActions:     wallet.AllowedActions,
 		Status:             wallet.Status,
-		PolicyMetadata:     wallet.PolicyMetadata,
+		PolicyMetadata:     policyMetadata,
+		SourceClient:       wallet.SourceClient.String,
 		CreatedAt:          wallet.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 		UpdatedAt:          wallet.UpdatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 	}
@@ -353,6 +533,8 @@ func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {
 		AgentWalletAddress:    intent.AgentWalletAddress,
 		WalletProvider:        intent.WalletProvider,
 		AllowedActions:        intent.AllowedActions,
+		SourceClient:          intent.SourceClient,
+		ClientRequestID:       intent.ClientRequestID,
 		Action:                intent.Action,
 		Status:                intent.Status,
 		RequiresConfirmation:  intent.RequiresConfirmation,
@@ -430,7 +612,7 @@ func newAgentExecutionResponse(result agent.ExecutionResult) agentExecutionRespo
 	}
 }
 
-func validateAgentWalletForExecution(intent agent.Intent, wallet agent.AgentWallet) error {
+func validateAgentWalletForExecution(intent agent.Intent, wallet repository.AgentWallet) error {
 	if intent.AgentID == "" {
 		return errors.New("agent_id is required for execution")
 	}
@@ -443,7 +625,7 @@ func validateAgentWalletForExecution(intent agent.Intent, wallet agent.AgentWall
 	if wallet.Chain != agent.ChainArcTestnet {
 		return errors.New("agent wallet chain must be ARC-TESTNET")
 	}
-	if !agent.AgentWalletAllowsAction(wallet, intent.Action) {
+	if !repositoryAgentWalletAllowsAction(wallet, intent.Action) {
 		return errors.New("agent wallet action is not allowed")
 	}
 	if equalAddress(wallet.AgentWalletAddress, knownDeployerResolverWallet()) {
@@ -461,6 +643,15 @@ func validateAgentWalletForExecution(intent agent.Intent, wallet agent.AgentWall
 		return errors.New("intent agent_wallet_address does not match registered agent wallet")
 	}
 	return nil
+}
+
+func repositoryAgentWalletAllowsAction(wallet repository.AgentWallet, action string) bool {
+	for _, allowedAction := range wallet.AllowedActions {
+		if allowedAction == action {
+			return true
+		}
+	}
+	return false
 }
 
 func knownDeployerResolverWallet() string {
