@@ -369,6 +369,10 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			err = agent.ErrExecutionNotImplemented
 		}
 		if err != nil {
+			if errors.Is(err, agent.ErrExecutionProviderDisabled) {
+				httpjson.WriteError(w, http.StatusServiceUnavailable, "agent_execution_provider_disabled", "Circle Agent Wallet execution provider is disabled")
+				return
+			}
 			if errors.Is(err, agent.ErrExecutionNotImplemented) {
 				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market, buy_yes, and buy_no execution are implemented")
 				return

@@ -856,6 +856,31 @@ func TestExecuteRejectsDisallowedAction(t *testing.T) {
 	}
 }
 
+func TestExecuteCircleProviderDisabledReturnsServiceUnavailable(t *testing.T) {
+	store := agent.NewStore()
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyYes)
+	executor := agent.NewCircleCLIExecutor(agent.CircleCLIExecutorConfig{
+		Enabled: false,
+	})
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, walletRegistry, executor)
+
+	intentID := createValidAgentIntent(t, router)
+	confirmAgentIntent(t, router, intentID)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusServiceUnavailable, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("agent_execution_provider_disabled")) {
+		t.Fatalf("expected provider disabled code, got %s", response.Body.String())
+	}
+}
+
 func TestExecuteConfirmedBuyYesReturnsRealExecutionShape(t *testing.T) {
 	store := agent.NewStore()
 	walletRegistry := newTestAgentWalletRegistry()

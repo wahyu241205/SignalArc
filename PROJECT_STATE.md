@@ -555,6 +555,13 @@ Current checkpoint state:
 - Backend agent intents now carry `agent_id` and optional `agent_wallet_address`.
 - Backend agent intents now carry `source_client` and optional `client_request_id` so WhatsApp, Telegram, ChatGPT, Claude, and web clients can share one channel-agnostic API contract.
 - Backend execution now rejects missing agent wallets, deployer/resolver wallet reuse, user-wallet reuse, disallowed actions, wrong chain, inactive wallet, mismatched wallet address, and unsupported provider execution.
+- Added a guarded backend Circle CLI executor provider for `circle_agent_wallet`.
+- Provider execution mode is `circle_agent_wallet_cli`.
+- Provider is disabled by default with `CIRCLE_AGENT_WALLET_EXECUTION_ENABLED=false`.
+- Provider config added: `CIRCLE_CLI_PATH`, `CIRCLE_AGENT_WALLET_CHAIN`, and `CIRCLE_AGENT_WALLET_TIMEOUT_SECONDS`.
+- Provider supports `create_market`, `buy_yes`, and `buy_no` only.
+- Provider uses Circle CLI `wallet execute` for writes and `contract query` for readbacks, with JSON-only parsing and sanitized errors.
+- Provider never calls Circle login, never accepts OTP, and never stores Circle tokens, session files, private keys, or deployer keys.
 - No secrets, `.env` files, frontend code, production deployment config, commits, pushes, or deploys were changed.
 
 Current non-claims:
@@ -562,7 +569,7 @@ Current non-claims:
 - No live external ChatGPT/Claude/Telegram client has triggered the backend.
 - Payout lifecycle from the Circle Agent Wallet is not complete yet.
 - Cancel/refund lifecycle from the Circle Agent Wallet is not complete yet.
-- Backend Circle Agent Wallet execution automation is not implemented yet; backend remains fail-closed for `circle_agent_wallet` execution until safe server-side Circle auth/session handling is designed from official docs.
+- Backend Circle Agent Wallet execution is implemented as an explicitly enabled Circle CLI adapter only; real backend execution still requires an operator-authenticated Circle CLI session in the backend runtime.
 - External AI client integrations are not implemented yet.
 - Circle CLI command shapes in `project-roadmap/agent-mcp.md` are official-doc/help-discovery shapes only unless accompanied by exact authenticated output and onchain evidence.
 - SignalArc does not claim production policy-limited execution on ARC-TESTNET; Circle CLI help says `wallet limit` is mainnet only.
@@ -570,7 +577,7 @@ Current non-claims:
 
 ## Next Recommended Step
 
-- Design the safe backend Circle Agent Wallet execution provider from official Circle documentation without relying on user-local CLI sessions, OTP capture, private keys, or deployer wallet reuse.
+- Validate the guarded backend Circle CLI provider in an operator-controlled backend runtime with an authenticated Circle Agent Wallet session, then record tx hash and onchain readback. Do not capture OTP or store Circle session material in SignalArc.
 - Do not add Circle API keys, deployer/user private keys, DNS, live deployment, contract redeploy, frontend execution UI, or mainnet configuration yet.
 
 Do not start unrelated coding before checking:

@@ -43,9 +43,10 @@ const erc20ABIJSON = `[
 const ArcTestnetUSDCAddress = "0x3600000000000000000000000000000000000000"
 
 var (
-	ErrExecutionNotImplemented = errors.New("agent execution action is not implemented")
-	ErrIntentNotConfirmed      = errors.New("agent intent is not confirmed")
-	ErrExecutionConfigInvalid  = errors.New("agent execution config is invalid")
+	ErrExecutionNotImplemented   = errors.New("agent execution action is not implemented")
+	ErrIntentNotConfirmed        = errors.New("agent intent is not confirmed")
+	ErrExecutionConfigInvalid    = errors.New("agent execution config is invalid")
+	ErrExecutionProviderDisabled = errors.New("agent execution provider is disabled")
 )
 
 type Executor interface {

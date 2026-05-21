@@ -2,9 +2,11 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/wahyu241205/SignalArc/backend/internal/agent"
+	"github.com/wahyu241205/SignalArc/backend/internal/config"
 	"github.com/wahyu241205/SignalArc/backend/internal/database"
 	"github.com/wahyu241205/SignalArc/backend/internal/repository"
 )
@@ -25,6 +27,14 @@ func NewRouter(db *database.DB) http.Handler {
 	tradesRepository := repository.NewTradesRepository(db)
 	agentWalletsRepository := repository.NewAgentWalletsRepository(db)
 	agentIntentStore := agent.NewStore()
+	cfg := config.Load()
+	circleExecutor := agent.NewCircleCLIExecutor(agent.CircleCLIExecutorConfig{
+		Enabled:      cfg.CircleAgentWalletExecutionEnabled,
+		CLIPath:      cfg.CircleCLIPath,
+		Chain:        cfg.CircleAgentWalletChain,
+		Timeout:      time.Duration(cfg.CircleAgentWalletTimeoutSeconds) * time.Second,
+		AgentFactory: agent.AgentFactoryAddress,
+	})
 
 	registerStatusRoutes(router, db)
 	registerArcRoutes(router)
@@ -33,7 +43,7 @@ func NewRouter(db *database.DB) http.Handler {
 	registerPositionRoutes(router, positionsRepository)
 	registerResolutionRoutes(router, resolutionsRepository)
 	registerSettlementRoutes(router, settlementsRepository)
-	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, nil)
+	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, circleExecutor)
 
 	return router
 }

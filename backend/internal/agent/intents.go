@@ -24,9 +24,10 @@ const (
 	StatusConfirmed = "confirmed"
 	StatusExecuted  = "executed"
 
-	ExecutionModeAgentContract = "agent_contract"
-	NetworkArcTestnet          = "arc_testnet"
-	AgentFactoryAddress        = "0x69aE770e8b2F96297101FeC4dc123B3801dA7d80"
+	ExecutionModeAgentContract        = "agent_contract"
+	ExecutionModeCircleAgentWalletCLI = "circle_agent_wallet_cli"
+	NetworkArcTestnet                 = "arc_testnet"
+	AgentFactoryAddress               = "0x69aE770e8b2F96297101FeC4dc123B3801dA7d80"
 
 	WalletProviderCircleAgentWallet        = "circle_agent_wallet"
 	WalletProviderTemporaryTestnetAgentEOA = "temporary_testnet_agent_eoa"

@@ -221,17 +221,52 @@ Live external agent validation is not complete until a real client submits an in
 
 ### Backend Circle Provider Decision
 
-Do not automate Circle CLI execution in backend by relying on a user's local interactive CLI session.
+Do not automate Circle CLI execution in backend by relying on a user's local interactive CLI session in production.
 
 Current backend behavior:
-- `circle_agent_wallet` execution remains fail-closed.
+- `circle_agent_wallet` execution uses a guarded Circle CLI adapter only when explicitly enabled.
 - Registered wallet metadata and intent validation are DB-backed.
 - Onchain Circle Agent Wallet transactions are proven manually through Circle CLI evidence only.
+- By default, `CIRCLE_AGENT_WALLET_EXECUTION_ENABLED=false`, so execution fails closed.
+- The backend never calls Circle login.
+- The backend never accepts OTP.
+- The backend never stores or logs Circle session files, OTPs, Circle tokens, private keys, or deployer keys.
 
-Next checkpoint:
-- Design a safe server-side Circle Agent Wallet execution strategy using official Circle documentation.
-- Document auth/session handling without storing OTPs, private keys, Circle tokens in plaintext, or user-local CLI state.
-- Only then wire automated provider execution.
+Backend Circle CLI Provider:
+- Provider: `circle_agent_wallet`
+- Execution mode: `circle_agent_wallet_cli`
+- Chain: `ARC-TESTNET`
+- CLI path config: `CIRCLE_CLI_PATH`, default `circle`
+- Enable config: `CIRCLE_AGENT_WALLET_EXECUTION_ENABLED`, default `false`
+- Chain config: `CIRCLE_AGENT_WALLET_CHAIN`, default `ARC-TESTNET`
+- Timeout config: `CIRCLE_AGENT_WALLET_TIMEOUT_SECONDS`, default `120`
+
+Supported backend Circle CLI actions in this MVP:
+- `create_market`
+- `buy_yes`
+- `buy_no`
+
+Not implemented in this provider checkpoint:
+- `close_market`
+- `resolve_market`
+- `claim_payout`
+- `cancel_market`
+- `claim_refund`
+
+Circle CLI command mapping:
+- `create_market`: `circle wallet execute "createMarket(string,string,uint256,address,address)" ... --address <agent_wallet> --contract <factory> --chain ARC-TESTNET --output json`
+- `buy_yes`: `approve(address,uint256)` against Arc Testnet USDC, then `buyYes(uint256)` against the market contract.
+- `buy_no`: `approve(address,uint256)` against Arc Testnet USDC, then `buyNo(uint256)` against the market contract.
+
+Readback mapping:
+- After `create_market`: `marketCount()`, `allMarkets(lastIndex)`, `isMarket(created_market)`.
+- After `buy_yes`: `yesPositions(agent_wallet)`, `totalYes()`, `totalCollateral()`, `USDC.balanceOf(market)`.
+- After `buy_no`: `noPositions(agent_wallet)`, `totalNo()`, `totalCollateral()`, `USDC.balanceOf(market)`.
+
+Runtime requirement:
+- The backend runtime must have Circle CLI installed and an operator-authenticated Circle Agent Wallet session available.
+- If official docs do not document a non-CLI server API for this exact execution path, production auth/session strategy remains a separate checkpoint.
+- This remains a testnet/dev execution path until production auth, policy, audit, and lifecycle behavior are designed and proven.
 
 ### Current Non-Claims
 
