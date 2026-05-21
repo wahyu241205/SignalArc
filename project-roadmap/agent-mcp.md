@@ -187,6 +187,60 @@ Real cancel / refund lifecycle validation:
   - `claimableRefund(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 2000000`
 - Note: `claimableRefund` reports the cancelled position amount and does not check `hasClaimed`; refund completion is proven by `hasClaimed == true`, market USDC balance `0`, and the successful USDC transfer in the claim transaction.
 
+## Real Arc Testnet Agent YES Payout Lifecycle Smoke
+
+Status: DONE.
+
+This is a real Arc Testnet transaction sequence, not a mock, fake smoke, dry run, or local simulation.
+
+Fresh USDC-backed payout market:
+- Action: `SignalArcAgentMarketFactory.createMarket`
+- Factory: `0x69aE770e8b2F96297101FeC4dc123B3801dA7d80`
+- Transaction: `0x4ac895622bc802ac6639095707675269d5b3de8a08e60991fe8a002c794aa75d`
+- Created agent market: `0xcCE012A74Cdf7d17138cd6A514394c79b092B6E7`
+- Close timestamp: `1779357303`
+- Collateral token: `0x3600000000000000000000000000000000000000`
+- Read validation:
+  - `marketCount() == 4`
+  - `allMarkets(3) == 0xcCE012A74Cdf7d17138cd6A514394c79b092B6E7`
+  - `collateralToken() == 0x3600000000000000000000000000000000000000`
+  - `status() == 0`
+  - `isOpen() == true`
+
+Real YES position:
+- USDC approve transaction: `0x73d9ac7f00cda86c02acc9d8082dafd8432874818696fc7588bb705305ce31ad`
+- `buyYes(1000000)` transaction: `0x584d9d762b4e5279e6db475ffe2a0ab43b0c06220c86ed799ba7e0dbc8d15311`
+- Read validation:
+  - `yesPositions(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 1000000`
+  - `totalYes() == 1000000`
+  - `totalCollateral() == 1000000`
+  - `USDC.balanceOf(0xcCE012A74Cdf7d17138cd6A514394c79b092B6E7) == 1000000`
+
+Real close / resolve / payout lifecycle validation:
+- Wait validation:
+  - latest block timestamp before close: `1779357317`
+  - close timestamp: `1779357303`
+- `closeMarket()` transaction: `0x0fb4194bbb9b75097180bcae078ecaf4ce20e3c9425a75de7358ac2d2f8f34e4`
+- Close receipt status: `1 (success)`
+- `resolve(YES)` transaction: `0x961153bc68239ffcdfccfe7472e7498305d98d1765fe90fb3b4a7013f8ba7afb`
+- Resolve receipt status: `1 (success)`
+- Pre-claim read validation:
+  - `status() == 2`
+  - `winningOutcome() == 1`
+  - `claimablePayout(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 1000000`
+  - `USDC.balanceOf(0xcCE012A74Cdf7d17138cd6A514394c79b092B6E7) == 1000000`
+- `claimPayout()` transaction: `0xca6e837d455a43e99136a6f2c50bdeb2ba76aef41c5235d5d9994baadc83b631`
+- Claim payout receipt status: `1 (success)`
+- Post-payout read validation:
+  - `status() == 2`
+  - `winningOutcome() == 1`
+  - `hasClaimed(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == true`
+  - `USDC.balanceOf(0xcCE012A74Cdf7d17138cd6A514394c79b092B6E7) == 0`
+  - `USDC.balanceOf(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 34570580`
+  - `claimablePayout(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 1000000`
+  - `USDC.allowance(deployer, market) == 0`
+- Note: `claimablePayout` reports the winning position amount and does not check `hasClaimed`; payout completion is proven by `hasClaimed == true`, market USDC balance `0`, and the successful USDC transfer in the claim transaction.
+
 ## Non-Claims
 
 Not implemented yet:
