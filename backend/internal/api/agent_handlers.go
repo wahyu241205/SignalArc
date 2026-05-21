@@ -33,6 +33,19 @@ type agentIntentResponse struct {
 	CreatedAt            string                 `json:"created_at"`
 }
 
+type agentExecutionPlanResponse struct {
+	IntentID            string   `json:"intent_id"`
+	Action              string   `json:"action"`
+	Status              string   `json:"status"`
+	ExecutionMode       string   `json:"execution_mode"`
+	Network             string   `json:"network"`
+	AgentFactoryAddress string   `json:"agent_factory_address"`
+	RequiresSignature   bool     `json:"requires_signature"`
+	BroadcastPerformed  bool     `json:"broadcast_performed"`
+	TransactionHash     *string  `json:"transaction_hash"`
+	Warnings            []string `json:"warnings"`
+}
+
 func registerAgentIntentRoutes(router chi.Router, store *agent.Store) {
 	router.Post("/agent/intents", func(w http.ResponseWriter, r *http.Request) {
 		var request createAgentIntentRequest
@@ -82,6 +95,28 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store) {
 			"intent": newAgentIntentResponse(intent),
 		})
 	})
+
+	router.Post("/agent/intents/{id}/confirm", func(w http.ResponseWriter, r *http.Request) {
+		intentID := chi.URLParam(r, "id")
+		executionPlan, err := store.ConfirmIntent(intentID)
+		if err != nil {
+			if errors.Is(err, agent.ErrIntentNotFound) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_intent_not_found", "agent intent not found")
+				return
+			}
+			if errors.Is(err, agent.ErrIntentInvalid) {
+				httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
+				return
+			}
+
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_confirm_failed", "failed to confirm agent intent")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"execution_plan": newAgentExecutionPlanResponse(executionPlan),
+		})
+	})
 }
 
 func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {
@@ -98,5 +133,20 @@ func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {
 		ValidationResult:     intent.ValidationResult,
 		Warnings:             intent.Warnings,
 		CreatedAt:            intent.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+	}
+}
+
+func newAgentExecutionPlanResponse(executionPlan agent.ExecutionPlan) agentExecutionPlanResponse {
+	return agentExecutionPlanResponse{
+		IntentID:            executionPlan.IntentID,
+		Action:              executionPlan.Action,
+		Status:              executionPlan.Status,
+		ExecutionMode:       executionPlan.ExecutionMode,
+		Network:             executionPlan.Network,
+		AgentFactoryAddress: executionPlan.AgentFactoryAddress,
+		RequiresSignature:   executionPlan.RequiresSignature,
+		BroadcastPerformed:  executionPlan.BroadcastPerformed,
+		TransactionHash:     executionPlan.TransactionHash,
+		Warnings:            executionPlan.Warnings,
 	}
 }

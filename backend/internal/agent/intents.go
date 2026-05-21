@@ -20,10 +20,18 @@ const (
 	ActionClaimRefund   = "claim_refund"
 	ActionClaimPayout   = "claim_payout"
 
-	StatusPreview = "preview"
+	StatusPreview   = "preview"
+	StatusConfirmed = "confirmed"
+
+	ExecutionModeAgentContract = "agent_contract"
+	NetworkArcTestnet          = "arc_testnet"
+	AgentFactoryAddress        = "0x69aE770e8b2F96297101FeC4dc123B3801dA7d80"
 )
 
-var ErrIntentNotFound = errors.New("agent intent not found")
+var (
+	ErrIntentNotFound = errors.New("agent intent not found")
+	ErrIntentInvalid  = errors.New("agent intent is invalid")
+)
 
 type CreateIntentInput struct {
 	Action     string
@@ -45,6 +53,19 @@ type Intent struct {
 	ValidationResult     ValidationResult
 	Warnings             []string
 	CreatedAt            time.Time
+}
+
+type ExecutionPlan struct {
+	IntentID            string
+	Action              string
+	Status              string
+	ExecutionMode       string
+	Network             string
+	AgentFactoryAddress string
+	RequiresSignature   bool
+	BroadcastPerformed  bool
+	TransactionHash     *string
+	Warnings            []string
 }
 
 type ValidationResult struct {
@@ -110,6 +131,44 @@ func (store *Store) GetIntent(id string) (Intent, error) {
 	}
 
 	return intent, nil
+}
+
+func (store *Store) ConfirmIntent(id string) (ExecutionPlan, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	intent, ok := store.intents[strings.TrimSpace(id)]
+	if !ok {
+		return ExecutionPlan{}, ErrIntentNotFound
+	}
+
+	if !intent.ValidationResult.Valid {
+		return ExecutionPlan{}, ErrIntentInvalid
+	}
+
+	intent.Status = StatusConfirmed
+	store.intents[intent.ID] = intent
+
+	return NewExecutionPlan(intent), nil
+}
+
+func NewExecutionPlan(intent Intent) ExecutionPlan {
+	return ExecutionPlan{
+		IntentID:            intent.ID,
+		Action:              intent.Action,
+		Status:              StatusConfirmed,
+		ExecutionMode:       ExecutionModeAgentContract,
+		Network:             NetworkArcTestnet,
+		AgentFactoryAddress: AgentFactoryAddress,
+		RequiresSignature:   true,
+		BroadcastPerformed:  false,
+		TransactionHash:     nil,
+		Warnings: []string{
+			"confirmation produced an execution plan only; no transaction has been executed",
+			"no private key, signing, RPC call, or broadcast was performed",
+			"Circle Agent Wallet integration is not enabled",
+		},
+	}
 }
 
 func normalizeInput(input CreateIntentInput) CreateIntentInput {
