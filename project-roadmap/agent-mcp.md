@@ -121,6 +121,51 @@ This is a real Arc Testnet transaction, not a mock or local simulation.
 
 Note: this validates real factory lifecycle only. Trading validation still requires a valid Arc Testnet collateral token.
 
+## Real Arc Testnet Agent USDC Collateral / Trading Smoke
+
+Status: DONE.
+
+This is a real Arc Testnet transaction sequence, not a mock, fake smoke, dry run, or local simulation.
+
+Official docs finding:
+- Arc docs document Arc Testnet USDC ERC-20 interface: `0x3600000000000000000000000000000000000000`.
+- Circle docs document Arc Testnet USDC token address: `0x3600000000000000000000000000000000000000`.
+- Token readback on Arc Testnet:
+  - `name() == "USDC"`
+  - `symbol() == "USDC"`
+  - `decimals() == 6`
+
+Previous agent market collateral read:
+- Market: `0x4e26143A63457cf06A34112b8B9044F3760d3007`
+- `collateralToken() == 0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC`
+- Result: not usable as ERC-20 collateral; this is the deployer/resolver EOA, not the documented Arc Testnet USDC contract.
+
+USDC-backed agent market:
+- Action: `SignalArcAgentMarketFactory.createMarket`
+- Factory: `0x69aE770e8b2F96297101FeC4dc123B3801dA7d80`
+- Transaction: `0x9e1dc4b2b65ea6220605f8960dd13ad1be3907b69b72560083e39d3f2c77f579`
+- Created agent market: `0xd76c5633c3D8C1761F7edae46506B44cDeEe43a7`
+- Collateral token: `0x3600000000000000000000000000000000000000`
+- Read validation:
+  - `marketCount() == 2`
+  - `collateralToken() == 0x3600000000000000000000000000000000000000`
+  - `admin() == 0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC`
+  - `resolver() == 0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC`
+  - `isOpen() == true`
+
+Real buyYes / buyNo validation:
+- USDC approve transaction: `0xc5963b4ad20b8c66dfb7787c260fcf04deb25fcf53667349958109a10f7584c9`
+- `buyYes(1000000)` transaction: `0x1a23107407b17a4dced81d8fd79c2ead8acb8148190a03aaae2f34662621e79f`
+- `buyNo(1000000)` transaction: `0x41e0a39271940265894c45893733f794936a6e49cf3f475ae8881d5f9a7bb073`
+- Read validation:
+  - `yesPositions(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 1000000`
+  - `noPositions(0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC) == 1000000`
+  - `totalYes() == 1000000`
+  - `totalNo() == 1000000`
+  - `totalCollateral() == 2000000`
+  - `USDC.balanceOf(0xd76c5633c3D8C1761F7edae46506B44cDeEe43a7) == 2000000`
+  - `USDC.allowance(deployer, market) == 0`
+
 ## Non-Claims
 
 Not implemented yet:
