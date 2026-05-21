@@ -526,7 +526,7 @@ Done:
 
 ## Live AI Agent Transaction MVP
 
-Status: IN PROGRESS - backend Circle Agent Wallet provider core trading flow validated on Arc Testnet; external client trigger, lifecycle actions, Docker/Cloud Run runtime strategy, production readiness, and mainnet readiness remain pending.
+Status: IN PROGRESS - backend Circle Agent Wallet provider core trading flow validated on Arc Testnet; lifecycle executor support is implemented in backend logic/tests but not yet runtime-validated; external client trigger, Docker/Cloud Run runtime strategy, production readiness, and mainnet readiness remain pending.
 
 Current checkpoint state:
 
@@ -559,7 +559,14 @@ Current checkpoint state:
 - Provider execution mode is `circle_agent_wallet_cli`.
 - Provider is disabled by default with `CIRCLE_AGENT_WALLET_EXECUTION_ENABLED=false`.
 - Provider config added: `CIRCLE_CLI_PATH`, `CIRCLE_AGENT_WALLET_CHAIN`, and `CIRCLE_AGENT_WALLET_TIMEOUT_SECONDS`.
-- Provider supports `create_market`, `buy_yes`, and `buy_no` only.
+- Provider supports `create_market`, `buy_yes`, `buy_no`, `close_market`, `resolve_market`, `claim_payout`, `cancel_market`, and `claim_refund` when the registered agent wallet allowlist permits the action.
+- Lifecycle support uses repo-confirmed `SignalArcAgentMarket` functions only:
+  - `close_market`: `closeMarket()`
+  - `resolve_market`: `resolve(uint8)` from contract `resolve(Outcome winningOutcome_)`
+  - `claim_payout`: `claimPayout()`
+  - `cancel_market`: `cancelMarket()`
+  - `claim_refund`: `claimRefund()`
+- Lifecycle readbacks use repo-confirmed getters only: `status()`, `winningOutcome()`, `claimablePayout(address)`, `claimableRefund(address)`, `hasClaimed(address)`, `isOpen()`, and USDC `balanceOf(address)`.
 - Provider uses Circle CLI `wallet execute` for writes and `contract query` for readbacks, with JSON-only parsing and sanitized errors.
 - Provider never calls Circle login, never accepts OTP, and never stores Circle tokens, session files, private keys, or deployer keys.
 - Runtime validation was performed from the host shell backend on port `4001`, not the Docker backend container, because the Docker backend container does not have Circle CLI installed.
@@ -600,12 +607,15 @@ Current checkpoint state:
   - Backend Circle provider `buy_yes` validated with a real Arc Testnet transaction.
   - Backend Circle provider `buy_no` validated with a real Arc Testnet transaction.
   - Backend-to-Circle-to-Arc path is proven for the core trading flow.
+- Current implementation-only status:
+  - Backend Circle provider lifecycle actions are implemented and covered by fake-runner tests only.
+  - No real Circle CLI lifecycle command or onchain lifecycle transaction was run in this implementation step.
 - No secrets, `.env` files, frontend code, production deployment config, commits, pushes, or deploys were changed.
 
 Current non-claims:
 
 - WhatsApp, Telegram, ChatGPT, and Claude live client triggers have not been tested yet.
-- Lifecycle actions are still not implemented or tested: `close_market`, `resolve_market`, `claim_payout`, `cancel_market`, `claim_refund`.
+- Lifecycle actions are implemented in backend logic/tests but are not runtime-validated on Arc Testnet yet: `close_market`, `resolve_market`, `claim_payout`, `cancel_market`, `claim_refund`.
 - Docker/Cloud Run runtime does not yet include a Circle CLI/session strategy.
 - No production readiness claim.
 - No mainnet claim.
@@ -616,6 +626,7 @@ Current non-claims:
 ## Next Recommended Step
 
 - Design and validate the Docker/Cloud Run Circle CLI/session strategy before treating the backend provider as deployable. Do not capture OTP or store Circle session material in SignalArc.
+- Runtime-validate lifecycle actions from an authenticated host-shell backend only when explicitly approved; do not use Docker for that until Circle CLI/session strategy exists there.
 - Do not add Circle API keys, deployer/user private keys, DNS, live deployment, contract redeploy, frontend execution UI, or mainnet configuration yet.
 
 Do not start unrelated coding before checking:

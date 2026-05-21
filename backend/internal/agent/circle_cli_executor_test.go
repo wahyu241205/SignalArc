@@ -143,15 +143,6 @@ func TestCircleCLIExecutorDisabledFailsClosed(t *testing.T) {
 	}
 }
 
-func TestCircleCLIExecutorLifecycleActionsRemainNotImplemented(t *testing.T) {
-	executor := newTestCircleCLIExecutor(&fakeCommandRunner{}, true)
-
-	_, err := executor.ExecuteCreateMarket(context.Background(), confirmedIntent(ActionCloseMarket))
-	if !errors.Is(err, ErrExecutionNotImplemented) {
-		t.Fatalf("expected not implemented, got %v", err)
-	}
-}
-
 func TestCircleCLIExecutorDisallowedActionFailsClosed(t *testing.T) {
 	executor := newTestCircleCLIExecutor(&fakeCommandRunner{}, true)
 	intent := confirmedIntent(ActionBuyYes)
@@ -160,6 +151,222 @@ func TestCircleCLIExecutorDisallowedActionFailsClosed(t *testing.T) {
 	_, err := executor.ExecuteBuyYes(context.Background(), intent)
 	if !errors.Is(err, ErrIntentInvalid) {
 		t.Fatalf("expected invalid intent, got %v", err)
+	}
+}
+
+func TestCircleCLIExecutorCloseMarketBuildsCommandAndReadback(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: [][]byte{
+		[]byte(`{"transactionHash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}`),
+		jsonResult(abiUint256("1")),
+		jsonResult(abiUint256("0")),
+	}}
+	executor := newTestCircleCLIExecutor(runner, true)
+
+	result, err := executor.ExecuteCloseMarket(context.Background(), confirmedIntent(ActionCloseMarket))
+	if err != nil {
+		t.Fatalf("execute close market: %v", err)
+	}
+
+	assertArgs(t, runner.calls[0].args, []string{
+		"wallet", "execute", "closeMarket()",
+		"--address", "0x9999999999999999999999999999999999999999",
+		"--contract", "0x3333333333333333333333333333333333333333",
+		"--chain", ChainArcTestnet,
+		"--output", "json",
+	})
+	if result.TransactionHash != "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" {
+		t.Fatalf("unexpected tx hash %q", result.TransactionHash)
+	}
+	if result.Readback.MarketStatus != "1" || result.Readback.IsOpen == nil || *result.Readback.IsOpen {
+		t.Fatalf("unexpected close readback %#v", result.Readback)
+	}
+}
+
+func TestCircleCLIExecutorResolveMarketBuildsCommandAndReadback(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: lifecyclePayoutOutputs(
+		"0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		"2",
+		"1",
+		"1000000",
+		false,
+		"2000000",
+	)}
+	executor := newTestCircleCLIExecutor(runner, true)
+	intent := confirmedIntent(ActionResolveMarket)
+	intent.Outcome = "yes"
+
+	result, err := executor.ExecuteResolveMarket(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("execute resolve market: %v", err)
+	}
+
+	assertArgs(t, runner.calls[0].args, []string{
+		"wallet", "execute", "resolve(uint8)", "1",
+		"--address", "0x9999999999999999999999999999999999999999",
+		"--contract", "0x3333333333333333333333333333333333333333",
+		"--chain", ChainArcTestnet,
+		"--output", "json",
+	})
+	if result.Readback.MarketStatus != "2" || result.Readback.WinningOutcome != "1" || result.Readback.ClaimablePayout != "1000000" {
+		t.Fatalf("unexpected resolve readback %#v", result.Readback)
+	}
+	if result.Readback.HasClaimed == nil || *result.Readback.HasClaimed {
+		t.Fatalf("expected has claimed false, got %#v", result.Readback.HasClaimed)
+	}
+}
+
+func TestCircleCLIExecutorClaimPayoutBuildsCommandAndReadback(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: lifecyclePayoutOutputs(
+		"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+		"2",
+		"1",
+		"1000000",
+		true,
+		"0",
+	)}
+	executor := newTestCircleCLIExecutor(runner, true)
+
+	result, err := executor.ExecuteClaimPayout(context.Background(), confirmedIntent(ActionClaimPayout))
+	if err != nil {
+		t.Fatalf("execute claim payout: %v", err)
+	}
+
+	assertArgs(t, runner.calls[0].args, []string{
+		"wallet", "execute", "claimPayout()",
+		"--address", "0x9999999999999999999999999999999999999999",
+		"--contract", "0x3333333333333333333333333333333333333333",
+		"--chain", ChainArcTestnet,
+		"--output", "json",
+	})
+	if result.Readback.HasClaimed == nil || !*result.Readback.HasClaimed || result.Readback.USDCBalance != "0" {
+		t.Fatalf("unexpected payout readback %#v", result.Readback)
+	}
+}
+
+func TestCircleCLIExecutorCancelMarketBuildsCommandAndReadback(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: lifecycleRefundOutputs(
+		"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+		"3",
+		"2000000",
+		false,
+		"2000000",
+	)}
+	executor := newTestCircleCLIExecutor(runner, true)
+
+	result, err := executor.ExecuteCancelMarket(context.Background(), confirmedIntent(ActionCancelMarket))
+	if err != nil {
+		t.Fatalf("execute cancel market: %v", err)
+	}
+
+	assertArgs(t, runner.calls[0].args, []string{
+		"wallet", "execute", "cancelMarket()",
+		"--address", "0x9999999999999999999999999999999999999999",
+		"--contract", "0x3333333333333333333333333333333333333333",
+		"--chain", ChainArcTestnet,
+		"--output", "json",
+	})
+	if result.Readback.MarketStatus != "3" || result.Readback.ClaimableRefund != "2000000" {
+		t.Fatalf("unexpected cancel readback %#v", result.Readback)
+	}
+}
+
+func TestCircleCLIExecutorClaimRefundBuildsCommandAndReadback(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: lifecycleRefundOutputs(
+		"0x1111111111111111111111111111111111111111111111111111111111111111",
+		"3",
+		"2000000",
+		true,
+		"0",
+	)}
+	executor := newTestCircleCLIExecutor(runner, true)
+
+	result, err := executor.ExecuteClaimRefund(context.Background(), confirmedIntent(ActionClaimRefund))
+	if err != nil {
+		t.Fatalf("execute claim refund: %v", err)
+	}
+
+	assertArgs(t, runner.calls[0].args, []string{
+		"wallet", "execute", "claimRefund()",
+		"--address", "0x9999999999999999999999999999999999999999",
+		"--contract", "0x3333333333333333333333333333333333333333",
+		"--chain", ChainArcTestnet,
+		"--output", "json",
+	})
+	if result.Readback.HasClaimed == nil || !*result.Readback.HasClaimed || result.Readback.USDCBalance != "0" {
+		t.Fatalf("unexpected refund readback %#v", result.Readback)
+	}
+}
+
+func TestCircleCLIExecutorLifecycleActionFailsWhenMissingMarketContractAddress(t *testing.T) {
+	executor := newTestCircleCLIExecutor(&fakeCommandRunner{}, true)
+	intent := confirmedIntent(ActionCloseMarket)
+	intent.MarketContractAddress = ""
+
+	_, err := executor.ExecuteCloseMarket(context.Background(), intent)
+	if !errors.Is(err, ErrIntentInvalid) {
+		t.Fatalf("expected invalid intent, got %v", err)
+	}
+}
+
+func TestCircleCLIExecutorLifecycleActionFailsWhenNotAllowed(t *testing.T) {
+	executor := newTestCircleCLIExecutor(&fakeCommandRunner{}, true)
+	intent := confirmedIntent(ActionCancelMarket)
+	intent.AllowedActions = []string{ActionBuyYes}
+
+	_, err := executor.ExecuteCancelMarket(context.Background(), intent)
+	if !errors.Is(err, ErrIntentInvalid) {
+		t.Fatalf("expected invalid intent, got %v", err)
+	}
+}
+
+func TestCircleCLIExecutorLifecycleDisabledFailsClosed(t *testing.T) {
+	executor := newTestCircleCLIExecutor(&fakeCommandRunner{}, false)
+
+	_, err := executor.ExecuteClaimRefund(context.Background(), confirmedIntent(ActionClaimRefund))
+	if !errors.Is(err, ErrExecutionProviderDisabled) {
+		t.Fatalf("expected disabled error, got %v", err)
+	}
+}
+
+func TestCircleCLIExecutorLifecycleReadbackErrorIsSanitized(t *testing.T) {
+	runner := &fakeCommandRunner{
+		outputs: [][]byte{[]byte(`{"transactionHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)},
+		errAt:   2,
+	}
+	executor := newTestCircleCLIExecutor(runner, true)
+
+	_, err := executor.ExecuteCloseMarket(context.Background(), confirmedIntent(ActionCloseMarket))
+	if err == nil {
+		t.Fatal("expected readback error")
+	}
+	if err.Error() == "raw sensitive CLI error" {
+		t.Fatal("expected sanitized error")
+	}
+}
+
+func TestCircleCLIExecutorLifecycleDoesNotUsePrivateKeyFallback(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: lifecycleRefundOutputs(
+		"0x2222222222222222222222222222222222222222222222222222222222222222",
+		"3",
+		"2000000",
+		true,
+		"0",
+	)}
+	executor := newTestCircleCLIExecutor(runner, true)
+
+	_, err := executor.ExecuteClaimRefund(context.Background(), confirmedIntent(ActionClaimRefund))
+	if err != nil {
+		t.Fatalf("execute claim refund: %v", err)
+	}
+
+	for _, call := range runner.calls {
+		if call.name != "circle" {
+			t.Fatalf("expected circle command only, got %q", call.name)
+		}
+		joined := strings.Join(call.args, " ")
+		if strings.Contains(strings.ToLower(joined), "private") || strings.Contains(joined, "AGENT_EXECUTOR_PRIVATE_KEY") {
+			t.Fatalf("unexpected private key fallback in args: %#v", call.args)
+		}
 	}
 }
 
@@ -230,7 +437,7 @@ func confirmedIntent(action string) Intent {
 		AgentID:               "agent_test",
 		AgentWalletAddress:    "0x9999999999999999999999999999999999999999",
 		WalletProvider:        WalletProviderCircleAgentWallet,
-		AllowedActions:        []string{ActionCreateMarket, ActionBuyYes, ActionBuyNo},
+		AllowedActions:        []string{ActionCreateMarket, ActionBuyYes, ActionBuyNo, ActionCloseMarket, ActionResolveMarket, ActionClaimPayout, ActionCancelMarket, ActionClaimRefund},
 		Action:                action,
 		Status:                StatusConfirmed,
 		UserWallet:            "0x1111111111111111111111111111111111111111",
@@ -242,6 +449,27 @@ func confirmedIntent(action string) Intent {
 		CloseTimestamp:        "1770000000",
 		Question:              "Will SignalArc execute through Circle?",
 		ValidationResult:      ValidationResult{Valid: true, Errors: []string{}},
+	}
+}
+
+func lifecyclePayoutOutputs(txHash string, status string, winningOutcome string, claimablePayout string, hasClaimed bool, balance string) [][]byte {
+	return [][]byte{
+		[]byte(`{"transactionHash":"` + txHash + `"}`),
+		jsonResult(abiUint256(status)),
+		jsonResult(abiUint256(winningOutcome)),
+		jsonResult(abiUint256(claimablePayout)),
+		jsonResult(abiBool(hasClaimed)),
+		jsonResult(abiUint256(balance)),
+	}
+}
+
+func lifecycleRefundOutputs(txHash string, status string, claimableRefund string, hasClaimed bool, balance string) [][]byte {
+	return [][]byte{
+		[]byte(`{"transactionHash":"` + txHash + `"}`),
+		jsonResult(abiUint256(status)),
+		jsonResult(abiUint256(claimableRefund)),
+		jsonResult(abiBool(hasClaimed)),
+		jsonResult(abiUint256(balance)),
 	}
 }
 
@@ -271,6 +499,13 @@ func abiUint256(decimal string) string {
 func abiAddress(address string) string {
 	trimmed := strings.TrimPrefix(strings.TrimPrefix(address, "0x"), "0X")
 	return "0x" + strings.Repeat("0", 64-len(trimmed)) + trimmed
+}
+
+func abiBool(value bool) string {
+	if value {
+		return abiUint256("1")
+	}
+	return abiUint256("0")
 }
 
 func assertArgs(t *testing.T, actual []string, expected []string) {

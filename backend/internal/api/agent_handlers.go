@@ -128,11 +128,17 @@ type agentReadbackResponse struct {
 	MarketCount     string `json:"market_count"`
 	CreatedMarket   string `json:"created_market,omitempty"`
 	IsMarket        *bool  `json:"is_market,omitempty"`
+	MarketStatus    string `json:"market_status,omitempty"`
+	WinningOutcome  string `json:"winning_outcome,omitempty"`
 	YesPositions    string `json:"yes_positions,omitempty"`
 	NoPositions     string `json:"no_positions,omitempty"`
 	TotalYes        string `json:"total_yes,omitempty"`
 	TotalNo         string `json:"total_no,omitempty"`
 	TotalCollateral string `json:"total_collateral,omitempty"`
+	ClaimablePayout string `json:"claimable_payout,omitempty"`
+	ClaimableRefund string `json:"claimable_refund,omitempty"`
+	HasClaimed      *bool  `json:"has_claimed,omitempty"`
+	IsOpen          *bool  `json:"is_open,omitempty"`
 	USDCBalance     string `json:"usdc_balance,omitempty"`
 	USDCAllowance   string `json:"usdc_allowance,omitempty"`
 }
@@ -325,8 +331,8 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
 			return
 		}
-		if intent.Action != agent.ActionCreateMarket && intent.Action != agent.ActionBuyYes && intent.Action != agent.ActionBuyNo {
-			httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market, buy_yes, and buy_no execution are implemented")
+		if !isBackendExecutableAgentAction(intent.Action) {
+			httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "agent execution action is not implemented")
 			return
 		}
 
@@ -365,6 +371,16 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			result, err = activeExecutor.ExecuteBuyYes(r.Context(), intent)
 		case agent.ActionBuyNo:
 			result, err = activeExecutor.ExecuteBuyNo(r.Context(), intent)
+		case agent.ActionCloseMarket:
+			result, err = activeExecutor.ExecuteCloseMarket(r.Context(), intent)
+		case agent.ActionResolveMarket:
+			result, err = activeExecutor.ExecuteResolveMarket(r.Context(), intent)
+		case agent.ActionClaimPayout:
+			result, err = activeExecutor.ExecuteClaimPayout(r.Context(), intent)
+		case agent.ActionCancelMarket:
+			result, err = activeExecutor.ExecuteCancelMarket(r.Context(), intent)
+		case agent.ActionClaimRefund:
+			result, err = activeExecutor.ExecuteClaimRefund(r.Context(), intent)
 		default:
 			err = agent.ErrExecutionNotImplemented
 		}
@@ -374,7 +390,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 				return
 			}
 			if errors.Is(err, agent.ErrExecutionNotImplemented) {
-				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "only create_market, buy_yes, and buy_no execution are implemented")
+				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "agent execution action is not implemented")
 				return
 			}
 			if errors.Is(err, agent.ErrIntentInvalid) {
@@ -398,6 +414,22 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			"execution": newAgentExecutionResponse(result),
 		})
 	})
+}
+
+func isBackendExecutableAgentAction(action string) bool {
+	switch action {
+	case agent.ActionCreateMarket,
+		agent.ActionBuyYes,
+		agent.ActionBuyNo,
+		agent.ActionCloseMarket,
+		agent.ActionResolveMarket,
+		agent.ActionClaimPayout,
+		agent.ActionCancelMarket,
+		agent.ActionClaimRefund:
+		return true
+	default:
+		return false
+	}
 }
 
 func newAgentWalletRegistrationInput(request registerAgentWalletRequest) (repository.UpsertAgentWalletInput, []string) {
@@ -605,11 +637,17 @@ func newAgentExecutionResponse(result agent.ExecutionResult) agentExecutionRespo
 			MarketCount:     result.Readback.MarketCount,
 			CreatedMarket:   result.Readback.CreatedMarket,
 			IsMarket:        result.Readback.IsMarket,
+			MarketStatus:    result.Readback.MarketStatus,
+			WinningOutcome:  result.Readback.WinningOutcome,
 			YesPositions:    result.Readback.YesPositions,
 			NoPositions:     result.Readback.NoPositions,
 			TotalYes:        result.Readback.TotalYes,
 			TotalNo:         result.Readback.TotalNo,
 			TotalCollateral: result.Readback.TotalCollateral,
+			ClaimablePayout: result.Readback.ClaimablePayout,
+			ClaimableRefund: result.Readback.ClaimableRefund,
+			HasClaimed:      result.Readback.HasClaimed,
+			IsOpen:          result.Readback.IsOpen,
 			USDCBalance:     result.Readback.USDCBalance,
 			USDCAllowance:   result.Readback.USDCAllowance,
 		},

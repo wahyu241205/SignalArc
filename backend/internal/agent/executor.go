@@ -53,6 +53,11 @@ type Executor interface {
 	ExecuteCreateMarket(context.Context, Intent) (ExecutionResult, error)
 	ExecuteBuyYes(context.Context, Intent) (ExecutionResult, error)
 	ExecuteBuyNo(context.Context, Intent) (ExecutionResult, error)
+	ExecuteCloseMarket(context.Context, Intent) (ExecutionResult, error)
+	ExecuteResolveMarket(context.Context, Intent) (ExecutionResult, error)
+	ExecuteClaimPayout(context.Context, Intent) (ExecutionResult, error)
+	ExecuteCancelMarket(context.Context, Intent) (ExecutionResult, error)
+	ExecuteClaimRefund(context.Context, Intent) (ExecutionResult, error)
 }
 
 type ExecutionResult struct {
@@ -76,11 +81,17 @@ type ExecutionReadback struct {
 	MarketCount     string
 	CreatedMarket   string
 	IsMarket        *bool
+	MarketStatus    string
+	WinningOutcome  string
 	YesPositions    string
 	NoPositions     string
 	TotalYes        string
 	TotalNo         string
 	TotalCollateral string
+	ClaimablePayout string
+	ClaimableRefund string
+	HasClaimed      *bool
+	IsOpen          *bool
 	USDCBalance     string
 	USDCAllowance   string
 }
@@ -214,6 +225,26 @@ func (executor *ArcExecutor) ExecuteBuyYes(ctx context.Context, intent Intent) (
 
 func (executor *ArcExecutor) ExecuteBuyNo(ctx context.Context, intent Intent) (ExecutionResult, error) {
 	return executor.executeBuyPosition(ctx, intent, ActionBuyNo, "buyNo", "noPositions", "totalNo")
+}
+
+func (executor *ArcExecutor) ExecuteCloseMarket(context.Context, Intent) (ExecutionResult, error) {
+	return ExecutionResult{}, ErrExecutionNotImplemented
+}
+
+func (executor *ArcExecutor) ExecuteResolveMarket(context.Context, Intent) (ExecutionResult, error) {
+	return ExecutionResult{}, ErrExecutionNotImplemented
+}
+
+func (executor *ArcExecutor) ExecuteClaimPayout(context.Context, Intent) (ExecutionResult, error) {
+	return ExecutionResult{}, ErrExecutionNotImplemented
+}
+
+func (executor *ArcExecutor) ExecuteCancelMarket(context.Context, Intent) (ExecutionResult, error) {
+	return ExecutionResult{}, ErrExecutionNotImplemented
+}
+
+func (executor *ArcExecutor) ExecuteClaimRefund(context.Context, Intent) (ExecutionResult, error) {
+	return ExecutionResult{}, ErrExecutionNotImplemented
 }
 
 func (executor *ArcExecutor) executeBuyPosition(ctx context.Context, intent Intent, expectedAction string, buyMethod string, positionMethod string, totalMethod string) (ExecutionResult, error) {

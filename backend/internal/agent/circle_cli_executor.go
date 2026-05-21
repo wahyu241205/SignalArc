@@ -126,6 +126,55 @@ func (executor *CircleCLIExecutor) ExecuteBuyNo(ctx context.Context, intent Inte
 	return executor.executeBuy(ctx, intent, ActionBuyNo, "buyNo(uint256)", "noPositions(address)", "totalNo()")
 }
 
+func (executor *CircleCLIExecutor) ExecuteCloseMarket(ctx context.Context, intent Intent) (ExecutionResult, error) {
+	return executor.executeLifecycle(ctx, intent, lifecycleActionSpec{
+		action:    ActionCloseMarket,
+		signature: "closeMarket()",
+		readback:  readbackMarketState,
+	})
+}
+
+func (executor *CircleCLIExecutor) ExecuteResolveMarket(ctx context.Context, intent Intent) (ExecutionResult, error) {
+	if err := executor.validateIntent(intent, ActionResolveMarket); err != nil {
+		return ExecutionResult{}, err
+	}
+	outcome, err := normalizeOutcomeParam(intent.Outcome)
+	if err != nil {
+		return ExecutionResult{}, err
+	}
+
+	return executor.executeLifecycle(ctx, intent, lifecycleActionSpec{
+		action:    ActionResolveMarket,
+		signature: "resolve(uint8)",
+		params:    []string{outcome},
+		readback:  readbackResolution,
+	})
+}
+
+func (executor *CircleCLIExecutor) ExecuteClaimPayout(ctx context.Context, intent Intent) (ExecutionResult, error) {
+	return executor.executeLifecycle(ctx, intent, lifecycleActionSpec{
+		action:    ActionClaimPayout,
+		signature: "claimPayout()",
+		readback:  readbackPayout,
+	})
+}
+
+func (executor *CircleCLIExecutor) ExecuteCancelMarket(ctx context.Context, intent Intent) (ExecutionResult, error) {
+	return executor.executeLifecycle(ctx, intent, lifecycleActionSpec{
+		action:    ActionCancelMarket,
+		signature: "cancelMarket()",
+		readback:  readbackRefund,
+	})
+}
+
+func (executor *CircleCLIExecutor) ExecuteClaimRefund(ctx context.Context, intent Intent) (ExecutionResult, error) {
+	return executor.executeLifecycle(ctx, intent, lifecycleActionSpec{
+		action:    ActionClaimRefund,
+		signature: "claimRefund()",
+		readback:  readbackRefund,
+	})
+}
+
 func (executor *CircleCLIExecutor) executeBuy(ctx context.Context, intent Intent, expectedAction string, buySignature string, positionSignature string, totalSignature string) (ExecutionResult, error) {
 	if err := executor.validateIntent(intent, expectedAction); err != nil {
 		return ExecutionResult{}, err
@@ -201,6 +250,122 @@ func (executor *CircleCLIExecutor) executeBuy(ctx context.Context, intent Intent
 	}, nil
 }
 
+type lifecycleReadbackKind string
+
+const (
+	readbackMarketState lifecycleReadbackKind = "market_state"
+	readbackResolution  lifecycleReadbackKind = "resolution"
+	readbackPayout      lifecycleReadbackKind = "payout"
+	readbackRefund      lifecycleReadbackKind = "refund"
+)
+
+type lifecycleActionSpec struct {
+	action    string
+	signature string
+	params    []string
+	readback  lifecycleReadbackKind
+}
+
+func (executor *CircleCLIExecutor) executeLifecycle(ctx context.Context, intent Intent, spec lifecycleActionSpec) (ExecutionResult, error) {
+	if err := executor.validateIntent(intent, spec.action); err != nil {
+		return ExecutionResult{}, err
+	}
+	if strings.TrimSpace(intent.MarketContractAddress) == "" {
+		return ExecutionResult{}, ErrIntentInvalid
+	}
+
+	txHash, err := executor.walletExecute(ctx,
+		spec.signature,
+		spec.params,
+		intent.AgentWalletAddress,
+		intent.MarketContractAddress,
+	)
+	if err != nil {
+		return ExecutionResult{}, err
+	}
+
+	readback, err := executor.lifecycleReadback(ctx, intent, spec.readback)
+	if err != nil {
+		return ExecutionResult{}, err
+	}
+
+	return ExecutionResult{
+		IntentID:              intent.ID,
+		AgentID:               intent.AgentID,
+		AgentWalletAddress:    intent.AgentWalletAddress,
+		WalletProvider:        intent.WalletProvider,
+		Action:                intent.Action,
+		Status:                StatusExecuted,
+		ExecutionMode:         ExecutionModeCircleAgentWalletCLI,
+		Network:               NetworkArcTestnet,
+		AgentFactoryAddress:   executor.cfg.AgentFactory,
+		MarketContractAddress: intent.MarketContractAddress,
+		BroadcastPerformed:    true,
+		TransactionHash:       txHash,
+		Readback:              readback,
+	}, nil
+}
+
+func (executor *CircleCLIExecutor) lifecycleReadback(ctx context.Context, intent Intent, kind lifecycleReadbackKind) (ExecutionReadback, error) {
+	readback := ExecutionReadback{}
+
+	status, err := executor.contractQueryUint256(ctx, "status()", nil, intent.MarketContractAddress)
+	if err != nil {
+		return ExecutionReadback{}, err
+	}
+	readback.MarketStatus = status
+
+	switch kind {
+	case readbackMarketState:
+		isOpen, err := executor.contractQueryBool(ctx, "isOpen()", nil, intent.MarketContractAddress)
+		if err != nil {
+			return ExecutionReadback{}, err
+		}
+		readback.IsOpen = &isOpen
+	case readbackResolution, readbackPayout:
+		winningOutcome, err := executor.contractQueryUint256(ctx, "winningOutcome()", nil, intent.MarketContractAddress)
+		if err != nil {
+			return ExecutionReadback{}, err
+		}
+		claimablePayout, err := executor.contractQueryUint256(ctx, "claimablePayout(address)", []string{intent.AgentWalletAddress}, intent.MarketContractAddress)
+		if err != nil {
+			return ExecutionReadback{}, err
+		}
+		hasClaimed, err := executor.contractQueryBool(ctx, "hasClaimed(address)", []string{intent.AgentWalletAddress}, intent.MarketContractAddress)
+		if err != nil {
+			return ExecutionReadback{}, err
+		}
+		usdcBalance, err := executor.contractQueryUint256(ctx, "balanceOf(address)", []string{intent.MarketContractAddress}, ArcTestnetUSDCAddress)
+		if err != nil {
+			return ExecutionReadback{}, err
+		}
+		readback.WinningOutcome = winningOutcome
+		readback.ClaimablePayout = claimablePayout
+		readback.HasClaimed = &hasClaimed
+		readback.USDCBalance = usdcBalance
+	case readbackRefund:
+		claimableRefund, err := executor.contractQueryUint256(ctx, "claimableRefund(address)", []string{intent.AgentWalletAddress}, intent.MarketContractAddress)
+		if err != nil {
+			return ExecutionReadback{}, err
+		}
+		hasClaimed, err := executor.contractQueryBool(ctx, "hasClaimed(address)", []string{intent.AgentWalletAddress}, intent.MarketContractAddress)
+		if err != nil {
+			return ExecutionReadback{}, err
+		}
+		usdcBalance, err := executor.contractQueryUint256(ctx, "balanceOf(address)", []string{intent.MarketContractAddress}, ArcTestnetUSDCAddress)
+		if err != nil {
+			return ExecutionReadback{}, err
+		}
+		readback.ClaimableRefund = claimableRefund
+		readback.HasClaimed = &hasClaimed
+		readback.USDCBalance = usdcBalance
+	default:
+		return ExecutionReadback{}, ErrExecutionNotImplemented
+	}
+
+	return readback, nil
+}
+
 func (executor *CircleCLIExecutor) validateIntent(intent Intent, expectedAction string) error {
 	if executor == nil {
 		return ErrExecutionConfigInvalid
@@ -230,6 +395,17 @@ func (executor *CircleCLIExecutor) validateIntent(intent Intent, expectedAction 
 		return ErrExecutionConfigInvalid
 	}
 	return nil
+}
+
+func normalizeOutcomeParam(outcome string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(outcome)) {
+	case "1", "yes":
+		return "1", nil
+	case "2", "no":
+		return "2", nil
+	default:
+		return "", ErrIntentInvalid
+	}
 }
 
 func (executor *CircleCLIExecutor) walletExecute(ctx context.Context, signature string, params []string, walletAddress string, contractAddress string) (string, error) {

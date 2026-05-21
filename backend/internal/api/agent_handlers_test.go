@@ -50,6 +50,51 @@ func (executor *stubAgentExecutor) ExecuteBuyNo(_ context.Context, intent agent.
 	return executor.result, nil
 }
 
+func (executor *stubAgentExecutor) ExecuteCloseMarket(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
+	executor.called = true
+	executor.intent = intent
+	if executor.err != nil {
+		return agent.ExecutionResult{}, executor.err
+	}
+	return executor.result, nil
+}
+
+func (executor *stubAgentExecutor) ExecuteResolveMarket(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
+	executor.called = true
+	executor.intent = intent
+	if executor.err != nil {
+		return agent.ExecutionResult{}, executor.err
+	}
+	return executor.result, nil
+}
+
+func (executor *stubAgentExecutor) ExecuteClaimPayout(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
+	executor.called = true
+	executor.intent = intent
+	if executor.err != nil {
+		return agent.ExecutionResult{}, executor.err
+	}
+	return executor.result, nil
+}
+
+func (executor *stubAgentExecutor) ExecuteCancelMarket(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
+	executor.called = true
+	executor.intent = intent
+	if executor.err != nil {
+		return agent.ExecutionResult{}, executor.err
+	}
+	return executor.result, nil
+}
+
+func (executor *stubAgentExecutor) ExecuteClaimRefund(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
+	executor.called = true
+	executor.intent = intent
+	if executor.err != nil {
+		return agent.ExecutionResult{}, executor.err
+	}
+	return executor.result, nil
+}
+
 type testAgentWalletRegistry struct {
 	wallets map[string]repository.AgentWallet
 }
@@ -1064,11 +1109,32 @@ func TestExecuteConfirmedBuyNoReturnsRealExecutionShape(t *testing.T) {
 	}
 }
 
-func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
+func TestExecuteConfirmedCancelMarketReturnsExecutionShape(t *testing.T) {
 	store := agent.NewStore()
 	walletRegistry := newTestAgentWalletRegistry()
 	registerTestAgentWallet(t, walletRegistry, agent.ActionCancelMarket)
-	executor := &stubAgentExecutor{}
+	hasClaimed := false
+	executor := &stubAgentExecutor{
+		result: agent.ExecutionResult{
+			IntentID:              "set-by-test",
+			AgentID:               "agent_test_1",
+			AgentWalletAddress:    "0x9999999999999999999999999999999999999999",
+			WalletProvider:        agent.WalletProviderCircleAgentWallet,
+			Action:                agent.ActionCancelMarket,
+			Status:                agent.StatusExecuted,
+			ExecutionMode:         agent.ExecutionModeCircleAgentWalletCLI,
+			Network:               agent.NetworkArcTestnet,
+			MarketContractAddress: "0x3333333333333333333333333333333333333333",
+			BroadcastPerformed:    true,
+			TransactionHash:       "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+			Readback: agent.ExecutionReadback{
+				MarketStatus:    "3",
+				ClaimableRefund: "2000000",
+				HasClaimed:      &hasClaimed,
+				USDCBalance:     "2000000",
+			},
+		},
+	}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, walletRegistry, executor)
 
@@ -1080,16 +1146,40 @@ func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
 		"market_contract_address": "0x3333333333333333333333333333333333333333"
 	}`)
 	confirmAgentIntent(t, router, intentID)
+	executor.result.IntentID = intentID
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
 	router.ServeHTTP(response, request)
 
-	if response.Code != http.StatusNotImplemented {
-		t.Fatalf("expected execute status %d, got %d: %s", http.StatusNotImplemented, response.Code, response.Body.String())
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
 	}
-	if executor.called {
-		t.Fatal("executor should not be called for unsupported action")
+	if !executor.called {
+		t.Fatal("expected executor to be called for lifecycle action")
+	}
+	if executor.intent.Action != agent.ActionCancelMarket {
+		t.Fatalf("expected cancel_market intent, got %q", executor.intent.Action)
+	}
+
+	var body struct {
+		Execution agentExecutionResponse `json:"execution"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode execute response: %v", err)
+	}
+
+	if body.Execution.Action != agent.ActionCancelMarket {
+		t.Fatalf("expected cancel_market action, got %q", body.Execution.Action)
+	}
+	if body.Execution.Readback.MarketStatus != "3" {
+		t.Fatalf("expected market status 3, got %q", body.Execution.Readback.MarketStatus)
+	}
+	if body.Execution.Readback.ClaimableRefund != "2000000" {
+		t.Fatalf("expected claimable refund 2000000, got %q", body.Execution.Readback.ClaimableRefund)
+	}
+	if body.Execution.Readback.HasClaimed == nil || *body.Execution.Readback.HasClaimed {
+		t.Fatalf("expected has_claimed false, got %#v", body.Execution.Readback.HasClaimed)
 	}
 }
 
