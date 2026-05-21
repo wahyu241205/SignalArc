@@ -34,25 +34,35 @@ var (
 )
 
 type CreateIntentInput struct {
-	Action     string
-	UserWallet string
-	MarketID   string
-	Amount     string
-	Outcome    string
+	Action                string
+	UserWallet            string
+	MarketID              string
+	MarketContractAddress string
+	Amount                string
+	Outcome               string
+	Resolver              string
+	CollateralToken       string
+	CloseTimestamp        string
+	Question              string
 }
 
 type Intent struct {
-	ID                   string
-	Action               string
-	Status               string
-	RequiresConfirmation bool
-	UserWallet           string
-	MarketID             string
-	Amount               string
-	Outcome              string
-	ValidationResult     ValidationResult
-	Warnings             []string
-	CreatedAt            time.Time
+	ID                    string
+	Action                string
+	Status                string
+	RequiresConfirmation  bool
+	UserWallet            string
+	MarketID              string
+	MarketContractAddress string
+	Amount                string
+	Outcome               string
+	Resolver              string
+	CollateralToken       string
+	CloseTimestamp        string
+	Question              string
+	ValidationResult      ValidationResult
+	Warnings              []string
+	CreatedAt             time.Time
 }
 
 type ExecutionPlan struct {
@@ -65,7 +75,18 @@ type ExecutionPlan struct {
 	RequiresSignature   bool
 	BroadcastPerformed  bool
 	TransactionHash     *string
+	TransactionRequest  TransactionRequest
 	Warnings            []string
+}
+
+type TransactionRequest struct {
+	To                 string
+	Contract           string
+	Function           string
+	Args               []string
+	Value              string
+	Chain              string
+	BroadcastPerformed bool
 }
 
 type ValidationResult struct {
@@ -97,15 +118,20 @@ func (store *Store) CreateIntent(input CreateIntentInput) (Intent, error) {
 	}
 
 	intent := Intent{
-		ID:                   intentID,
-		Action:               normalized.Action,
-		Status:               StatusPreview,
-		RequiresConfirmation: true,
-		UserWallet:           normalized.UserWallet,
-		MarketID:             normalized.MarketID,
-		Amount:               normalized.Amount,
-		Outcome:              normalized.Outcome,
-		ValidationResult:     validationResult,
+		ID:                    intentID,
+		Action:                normalized.Action,
+		Status:                StatusPreview,
+		RequiresConfirmation:  true,
+		UserWallet:            normalized.UserWallet,
+		MarketID:              normalized.MarketID,
+		MarketContractAddress: normalized.MarketContractAddress,
+		Amount:                normalized.Amount,
+		Outcome:               normalized.Outcome,
+		Resolver:              normalized.Resolver,
+		CollateralToken:       normalized.CollateralToken,
+		CloseTimestamp:        normalized.CloseTimestamp,
+		Question:              normalized.Question,
+		ValidationResult:      validationResult,
 		Warnings: []string{
 			"preview only; no transaction has been executed",
 			"Circle Agent Wallet integration is not enabled",
@@ -163,6 +189,7 @@ func NewExecutionPlan(intent Intent) ExecutionPlan {
 		RequiresSignature:   true,
 		BroadcastPerformed:  false,
 		TransactionHash:     nil,
+		TransactionRequest:  NewTransactionRequest(intent),
 		Warnings: []string{
 			"confirmation produced an execution plan only; no transaction has been executed",
 			"no private key, signing, RPC call, or broadcast was performed",
@@ -171,13 +198,77 @@ func NewExecutionPlan(intent Intent) ExecutionPlan {
 	}
 }
 
+func NewTransactionRequest(intent Intent) TransactionRequest {
+	transactionRequest := TransactionRequest{
+		Value:              "0",
+		Chain:              NetworkArcTestnet,
+		BroadcastPerformed: false,
+	}
+
+	switch intent.Action {
+	case ActionCreateMarket:
+		transactionRequest.To = AgentFactoryAddress
+		transactionRequest.Contract = "SignalArcAgentMarketFactory"
+		transactionRequest.Function = "createMarket"
+		transactionRequest.Args = []string{
+			intent.MarketID,
+			intent.Question,
+			intent.CloseTimestamp,
+			intent.Resolver,
+			intent.CollateralToken,
+		}
+	case ActionBuyYes:
+		transactionRequest.To = intent.MarketContractAddress
+		transactionRequest.Contract = "SignalArcAgentMarket"
+		transactionRequest.Function = "buyYes"
+		transactionRequest.Args = []string{intent.Amount}
+	case ActionBuyNo:
+		transactionRequest.To = intent.MarketContractAddress
+		transactionRequest.Contract = "SignalArcAgentMarket"
+		transactionRequest.Function = "buyNo"
+		transactionRequest.Args = []string{intent.Amount}
+	case ActionCancelMarket:
+		transactionRequest.To = intent.MarketContractAddress
+		transactionRequest.Contract = "SignalArcAgentMarket"
+		transactionRequest.Function = "cancelMarket"
+		transactionRequest.Args = []string{}
+	case ActionCloseMarket:
+		transactionRequest.To = intent.MarketContractAddress
+		transactionRequest.Contract = "SignalArcAgentMarket"
+		transactionRequest.Function = "closeMarket"
+		transactionRequest.Args = []string{}
+	case ActionResolveMarket:
+		transactionRequest.To = intent.MarketContractAddress
+		transactionRequest.Contract = "SignalArcAgentMarket"
+		transactionRequest.Function = "resolve"
+		transactionRequest.Args = []string{intent.Outcome}
+	case ActionClaimRefund:
+		transactionRequest.To = intent.MarketContractAddress
+		transactionRequest.Contract = "SignalArcAgentMarket"
+		transactionRequest.Function = "claimRefund"
+		transactionRequest.Args = []string{}
+	case ActionClaimPayout:
+		transactionRequest.To = intent.MarketContractAddress
+		transactionRequest.Contract = "SignalArcAgentMarket"
+		transactionRequest.Function = "claimPayout"
+		transactionRequest.Args = []string{}
+	}
+
+	return transactionRequest
+}
+
 func normalizeInput(input CreateIntentInput) CreateIntentInput {
 	return CreateIntentInput{
-		Action:     strings.TrimSpace(input.Action),
-		UserWallet: strings.TrimSpace(input.UserWallet),
-		MarketID:   strings.TrimSpace(input.MarketID),
-		Amount:     strings.TrimSpace(input.Amount),
-		Outcome:    strings.TrimSpace(input.Outcome),
+		Action:                strings.TrimSpace(input.Action),
+		UserWallet:            strings.TrimSpace(input.UserWallet),
+		MarketID:              strings.TrimSpace(input.MarketID),
+		MarketContractAddress: strings.TrimSpace(input.MarketContractAddress),
+		Amount:                strings.TrimSpace(input.Amount),
+		Outcome:               strings.TrimSpace(input.Outcome),
+		Resolver:              strings.TrimSpace(input.Resolver),
+		CollateralToken:       strings.TrimSpace(input.CollateralToken),
+		CloseTimestamp:        strings.TrimSpace(input.CloseTimestamp),
+		Question:              strings.TrimSpace(input.Question),
 	}
 }
 
@@ -196,6 +287,25 @@ func validateIntent(input CreateIntentInput) ValidationResult {
 
 	if isMarketSpecificAction(input.Action) && input.MarketID == "" {
 		result.Errors = append(result.Errors, "market_id is required for market-specific actions")
+	}
+
+	if input.Action == ActionCreateMarket {
+		if input.Question == "" {
+			result.Errors = append(result.Errors, "question is required for create_market")
+		}
+		if input.CloseTimestamp == "" {
+			result.Errors = append(result.Errors, "close_timestamp is required for create_market")
+		}
+		if input.Resolver == "" {
+			result.Errors = append(result.Errors, "resolver is required for create_market")
+		}
+		if input.CollateralToken == "" {
+			result.Errors = append(result.Errors, "collateral_token is required for create_market")
+		}
+	}
+
+	if requiresMarketContractAddress(input.Action) && input.MarketContractAddress == "" {
+		result.Errors = append(result.Errors, "market_contract_address is required for existing market contract actions")
 	}
 
 	if input.Action == ActionBuyYes || input.Action == ActionBuyNo {
@@ -238,6 +348,21 @@ func isTransactionAction(action string) bool {
 }
 
 func isMarketSpecificAction(action string) bool {
+	switch action {
+	case ActionBuyYes,
+		ActionBuyNo,
+		ActionCancelMarket,
+		ActionCloseMarket,
+		ActionResolveMarket,
+		ActionClaimRefund,
+		ActionClaimPayout:
+		return true
+	default:
+		return false
+	}
+}
+
+func requiresMarketContractAddress(action string) bool {
 	switch action {
 	case ActionBuyYes,
 		ActionBuyNo,

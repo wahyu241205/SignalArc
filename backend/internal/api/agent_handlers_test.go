@@ -20,6 +20,7 @@ func TestCreateAgentIntentPreview(t *testing.T) {
 		"action": "buy_yes",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
 		"amount": "12.5"
 	}`))
 
@@ -68,7 +69,8 @@ func TestGetAgentIntentPreview(t *testing.T) {
 	createRequest := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
 		"action": "claim_payout",
 		"user_wallet": "0x2222222222222222222222222222222222222222",
-		"market_id": "market-2"
+		"market_id": "market-2",
+		"market_contract_address": "0x4444444444444444444444444444444444444444"
 	}`))
 	router.ServeHTTP(createResponse, createRequest)
 
@@ -111,6 +113,7 @@ func TestCreateAgentIntentValidationErrors(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
 		"action": "buy_no",
 		"market_id": "market-1",
+		"market_contract_address": "0x5555555555555555555555555555555555555555",
 		"amount": "0"
 	}`))
 
@@ -309,10 +312,105 @@ func TestConfirmAgentIntentResponseSaysBroadcastNotPerformed(t *testing.T) {
 	if body.ExecutionPlan.TransactionHash != nil {
 		t.Fatalf("expected transaction_hash null, got %q", *body.ExecutionPlan.TransactionHash)
 	}
+	if body.ExecutionPlan.TransactionRequest.BroadcastPerformed {
+		t.Fatal("expected transaction_request broadcast_performed false")
+	}
 }
 
-func createValidAgentIntent(t *testing.T, router http.Handler) string {
-	t.Helper()
+func TestConfirmCreateMarketReturnsFactoryTransactionRequest(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore())
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "create_market",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "agent-market-1",
+		"question": "Will SignalArc create an agent market?",
+		"close_timestamp": "1767225600",
+		"resolver": "0x2222222222222222222222222222222222222222",
+		"collateral_token": "0x3333333333333333333333333333333333333333"
+	}`)
+
+	executionPlan := confirmAgentIntent(t, router, intentID)
+
+	if executionPlan.TransactionRequest.To != "0x69aE770e8b2F96297101FeC4dc123B3801dA7d80" {
+		t.Fatalf("expected factory address as to, got %q", executionPlan.TransactionRequest.To)
+	}
+	if executionPlan.TransactionRequest.Contract != "SignalArcAgentMarketFactory" {
+		t.Fatalf("expected factory contract, got %q", executionPlan.TransactionRequest.Contract)
+	}
+	if executionPlan.TransactionRequest.Function != "createMarket" {
+		t.Fatalf("expected createMarket function, got %q", executionPlan.TransactionRequest.Function)
+	}
+	expectedArgs := []string{
+		"agent-market-1",
+		"Will SignalArc create an agent market?",
+		"1767225600",
+		"0x2222222222222222222222222222222222222222",
+		"0x3333333333333333333333333333333333333333",
+	}
+	assertStringSliceEqual(t, executionPlan.TransactionRequest.Args, expectedArgs)
+	assertNoExecutionClaim(t, executionPlan)
+}
+
+func TestConfirmBuyYesReturnsMarketTransactionRequest(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore())
+	marketAddress := "0x4444444444444444444444444444444444444444"
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "buy_yes",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "`+marketAddress+`",
+		"amount": "42.5"
+	}`)
+
+	executionPlan := confirmAgentIntent(t, router, intentID)
+
+	if executionPlan.TransactionRequest.To != marketAddress {
+		t.Fatalf("expected market address as to, got %q", executionPlan.TransactionRequest.To)
+	}
+	if executionPlan.TransactionRequest.Contract != "SignalArcAgentMarket" {
+		t.Fatalf("expected agent market contract, got %q", executionPlan.TransactionRequest.Contract)
+	}
+	if executionPlan.TransactionRequest.Function != "buyYes" {
+		t.Fatalf("expected buyYes function, got %q", executionPlan.TransactionRequest.Function)
+	}
+	assertStringSliceEqual(t, executionPlan.TransactionRequest.Args, []string{"42.5"})
+	assertNoExecutionClaim(t, executionPlan)
+}
+
+func TestConfirmClaimRefundReturnsMarketTransactionRequest(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore())
+	marketAddress := "0x5555555555555555555555555555555555555555"
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "claim_refund",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "`+marketAddress+`"
+	}`)
+
+	executionPlan := confirmAgentIntent(t, router, intentID)
+
+	if executionPlan.TransactionRequest.To != marketAddress {
+		t.Fatalf("expected market address as to, got %q", executionPlan.TransactionRequest.To)
+	}
+	if executionPlan.TransactionRequest.Contract != "SignalArcAgentMarket" {
+		t.Fatalf("expected agent market contract, got %q", executionPlan.TransactionRequest.Contract)
+	}
+	if executionPlan.TransactionRequest.Function != "claimRefund" {
+		t.Fatalf("expected claimRefund function, got %q", executionPlan.TransactionRequest.Function)
+	}
+	assertStringSliceEqual(t, executionPlan.TransactionRequest.Args, []string{})
+	assertNoExecutionClaim(t, executionPlan)
+}
+
+func TestBuyYesMissingMarketContractAddressFailsValidation(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore())
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
@@ -321,6 +419,43 @@ func createValidAgentIntent(t *testing.T, router http.Handler) string {
 		"market_id": "market-1",
 		"amount": "12.5"
 	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
+	}
+
+	var body struct {
+		Intent agentIntentResponse `json:"intent"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Intent.ValidationResult.Valid {
+		t.Fatal("expected invalid validation result")
+	}
+	if !containsString(body.Intent.ValidationResult.Errors, "market_contract_address is required for existing market contract actions") {
+		t.Fatalf("expected market_contract_address validation error, got %#v", body.Intent.ValidationResult.Errors)
+	}
+}
+
+func createValidAgentIntent(t *testing.T, router http.Handler) string {
+	t.Helper()
+
+	return createAgentIntent(t, router, `{
+		"action": "buy_yes",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "12.5"
+	}`)
+}
+
+func createAgentIntent(t *testing.T, router http.Handler, payload string) string {
+	t.Helper()
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(payload))
 	router.ServeHTTP(response, request)
 
 	if response.Code != http.StatusCreated {
@@ -335,4 +470,68 @@ func createValidAgentIntent(t *testing.T, router http.Handler) string {
 	}
 
 	return body.Intent.IntentID
+}
+
+func confirmAgentIntent(t *testing.T, router http.Handler, intentID string) agentExecutionPlanResponse {
+	t.Helper()
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/confirm", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected confirm status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		ExecutionPlan agentExecutionPlanResponse `json:"execution_plan"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode confirm response: %v", err)
+	}
+
+	return body.ExecutionPlan
+}
+
+func assertNoExecutionClaim(t *testing.T, executionPlan agentExecutionPlanResponse) {
+	t.Helper()
+
+	if executionPlan.BroadcastPerformed {
+		t.Fatal("expected broadcast_performed false")
+	}
+	if executionPlan.TransactionHash != nil {
+		t.Fatalf("expected transaction_hash null, got %q", *executionPlan.TransactionHash)
+	}
+	if executionPlan.TransactionRequest.BroadcastPerformed {
+		t.Fatal("expected transaction_request broadcast_performed false")
+	}
+	if executionPlan.TransactionRequest.Value != "0" {
+		t.Fatalf("expected transaction value 0, got %q", executionPlan.TransactionRequest.Value)
+	}
+	if executionPlan.TransactionRequest.Chain != "arc_testnet" {
+		t.Fatalf("expected transaction chain arc_testnet, got %q", executionPlan.TransactionRequest.Chain)
+	}
+}
+
+func assertStringSliceEqual(t *testing.T, actual []string, expected []string) {
+	t.Helper()
+
+	if len(actual) != len(expected) {
+		t.Fatalf("expected args %#v, got %#v", expected, actual)
+	}
+	for index := range expected {
+		if actual[index] != expected[index] {
+			t.Fatalf("expected args %#v, got %#v", expected, actual)
+		}
+	}
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+
+	return false
 }

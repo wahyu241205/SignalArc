@@ -11,39 +11,60 @@ import (
 )
 
 type createAgentIntentRequest struct {
-	Action     string `json:"action"`
-	UserWallet string `json:"user_wallet"`
-	MarketID   string `json:"market_id"`
-	Amount     string `json:"amount"`
-	Outcome    string `json:"outcome"`
+	Action                string `json:"action"`
+	UserWallet            string `json:"user_wallet"`
+	MarketID              string `json:"market_id"`
+	MarketContractAddress string `json:"market_contract_address"`
+	Amount                string `json:"amount"`
+	Outcome               string `json:"outcome"`
+	Resolver              string `json:"resolver"`
+	CollateralToken       string `json:"collateral_token"`
+	CloseTimestamp        string `json:"close_timestamp"`
+	Question              string `json:"question"`
 }
 
 type agentIntentResponse struct {
-	IntentID             string                 `json:"intent_id"`
-	Action               string                 `json:"action"`
-	Status               string                 `json:"status"`
-	RequiresConfirmation bool                   `json:"requires_confirmation"`
-	UserWallet           string                 `json:"user_wallet,omitempty"`
-	Address              string                 `json:"address,omitempty"`
-	MarketID             string                 `json:"market_id,omitempty"`
-	Amount               string                 `json:"amount,omitempty"`
-	Outcome              string                 `json:"outcome,omitempty"`
-	ValidationResult     agent.ValidationResult `json:"validation_result"`
-	Warnings             []string               `json:"warnings"`
-	CreatedAt            string                 `json:"created_at"`
+	IntentID              string                 `json:"intent_id"`
+	Action                string                 `json:"action"`
+	Status                string                 `json:"status"`
+	RequiresConfirmation  bool                   `json:"requires_confirmation"`
+	UserWallet            string                 `json:"user_wallet,omitempty"`
+	Address               string                 `json:"address,omitempty"`
+	MarketID              string                 `json:"market_id,omitempty"`
+	MarketContractAddress string                 `json:"market_contract_address,omitempty"`
+	Amount                string                 `json:"amount,omitempty"`
+	Outcome               string                 `json:"outcome,omitempty"`
+	Resolver              string                 `json:"resolver,omitempty"`
+	CollateralToken       string                 `json:"collateral_token,omitempty"`
+	CloseTimestamp        string                 `json:"close_timestamp,omitempty"`
+	Question              string                 `json:"question,omitempty"`
+	ValidationResult      agent.ValidationResult `json:"validation_result"`
+	Warnings              []string               `json:"warnings"`
+	CreatedAt             string                 `json:"created_at"`
 }
 
 type agentExecutionPlanResponse struct {
-	IntentID            string   `json:"intent_id"`
-	Action              string   `json:"action"`
-	Status              string   `json:"status"`
-	ExecutionMode       string   `json:"execution_mode"`
-	Network             string   `json:"network"`
-	AgentFactoryAddress string   `json:"agent_factory_address"`
-	RequiresSignature   bool     `json:"requires_signature"`
-	BroadcastPerformed  bool     `json:"broadcast_performed"`
-	TransactionHash     *string  `json:"transaction_hash"`
-	Warnings            []string `json:"warnings"`
+	IntentID            string                     `json:"intent_id"`
+	Action              string                     `json:"action"`
+	Status              string                     `json:"status"`
+	ExecutionMode       string                     `json:"execution_mode"`
+	Network             string                     `json:"network"`
+	AgentFactoryAddress string                     `json:"agent_factory_address"`
+	RequiresSignature   bool                       `json:"requires_signature"`
+	BroadcastPerformed  bool                       `json:"broadcast_performed"`
+	TransactionHash     *string                    `json:"transaction_hash"`
+	TransactionRequest  transactionRequestResponse `json:"transaction_request"`
+	Warnings            []string                   `json:"warnings"`
+}
+
+type transactionRequestResponse struct {
+	To                 string   `json:"to"`
+	Contract           string   `json:"contract"`
+	Function           string   `json:"function"`
+	Args               []string `json:"args"`
+	Value              string   `json:"value"`
+	Chain              string   `json:"chain"`
+	BroadcastPerformed bool     `json:"broadcast_performed"`
 }
 
 func registerAgentIntentRoutes(router chi.Router, store *agent.Store) {
@@ -55,11 +76,16 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store) {
 		}
 
 		intent, err := store.CreateIntent(agent.CreateIntentInput{
-			Action:     request.Action,
-			UserWallet: request.UserWallet,
-			MarketID:   request.MarketID,
-			Amount:     request.Amount,
-			Outcome:    request.Outcome,
+			Action:                request.Action,
+			UserWallet:            request.UserWallet,
+			MarketID:              request.MarketID,
+			MarketContractAddress: request.MarketContractAddress,
+			Amount:                request.Amount,
+			Outcome:               request.Outcome,
+			Resolver:              request.Resolver,
+			CollateralToken:       request.CollateralToken,
+			CloseTimestamp:        request.CloseTimestamp,
+			Question:              request.Question,
 		})
 		if err != nil {
 			httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_create_failed", "failed to create agent intent preview")
@@ -121,18 +147,23 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store) {
 
 func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {
 	return agentIntentResponse{
-		IntentID:             intent.ID,
-		Action:               intent.Action,
-		Status:               intent.Status,
-		RequiresConfirmation: intent.RequiresConfirmation,
-		UserWallet:           intent.UserWallet,
-		Address:              intent.UserWallet,
-		MarketID:             intent.MarketID,
-		Amount:               intent.Amount,
-		Outcome:              intent.Outcome,
-		ValidationResult:     intent.ValidationResult,
-		Warnings:             intent.Warnings,
-		CreatedAt:            intent.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+		IntentID:              intent.ID,
+		Action:                intent.Action,
+		Status:                intent.Status,
+		RequiresConfirmation:  intent.RequiresConfirmation,
+		UserWallet:            intent.UserWallet,
+		Address:               intent.UserWallet,
+		MarketID:              intent.MarketID,
+		MarketContractAddress: intent.MarketContractAddress,
+		Amount:                intent.Amount,
+		Outcome:               intent.Outcome,
+		Resolver:              intent.Resolver,
+		CollateralToken:       intent.CollateralToken,
+		CloseTimestamp:        intent.CloseTimestamp,
+		Question:              intent.Question,
+		ValidationResult:      intent.ValidationResult,
+		Warnings:              intent.Warnings,
+		CreatedAt:             intent.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 	}
 }
 
@@ -147,6 +178,19 @@ func newAgentExecutionPlanResponse(executionPlan agent.ExecutionPlan) agentExecu
 		RequiresSignature:   executionPlan.RequiresSignature,
 		BroadcastPerformed:  executionPlan.BroadcastPerformed,
 		TransactionHash:     executionPlan.TransactionHash,
+		TransactionRequest:  newTransactionRequestResponse(executionPlan.TransactionRequest),
 		Warnings:            executionPlan.Warnings,
+	}
+}
+
+func newTransactionRequestResponse(transactionRequest agent.TransactionRequest) transactionRequestResponse {
+	return transactionRequestResponse{
+		To:                 transactionRequest.To,
+		Contract:           transactionRequest.Contract,
+		Function:           transactionRequest.Function,
+		Args:               transactionRequest.Args,
+		Value:              transactionRequest.Value,
+		Chain:              transactionRequest.Chain,
+		BroadcastPerformed: transactionRequest.BroadcastPerformed,
 	}
 }
