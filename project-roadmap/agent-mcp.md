@@ -86,11 +86,22 @@ If not documented, mark as unknown / not documented.
 
 1. Separate agent contract prototype — DONE
 2. Foundry tests — DONE
-3. Agent factory deploy on Arc Testnet — NEXT
-4. Backend Agent API intent model
+3. Agent factory deploy on Arc Testnet — DONE
+4. Backend Agent API intent model — NEXT
 5. Backend execution path to agent contract
 6. Circle Agent Wallet proof of concept
 7. Policy-limited agent wallet execution
+
+
+
+## Agent Factory Deployment
+
+Status: DONE.
+
+- Network: Arc Testnet
+- Agent factory: `0x69aE770e8b2F96297101FeC4dc123B3801dA7d80`
+- Deploy transaction: `0x8e4dfa481a2863a08a749fe4add30c4f030f178a4d6ba4658419df6730ebf10b`
+- Read validation: `marketCount() == 0`
 
 ## Non-Claims
 
