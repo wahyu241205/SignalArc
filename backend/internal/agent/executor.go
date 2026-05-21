@@ -56,6 +56,9 @@ type Executor interface {
 
 type ExecutionResult struct {
 	IntentID               string
+	AgentID                string
+	AgentWalletAddress     string
+	WalletProvider         string
 	Action                 string
 	Status                 string
 	ExecutionMode          string
@@ -190,6 +193,9 @@ func (executor *ArcExecutor) ExecuteCreateMarket(ctx context.Context, intent Int
 
 	return ExecutionResult{
 		IntentID:            intent.ID,
+		AgentID:             intent.AgentID,
+		AgentWalletAddress:  intent.AgentWalletAddress,
+		WalletProvider:      intent.WalletProvider,
 		Action:              intent.Action,
 		Status:              StatusExecuted,
 		ExecutionMode:       ExecutionModeAgentContract,
@@ -327,6 +333,9 @@ func (executor *ArcExecutor) executeBuyPosition(ctx context.Context, intent Inte
 
 	return ExecutionResult{
 		IntentID:               intent.ID,
+		AgentID:                intent.AgentID,
+		AgentWalletAddress:     intent.AgentWalletAddress,
+		WalletProvider:         intent.WalletProvider,
 		Action:                 intent.Action,
 		Status:                 StatusExecuted,
 		ExecutionMode:          ExecutionModeAgentContract,

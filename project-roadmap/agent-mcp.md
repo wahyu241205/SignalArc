@@ -16,6 +16,233 @@ Agent can later:
 - claim payout
 - resolve/cancel only if authorized
 
+## Live AI Agent Transaction MVP
+
+Status: IN PROGRESS - blocked on Circle Agent Wallet CLI setup/authentication and a real ARC-TESTNET agent wallet transaction.
+
+Primary objective:
+- A user owns or controls an agent.
+- The agent has its own wallet address.
+- The agent wallet is not the deployer wallet.
+- The agent wallet is not the user personal wallet unless an explicitly documented user-controlled custody link is implemented.
+- ChatGPT, Claude, Telegram, or other external clients are command interfaces only.
+- SignalArc Backend Agent API remains the source of truth for intent validation, policy, permissions, balances, market status, execution state, and audit state.
+- Every milestone transaction must include a real Arc Testnet tx hash, receipt success, onchain readback, and proof that the signer/wallet is the agent wallet.
+
+### Agent Wallet Boundary
+
+Do not use `contracts/.env` `PRIVATE_KEY` as an agent wallet.
+
+Do not map `PRIVATE_KEY` to `AGENT_EXECUTOR_PRIVATE_KEY`.
+
+Do not use the deployer, resolver, or user wallet as the agent wallet.
+
+Do not treat `AGENT_EXECUTOR_PRIVATE_KEY` as the final Agent Wallet design. The existing backend EOA executor is legacy execution plumbing only and is not valid proof of the Live AI Agent Transaction MVP.
+
+Deployer/resolver wallet explicitly forbidden as an agent wallet:
+- `0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC`
+
+Preferred wallet provider:
+- `circle_agent_wallet`, if the live Circle Agent Wallet CLI path is authenticated and proven on `ARC-TESTNET`.
+
+Documented fallback provider name only:
+- `temporary_testnet_agent_eoa`
+
+The fallback must never use the deployer private key, resolver wallet, user wallet, or any key copied from `contracts/.env`.
+
+### Official Documentation Findings
+
+Circle Agent Wallets:
+- Designed for agents to hold, spend, trade, and earn USDC/tokens within spending controls.
+- Built on Circle user-controlled wallets with 2-of-2 MPC.
+- Agent key shares are not exposed to the agent.
+- Users retain custody.
+- Operated through Circle CLI.
+
+Circle Agent Wallet ARC-TESTNET support:
+- Circle documents `ARC-TESTNET` as the Arc Testnet chain identifier for Agent Wallet CLI commands.
+- Circle documents `circle wallet login you@example.com --testnet`.
+- Circle documents `circle wallet list --type agent --chain ARC-TESTNET`.
+- Circle documents `circle wallet fund --address 0xYourWalletAddress --chain ARC-TESTNET` for testnet funding, with testnet wallets auto-funded from the Circle faucet.
+- Circle documents `circle wallet balance --address 0xYourWalletAddress --chain ARC-TESTNET`.
+- Circle documents `circle wallet execute <abiFunctionSignature> ... --address <agent_wallet> --contract <contract> --chain ARC-TESTNET`.
+- Circle documents `circle contract query <abiFunctionSignature> ... --contract <contract> --chain ARC-TESTNET`.
+
+These are official-doc and CLI help command shapes only. They are not authenticated local validation results unless this document records the exact command output, wallet address, tx hash or Circle transaction id, receipt status, and onchain readback.
+
+Arc:
+- Arc MCP is documentation lookup tooling only.
+- Arc MCP is not the runtime trading agent.
+- Arc Agentic Economy is relevant to the long-term SignalArc design.
+
+Unknown / not documented:
+- Whether SignalArc should store Circle policy IDs, detailed spending caps, or Circle-side wallet policy state in the backend before a real Circle Agent Wallet is authenticated and inspected.
+- Whether Circle Agent Wallet contract execution for this exact SignalArc contract call shape succeeds on this local account before CLI login and OTP authentication.
+
+### Checkpoint 2 - Circle Agent Wallet POC Discovery
+
+Local discovery result:
+- `circle` CLI was installed globally with `npm install -g @circle-fin/cli` because it is an external/global tool and not a SignalArc project dependency.
+- `circle --version` returned `0.0.3`.
+- Safe help discovery was run for `circle wallet`, `wallet login`, `wallet list`, `wallet create`, `wallet fund`, `wallet balance`, `wallet execute`, and `contract query`.
+- Additional safe help discovery was run for `circle --help` and `circle terms --help`.
+- Safe auth/chain discovery commands were blocked before login by Circle CLI Terms acceptance:
+  - `circle wallet status --type agent --output json`
+  - `circle blockchain list -q`
+  - `circle blockchain list --output json`
+- Circle CLI testnet authentication could not be tested because accepting Terms of Use and Privacy Policy is a user-controlled manual step.
+- No Circle Agent Wallet address was created or listed.
+- No Circle Agent Wallet was funded.
+- No Circle Agent Wallet contract execution was performed.
+
+Manual setup commands from official docs:
+
+```bash
+npm install -g @circle-fin/cli
+circle wallet login you@example.com --testnet
+circle wallet list --type agent --chain ARC-TESTNET
+circle wallet fund --address 0xYourWalletAddress --chain ARC-TESTNET
+circle wallet balance --address 0xYourWalletAddress --chain ARC-TESTNET
+circle wallet execute "createMarket(string,string,uint256,address,address)" <marketId> <question> <closeTimestamp> <resolver> <collateralToken> --address 0xAgentWallet --contract 0x69aE770e8b2F96297101FeC4dc123B3801dA7d80 --chain ARC-TESTNET
+circle contract query "marketCount()" --contract 0x69aE770e8b2F96297101FeC4dc123B3801dA7d80 --chain ARC-TESTNET
+```
+
+If OTP/manual login is required, stop and let the user complete it. Do not bypass user control.
+
+Current manual blocker:
+
+```bash
+# User-controlled step; do not run automatically.
+circle terms accept
+circle wallet login you@example.com --testnet
+```
+
+Circle CLI help says login emails an OTP. The user must accept Circle Terms/Privacy Policy and complete OTP manually before SignalArc can list, fund, or execute from an agent wallet.
+
+Note: official Circle docs show `circle wallet login you@example.com --testnet`; the installed `circle wallet login --help` output describes separate mainnet/testnet sessions but did not list a `--testnet` option. Treat the exact testnet login flag as blocked until the user completes the CLI Terms step and the command can be checked interactively.
+
+### Backend Agent Wallet Model
+
+Backend model added for:
+- `agent_id`
+- `user_wallet`
+- `agent_wallet_address`
+- `wallet_provider`
+- `chain`
+- `allowed_actions`
+- `status`
+- `policy_metadata`
+- `created_at`
+- `updated_at`
+
+Current implementation uses temporary in-memory development registration through `POST /agent/wallets`. It is not final production persistence. This avoids storing private keys, Circle OTPs, secret tokens, or undocumented Circle policy state before the real Circle Agent Wallet path is proven.
+
+Persistent migration is deferred until the Circle Agent Wallet proof of concept provides a real provider payload and policy shape to store.
+
+### Backend Execution Guardrails
+
+`POST /agent/intents` now accepts:
+- `agent_id`
+- `agent_wallet_address`
+- existing action, market, and amount fields
+
+`POST /agent/intents/{id}/execute` rejects execution when:
+- `agent_id` has no registered agent wallet.
+- agent wallet is inactive.
+- agent wallet chain is not `ARC-TESTNET`.
+- action is not in `allowed_actions`.
+- agent wallet equals the deployer/resolver wallet.
+- agent wallet equals the registered user wallet.
+- agent wallet matches `SIGNALARC_FORBIDDEN_AGENT_WALLETS`.
+- request `agent_wallet_address` does not match the registered agent wallet.
+- provider is `circle_agent_wallet` but Circle CLI authentication and live wallet proof are not complete.
+- provider is `temporary_testnet_agent_eoa`; this is only a documented fallback name and is not enabled.
+
+### External Agent Interface MVP
+
+Chosen MVP client: ChatGPT custom action / API-call style client.
+
+Current definition only:
+- External client calls SignalArc Backend Agent API.
+- External client does not hold private keys.
+- External client does not call contracts directly.
+- Backend remains the execution gate.
+
+Live external agent validation is not complete until a real client submits an intent and the registered agent wallet executes the onchain transaction through the backend-approved path.
+
+### Current Non-Claims
+
+Not complete:
+- The payout lifecycle has not been completed from this agent wallet in this Codex shell.
+- The cancel/refund lifecycle has not been completed from this agent wallet in this Codex shell.
+- No live external ChatGPT/Claude/Telegram client triggered execution.
+- SignalArc is not mainnet ready.
+- SignalArc does not claim production policy-limited execution on ARC-TESTNET. Circle CLI help says `wallet limit` is mainnet only.
+- SignalArc is not claiming autonomous trading.
+
+### User-Proven Circle Agent Wallet Evidence
+
+Status: PARTIALLY VALIDATED BY USER-PROVIDED CIRCLE CLI EVIDENCE.
+
+This evidence supersedes the earlier deployer-signed smoke tests for the create-market and buy-position portions of the Live AI Agent Transaction MVP. It does not complete payout, refund, external-agent-client, or production policy-limit validation.
+
+Agent wallet:
+- Chain: `ARC-TESTNET`
+- Wallet provider: `circle_agent_wallet`
+- Circle CLI version observed: `0.0.3`
+- Agent wallet address: `0x96d5051a005547eba149f71604ccf58ae1a7c950`
+- Deployer/resolver wallet: `0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC`
+- Boundary proof: agent wallet is different from deployer/resolver wallet.
+- Funding proof: Circle Agent Wallet balance showed `20 USDC` before the recorded execution sequence.
+
+Factory:
+- `SignalArcAgentMarketFactory`: `0x69aE770e8b2F96297101FeC4dc123B3801dA7d80`
+- Initial readback: `marketCount() == 7`
+
+Circle Agent Wallet `createMarket`:
+- Transaction: `0x7142dbd7eebe7cbfb19199d9984efa5cef814d0e6038c17b98f2e98cc731cacf`
+- Circle source address: `0x96d5051a005547eba149f71604ccf58ae1a7c950`
+- Circle state: `COMPLETE`
+- Post-create factory readback:
+  - `marketCount() == 8`
+  - `allMarkets(7) == 0xAbCf081E456C1a11106deF590666A07B76D456f8`
+
+Created market readback:
+- Market: `0xAbCf081E456C1a11106deF590666A07B76D456f8`
+- `collateralToken() == 0x3600000000000000000000000000000000000000`
+- `admin() == 0x96d5051a005547eba149f71604ccf58ae1a7c950`
+- `resolver() == 0x96d5051a005547eba149f71604ccf58ae1a7c950`
+- `isOpen() == true`
+
+Circle Agent Wallet YES position:
+- USDC approve transaction: `0xeb7304b0a1be9f5dc575f62fb705dfaf384bc720da13f7e4ffe9563442c036ca`
+- `buyYes(1000000)` transaction: `0xe311d999e15e6f34fa6f623a8f27bc724c665d7c3296632460339326b6094b16`
+- Readback:
+  - `yesPositions(0x96d5051a005547eba149f71604ccf58ae1a7c950) == 1000000`
+  - `totalYes() == 1000000`
+  - `totalCollateral() == 1000000`
+
+Circle Agent Wallet NO position:
+- USDC approve transaction: `0x6ea6a10293a4df5d7ed50e077821115571787d8e9d6b9507a984ebf33fc52a9b`
+- `buyNo(1000000)` transaction: `0xaefe8bcdcec794c811d615517f0dfa800b9e263631200a74c85d000374aa8f24`
+- Readback:
+  - `noPositions(0x96d5051a005547eba149f71604ccf58ae1a7c950) == 1000000`
+  - `totalNo() == 1000000`
+  - `totalCollateral() == 2000000`
+  - `USDC.balanceOf(0xAbCf081E456C1a11106deF590666A07B76D456f8) == 2000000`
+
+Continuation attempt from this Codex shell:
+- `CIRCLE_ACCEPT_TERMS=1` was set only for Circle CLI processes so the non-interactive shell could use the existing session.
+- `circle wallet status --type agent --output json` returned `AUTH_REQUIRED`.
+- `circle wallet list --type agent --chain ARC-TESTNET --output json` returned not logged in or session expired.
+- `circle wallet balance --address 0x96d5051a005547eba149f71604ccf58ae1a7c950 --chain ARC-TESTNET` returned no active agent session.
+- `circle contract query` readbacks attempted from this shell returned `fetch failed`.
+
+Current blocker:
+- The authenticated Circle Agent Wallet session is not available to this non-interactive Codex shell.
+- Required manual step: authenticate the Circle CLI in the same shell/context that Codex can access, then rerun status/list/balance before any further transaction.
+- Do not ask for or print OTP, tokens, private keys, or Circle credentials.
+
 ## Core Rule
 
 Backend remains source of truth.

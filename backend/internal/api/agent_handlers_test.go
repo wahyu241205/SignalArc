@@ -96,6 +96,47 @@ func TestCreateAgentIntentPreview(t *testing.T) {
 	}
 }
 
+func TestRegisterAgentWallet(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/wallets", bytes.NewBufferString(`{
+		"agent_id": "agent_test_1",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"agent_wallet_address": "0x9999999999999999999999999999999999999999",
+		"wallet_provider": "circle_agent_wallet",
+		"chain": "ARC-TESTNET",
+		"allowed_actions": ["create_market", "buy_yes"],
+		"status": "active",
+		"policy_metadata": {
+			"per_tx_usdc_cap": "unknown / not documented until Circle policy is configured"
+		}
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		AgentWallet agentWalletResponse `json:"agent_wallet"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.AgentWallet.AgentID != "agent_test_1" {
+		t.Fatalf("expected agent id, got %q", body.AgentWallet.AgentID)
+	}
+	if body.AgentWallet.AgentWalletAddress != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("unexpected agent wallet address %q", body.AgentWallet.AgentWalletAddress)
+	}
+	if body.AgentWallet.WalletProvider != agent.WalletProviderCircleAgentWallet {
+		t.Fatalf("unexpected wallet provider %q", body.AgentWallet.WalletProvider)
+	}
+}
+
 func TestGetAgentIntentPreview(t *testing.T) {
 	store := agent.NewStore()
 	router := chi.NewRouter()
@@ -391,10 +432,14 @@ func TestConfirmCreateMarketReturnsFactoryTransactionRequest(t *testing.T) {
 
 func TestExecuteConfirmedCreateMarketReturnsRealExecutionShape(t *testing.T) {
 	store := agent.NewStore()
+	registerTestAgentWallet(t, store, agent.ActionCreateMarket)
 	isMarket := true
 	executor := &stubAgentExecutor{
 		result: agent.ExecutionResult{
 			IntentID:            "set-by-test",
+			AgentID:             "agent_test_1",
+			AgentWalletAddress:  "0x9999999999999999999999999999999999999999",
+			WalletProvider:      agent.WalletProviderCircleAgentWallet,
 			Action:              agent.ActionCreateMarket,
 			Status:              agent.StatusExecuted,
 			ExecutionMode:       agent.ExecutionModeAgentContract,
@@ -414,6 +459,7 @@ func TestExecuteConfirmedCreateMarketReturnsRealExecutionShape(t *testing.T) {
 
 	intentID := createAgentIntent(t, router, `{
 		"action": "create_market",
+		"agent_id": "agent_test_1",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "agent-market-execute-1",
 		"question": "Will SignalArc execute an agent market?",
@@ -470,12 +516,14 @@ func TestExecuteConfirmedCreateMarketReturnsRealExecutionShape(t *testing.T) {
 
 func TestExecuteUnconfirmedIntentReturnsConflict(t *testing.T) {
 	store := agent.NewStore()
+	registerTestAgentWallet(t, store, agent.ActionCreateMarket)
 	executor := &stubAgentExecutor{}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, executor)
 
 	intentID := createAgentIntent(t, router, `{
 		"action": "create_market",
+		"agent_id": "agent_test_1",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "agent-market-execute-2",
 		"question": "Will SignalArc reject unconfirmed execution?",
@@ -496,11 +544,76 @@ func TestExecuteUnconfirmedIntentReturnsConflict(t *testing.T) {
 	}
 }
 
+func TestExecuteMissingAgentWalletReturnsBadRequest(t *testing.T) {
+	store := agent.NewStore()
+	executor := &stubAgentExecutor{}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "buy_yes",
+		"agent_id": "agent_missing",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "1000000"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+	if executor.called {
+		t.Fatal("executor should not be called when the agent wallet is missing")
+	}
+}
+
+func TestExecuteRejectsDeployerWalletAsAgentWallet(t *testing.T) {
+	store := agent.NewStore()
+	_, err := store.RegisterAgentWallet(agent.AgentWallet{
+		AgentID:            "agent_test_1",
+		UserWallet:         "0x1111111111111111111111111111111111111111",
+		AgentWalletAddress: knownDeployerResolverWallet(),
+		WalletProvider:     agent.WalletProviderCircleAgentWallet,
+		Chain:              agent.ChainArcTestnet,
+		AllowedActions:     []string{agent.ActionBuyYes},
+		Status:             agent.WalletStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("register agent wallet: %v", err)
+	}
+	executor := &stubAgentExecutor{}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, executor)
+
+	intentID := createValidAgentIntent(t, router)
+	confirmAgentIntent(t, router, intentID)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusForbidden, response.Code, response.Body.String())
+	}
+	if executor.called {
+		t.Fatal("executor should not be called for deployer wallet")
+	}
+}
+
 func TestExecuteConfirmedBuyYesReturnsRealExecutionShape(t *testing.T) {
 	store := agent.NewStore()
+	registerTestAgentWallet(t, store, agent.ActionBuyYes)
 	executor := &stubAgentExecutor{
 		result: agent.ExecutionResult{
 			IntentID:               "set-by-test",
+			AgentID:                "agent_test_1",
+			AgentWalletAddress:     "0x9999999999999999999999999999999999999999",
+			WalletProvider:         agent.WalletProviderCircleAgentWallet,
 			Action:                 agent.ActionBuyYes,
 			Status:                 agent.StatusExecuted,
 			ExecutionMode:          agent.ExecutionModeAgentContract,
@@ -579,9 +692,13 @@ func TestExecuteConfirmedBuyYesReturnsRealExecutionShape(t *testing.T) {
 
 func TestExecuteConfirmedBuyNoReturnsRealExecutionShape(t *testing.T) {
 	store := agent.NewStore()
+	registerTestAgentWallet(t, store, agent.ActionBuyNo)
 	executor := &stubAgentExecutor{
 		result: agent.ExecutionResult{
 			IntentID:               "set-by-test",
+			AgentID:                "agent_test_1",
+			AgentWalletAddress:     "0x9999999999999999999999999999999999999999",
+			WalletProvider:         agent.WalletProviderCircleAgentWallet,
 			Action:                 agent.ActionBuyNo,
 			Status:                 agent.StatusExecuted,
 			ExecutionMode:          agent.ExecutionModeAgentContract,
@@ -604,6 +721,7 @@ func TestExecuteConfirmedBuyNoReturnsRealExecutionShape(t *testing.T) {
 
 	intentID := createAgentIntent(t, router, `{
 		"action": "buy_no",
+		"agent_id": "agent_test_1",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "market-1",
 		"market_contract_address": "0x3333333333333333333333333333333333333333",
@@ -670,12 +788,14 @@ func TestExecuteConfirmedBuyNoReturnsRealExecutionShape(t *testing.T) {
 
 func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
 	store := agent.NewStore()
+	registerTestAgentWallet(t, store, agent.ActionCancelMarket)
 	executor := &stubAgentExecutor{}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, executor)
 
 	intentID := createAgentIntent(t, router, `{
 		"action": "cancel_market",
+		"agent_id": "agent_test_1",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "market-1",
 		"market_contract_address": "0x3333333333333333333333333333333333333333"
@@ -696,12 +816,14 @@ func TestExecuteUnsupportedActionReturnsNotImplemented(t *testing.T) {
 
 func TestExecuteReportsConfigErrorWithoutSecretDetails(t *testing.T) {
 	store := agent.NewStore()
+	registerTestAgentWallet(t, store, agent.ActionCreateMarket)
 	executor := &stubAgentExecutor{err: agent.ErrExecutionConfigInvalid}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, executor)
 
 	intentID := createAgentIntent(t, router, `{
 		"action": "create_market",
+		"agent_id": "agent_test_1",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "agent-market-execute-3",
 		"question": "Will SignalArc hide execution config details?",
@@ -728,12 +850,14 @@ func TestExecuteReportsConfigErrorWithoutSecretDetails(t *testing.T) {
 
 func TestExecuteMapsExecutorNotImplemented(t *testing.T) {
 	store := agent.NewStore()
+	registerTestAgentWallet(t, store, agent.ActionCreateMarket)
 	executor := &stubAgentExecutor{err: agent.ErrExecutionNotImplemented}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, executor)
 
 	intentID := createAgentIntent(t, router, `{
 		"action": "create_market",
+		"agent_id": "agent_test_1",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "agent-market-execute-4",
 		"question": "Will SignalArc map executor not implemented?",
@@ -754,12 +878,14 @@ func TestExecuteMapsExecutorNotImplemented(t *testing.T) {
 
 func TestExecuteMapsUnexpectedExecutorError(t *testing.T) {
 	store := agent.NewStore()
+	registerTestAgentWallet(t, store, agent.ActionCreateMarket)
 	executor := &stubAgentExecutor{err: errors.New("rpc unavailable")}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, executor)
 
 	intentID := createAgentIntent(t, router, `{
 		"action": "create_market",
+		"agent_id": "agent_test_1",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "agent-market-execute-5",
 		"question": "Will SignalArc map executor errors?",
@@ -869,6 +995,7 @@ func createValidAgentIntent(t *testing.T, router http.Handler) string {
 
 	return createAgentIntent(t, router, `{
 		"action": "buy_yes",
+		"agent_id": "agent_test_1",
 		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"market_id": "market-1",
 		"market_contract_address": "0x3333333333333333333333333333333333333333",
@@ -895,6 +1022,26 @@ func createAgentIntent(t *testing.T, router http.Handler, payload string) string
 	}
 
 	return body.Intent.IntentID
+}
+
+func registerTestAgentWallet(t *testing.T, store *agent.Store, allowedActions ...string) {
+	t.Helper()
+
+	_, err := store.RegisterAgentWallet(agent.AgentWallet{
+		AgentID:            "agent_test_1",
+		UserWallet:         "0x1111111111111111111111111111111111111111",
+		AgentWalletAddress: "0x9999999999999999999999999999999999999999",
+		WalletProvider:     agent.WalletProviderCircleAgentWallet,
+		Chain:              agent.ChainArcTestnet,
+		AllowedActions:     allowedActions,
+		Status:             agent.WalletStatusActive,
+		PolicyMetadata: map[string]string{
+			"source": "test",
+		},
+	})
+	if err != nil {
+		t.Fatalf("register test agent wallet: %v", err)
+	}
 }
 
 func confirmAgentIntent(t *testing.T, router http.Handler, intentID string) agentExecutionPlanResponse {

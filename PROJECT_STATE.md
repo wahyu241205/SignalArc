@@ -524,10 +524,47 @@ Done:
 
 - Local frontend/backend MVP integration fix and usability smoke test completed.
 
+## Live AI Agent Transaction MVP
+
+Status: IN PROGRESS - boundary/discovery only; blocked before live onchain validation.
+
+Current checkpoint state:
+
+- Agent Wallet Boundary documented in `project-roadmap/agent-mcp.md`.
+- Previous deployer-signed Arc Testnet transactions are explicitly not accepted as agent-wallet validation.
+- `contracts/.env` `PRIVATE_KEY` must not be used as an agent wallet.
+- `AGENT_EXECUTOR_PRIVATE_KEY` is not the final Agent Wallet design.
+- Circle Agent Wallet is the preferred provider if the official CLI path works on `ARC-TESTNET`.
+- Circle CLI was installed globally as an external tool with `npm install -g @circle-fin/cli`; no SignalArc package manager files were intentionally changed for Circle CLI.
+- `circle --version` returned `0.0.3`.
+- Circle CLI safe help discovery was completed.
+- Circle CLI auth/chain discovery is blocked by user-controlled Terms acceptance before login or OTP; `circle terms accept` must be run manually by the user before authenticated discovery continues.
+- Official Circle docs show `circle wallet login you@example.com --testnet`, but the installed `circle wallet login --help` output did not list a `--testnet` option before Terms/login validation.
+- User-provided Circle CLI evidence now proves a real `ARC-TESTNET` Circle Agent Wallet at `0x96d5051a005547eba149f71604ccf58ae1a7c950`, distinct from deployer/resolver `0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC`.
+- User-provided funding proof showed `20 USDC`.
+- User-provided create-market evidence recorded tx `0x7142dbd7eebe7cbfb19199d9984efa5cef814d0e6038c17b98f2e98cc731cacf`, source address `0x96d5051a005547eba149f71604ccf58ae1a7c950`, state `COMPLETE`, `marketCount() == 8`, and `allMarkets(7) == 0xAbCf081E456C1a11106deF590666A07B76D456f8`.
+- User-provided market readback proved market `0xAbCf081E456C1a11106deF590666A07B76D456f8`, collateral token `0x3600000000000000000000000000000000000000`, admin/resolver both `0x96d5051a005547eba149f71604ccf58ae1a7c950`, and `isOpen == true`.
+- User-provided buy YES evidence recorded approve tx `0xeb7304b0a1be9f5dc575f62fb705dfaf384bc720da13f7e4ffe9563442c036ca`, buy tx `0xe311d999e15e6f34fa6f623a8f27bc724c665d7c3296632460339326b6094b16`, and readback `yesPositions(agent wallet) == 1000000`, `totalYes == 1000000`, `totalCollateral == 1000000`.
+- User-provided buy NO evidence recorded approve tx `0x6ea6a10293a4df5d7ed50e077821115571787d8e9d6b9507a984ebf33fc52a9b`, buy tx `0xaefe8bcdcec794c811d615517f0dfa800b9e263631200a74c85d000374aa8f24`, and readback `noPositions(agent wallet) == 1000000`, `totalNo == 1000000`, `totalCollateral == 2000000`, `USDC.balanceOf(market) == 2000000`.
+- Continuation from this Codex shell is blocked because Circle CLI returns `AUTH_REQUIRED` or no active agent session for status/list/balance, even when `CIRCLE_ACCEPT_TERMS=1` is set for the process.
+- Backend now has temporary in-memory development agent wallet registration through `POST /agent/wallets`; this is not final production persistence.
+- Backend agent intents now carry `agent_id` and optional `agent_wallet_address`.
+- Backend execution now rejects missing agent wallets, deployer/resolver wallet reuse, user-wallet reuse, disallowed actions, wrong chain, inactive wallet, mismatched wallet address, and unsupported provider execution.
+- No secrets, `.env` files, frontend code, production deployment config, commits, pushes, or deploys were changed.
+
+Current non-claims:
+
+- No live external ChatGPT/Claude/Telegram client has triggered the backend.
+- Payout lifecycle from the Circle Agent Wallet is not complete yet.
+- Cancel/refund lifecycle from the Circle Agent Wallet is not complete yet.
+- Circle CLI command shapes in `project-roadmap/agent-mcp.md` are official-doc/help-discovery shapes only unless accompanied by exact authenticated output and onchain evidence.
+- SignalArc does not claim production policy-limited execution on ARC-TESTNET; Circle CLI help says `wallet limit` is mainnet only.
+- The phase is not complete.
+
 ## Next Recommended Step
 
-- Plan the next controlled frontend/onchain integration step: wallet-aware read-only state and safe onchain-read preparation before any transaction execution.
-- Do not add Circle SDK, Circle API keys, onchain writes, DNS, live deployment, contract redeploy, or mainnet configuration yet.
+- Install/authenticate Circle CLI for testnet under user control, list or create an `ARC-TESTNET` Circle Agent Wallet, fund it, prove the wallet address is not the deployer/resolver/user wallet, then wire only that proven provider path into backend execution.
+- Do not add Circle API keys, deployer/user private keys, DNS, live deployment, contract redeploy, frontend execution UI, or mainnet configuration yet.
 
 Do not start unrelated coding before checking:
 

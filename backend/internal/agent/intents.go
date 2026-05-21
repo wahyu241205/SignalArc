@@ -27,14 +27,23 @@ const (
 	ExecutionModeAgentContract = "agent_contract"
 	NetworkArcTestnet          = "arc_testnet"
 	AgentFactoryAddress        = "0x69aE770e8b2F96297101FeC4dc123B3801dA7d80"
+
+	WalletProviderCircleAgentWallet        = "circle_agent_wallet"
+	WalletProviderTemporaryTestnetAgentEOA = "temporary_testnet_agent_eoa"
+	WalletStatusActive                     = "active"
+	ChainArcTestnet                        = "ARC-TESTNET"
 )
 
 var (
-	ErrIntentNotFound = errors.New("agent intent not found")
-	ErrIntentInvalid  = errors.New("agent intent is invalid")
+	ErrIntentNotFound       = errors.New("agent intent not found")
+	ErrIntentInvalid        = errors.New("agent intent is invalid")
+	ErrAgentWalletNotFound  = errors.New("agent wallet not found")
+	ErrAgentWalletForbidden = errors.New("agent wallet is forbidden")
 )
 
 type CreateIntentInput struct {
+	AgentID               string
+	AgentWalletAddress    string
 	Action                string
 	UserWallet            string
 	MarketID              string
@@ -47,8 +56,25 @@ type CreateIntentInput struct {
 	Question              string
 }
 
+type AgentWallet struct {
+	AgentID            string
+	UserWallet         string
+	AgentWalletAddress string
+	WalletProvider     string
+	Chain              string
+	AllowedActions     []string
+	Status             string
+	PolicyMetadata     map[string]string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 type Intent struct {
 	ID                    string
+	AgentID               string
+	AgentWalletAddress    string
+	WalletProvider        string
+	AllowedActions        []string
 	Action                string
 	Status                string
 	RequiresConfirmation  bool
@@ -98,6 +124,7 @@ type ValidationResult struct {
 type Store struct {
 	mu      sync.RWMutex
 	intents map[string]Intent
+	wallets map[string]AgentWallet
 	now     func() time.Time
 	newID   func() (string, error)
 }
@@ -105,14 +132,56 @@ type Store struct {
 func NewStore() *Store {
 	return &Store{
 		intents: make(map[string]Intent),
+		wallets: make(map[string]AgentWallet),
 		now:     time.Now,
 		newID:   newIntentID,
 	}
 }
 
+func (store *Store) RegisterAgentWallet(wallet AgentWallet) (AgentWallet, error) {
+	normalized := normalizeAgentWallet(wallet)
+	validation := validateAgentWallet(normalized)
+	if !validation.Valid {
+		return AgentWallet{}, ErrIntentInvalid
+	}
+
+	now := store.now().UTC()
+	if normalized.CreatedAt.IsZero() {
+		normalized.CreatedAt = now
+	}
+	normalized.UpdatedAt = now
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.wallets[normalized.AgentID] = normalized
+
+	return normalized, nil
+}
+
+func (store *Store) GetAgentWallet(agentID string) (AgentWallet, error) {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+
+	wallet, ok := store.wallets[strings.TrimSpace(agentID)]
+	if !ok {
+		return AgentWallet{}, ErrAgentWalletNotFound
+	}
+
+	return wallet, nil
+}
+
 func (store *Store) CreateIntent(input CreateIntentInput) (Intent, error) {
 	normalized := normalizeInput(input)
 	validationResult := validateIntent(normalized)
+	var agentWallet AgentWallet
+	if normalized.AgentID != "" {
+		if wallet, err := store.GetAgentWallet(normalized.AgentID); err == nil {
+			agentWallet = wallet
+			if normalized.AgentWalletAddress == "" {
+				normalized.AgentWalletAddress = wallet.AgentWalletAddress
+			}
+		}
+	}
 	intentID, err := store.newID()
 	if err != nil {
 		return Intent{}, err
@@ -120,6 +189,10 @@ func (store *Store) CreateIntent(input CreateIntentInput) (Intent, error) {
 
 	intent := Intent{
 		ID:                    intentID,
+		AgentID:               normalized.AgentID,
+		AgentWalletAddress:    normalized.AgentWalletAddress,
+		WalletProvider:        agentWallet.WalletProvider,
+		AllowedActions:        append([]string{}, agentWallet.AllowedActions...),
 		Action:                normalized.Action,
 		Status:                StatusPreview,
 		RequiresConfirmation:  true,
@@ -135,8 +208,8 @@ func (store *Store) CreateIntent(input CreateIntentInput) (Intent, error) {
 		ValidationResult:      validationResult,
 		Warnings: []string{
 			"preview only; no transaction has been executed",
-			"Circle Agent Wallet integration is not enabled",
-			"contract execution wiring is not enabled",
+			"execution requires a registered agent wallet controlled separately from the user/deployer wallet",
+			"Circle Agent Wallet contract execution is not enabled until CLI authentication and live wallet proof are complete",
 		},
 		CreatedAt: store.now().UTC(),
 	}
@@ -194,7 +267,7 @@ func NewExecutionPlan(intent Intent) ExecutionPlan {
 		Warnings: []string{
 			"confirmation produced an execution plan only; no transaction has been executed",
 			"no private key, signing, RPC call, or broadcast was performed",
-			"Circle Agent Wallet integration is not enabled",
+			"execution must be performed by the registered agent wallet provider, not by the deployer private key",
 		},
 	}
 }
@@ -260,6 +333,8 @@ func NewTransactionRequest(intent Intent) TransactionRequest {
 
 func normalizeInput(input CreateIntentInput) CreateIntentInput {
 	return CreateIntentInput{
+		AgentID:               strings.TrimSpace(input.AgentID),
+		AgentWalletAddress:    strings.TrimSpace(input.AgentWalletAddress),
 		Action:                strings.TrimSpace(input.Action),
 		UserWallet:            strings.TrimSpace(input.UserWallet),
 		MarketID:              strings.TrimSpace(input.MarketID),
@@ -285,7 +360,6 @@ func validateIntent(input CreateIntentInput) ValidationResult {
 	if isTransactionAction(input.Action) && input.UserWallet == "" {
 		result.Errors = append(result.Errors, "user_wallet is required for transaction actions")
 	}
-
 	if isMarketSpecificAction(input.Action) && input.MarketID == "" {
 		result.Errors = append(result.Errors, "market_id is required for market-specific actions")
 	}
@@ -326,6 +400,76 @@ func validateIntent(input CreateIntentInput) ValidationResult {
 	}
 
 	return result
+}
+
+func normalizeAgentWallet(wallet AgentWallet) AgentWallet {
+	allowedActions := make([]string, 0, len(wallet.AllowedActions))
+	for _, action := range wallet.AllowedActions {
+		action = strings.TrimSpace(action)
+		if action != "" {
+			allowedActions = append(allowedActions, action)
+		}
+	}
+
+	normalized := AgentWallet{
+		AgentID:            strings.TrimSpace(wallet.AgentID),
+		UserWallet:         strings.TrimSpace(wallet.UserWallet),
+		AgentWalletAddress: strings.TrimSpace(wallet.AgentWalletAddress),
+		WalletProvider:     strings.TrimSpace(wallet.WalletProvider),
+		Chain:              strings.TrimSpace(wallet.Chain),
+		AllowedActions:     allowedActions,
+		Status:             strings.TrimSpace(wallet.Status),
+		PolicyMetadata:     wallet.PolicyMetadata,
+		CreatedAt:          wallet.CreatedAt,
+		UpdatedAt:          wallet.UpdatedAt,
+	}
+	if normalized.Chain == "" {
+		normalized.Chain = ChainArcTestnet
+	}
+	if normalized.Status == "" {
+		normalized.Status = WalletStatusActive
+	}
+	return normalized
+}
+
+func validateAgentWallet(wallet AgentWallet) ValidationResult {
+	result := ValidationResult{Valid: true, Errors: []string{}}
+	if wallet.AgentID == "" {
+		result.Errors = append(result.Errors, "agent_id is required")
+	}
+	if wallet.UserWallet == "" {
+		result.Errors = append(result.Errors, "user_wallet is required")
+	}
+	if wallet.AgentWalletAddress == "" {
+		result.Errors = append(result.Errors, "agent_wallet_address is required")
+	}
+	if wallet.WalletProvider != WalletProviderCircleAgentWallet && wallet.WalletProvider != WalletProviderTemporaryTestnetAgentEOA {
+		result.Errors = append(result.Errors, "wallet_provider is unsupported")
+	}
+	if wallet.Chain != ChainArcTestnet {
+		result.Errors = append(result.Errors, "chain must be ARC-TESTNET")
+	}
+	if len(wallet.AllowedActions) == 0 {
+		result.Errors = append(result.Errors, "allowed_actions is required")
+	}
+	for _, action := range wallet.AllowedActions {
+		if !isSupportedAction(action) {
+			result.Errors = append(result.Errors, "allowed_actions contains unsupported action")
+		}
+	}
+	if len(result.Errors) > 0 {
+		result.Valid = false
+	}
+	return result
+}
+
+func AgentWalletAllowsAction(wallet AgentWallet, action string) bool {
+	for _, allowedAction := range wallet.AllowedActions {
+		if allowedAction == action {
+			return true
+		}
+	}
+	return false
 }
 
 func isSupportedAction(action string) bool {
