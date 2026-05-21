@@ -84,9 +84,9 @@ If not documented, mark as unknown / not documented.
 
 ## Implementation Order
 
-1. Separate agent contract prototype
-2. Foundry tests
-3. Agent factory deploy on Arc Testnet
+1. Separate agent contract prototype — DONE
+2. Foundry tests — DONE
+3. Agent factory deploy on Arc Testnet — NEXT
 4. Backend Agent API intent model
 5. Backend execution path to agent contract
 6. Circle Agent Wallet proof of concept
