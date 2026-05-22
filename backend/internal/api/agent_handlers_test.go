@@ -53,6 +53,15 @@ func (runner *stubCircleOnboardingRunner) VerifyOTP(_ context.Context, requestID
 	return nil
 }
 
+type testEnvCommandRunner struct {
+	output []byte
+	err    error
+}
+
+func (runner testEnvCommandRunner) RunWithEnv(_ context.Context, _ string, _ []string, _ []string) ([]byte, error) {
+	return runner.output, runner.err
+}
+
 func (executor *stubAgentExecutor) ExecuteCreateMarket(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
 	executor.called = true
 	executor.intent = intent
@@ -687,6 +696,63 @@ func TestStartAgentOnboardingEnabledCallsRunner(t *testing.T) {
 	}
 	if !stored.CircleRequestExpiresAt.Valid || !stored.CircleRequestExpiresAt.Time.Equal(expiresAt) {
 		t.Fatalf("unexpected stored expiry %#v", stored.CircleRequestExpiresAt)
+	}
+}
+
+func TestStartAgentOnboardingEnabledAcceptsTextRequestIDOutput(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	requestStore := agent.NewCircleOTPRequestStore()
+	onboardingRunner := agent.NewCircleCLIOnboardingRunner(agent.CircleCLIOnboardingRunnerConfig{
+		CLIPath:       "circle",
+		Chain:         agent.ChainArcTestnet,
+		CommandRunner: testEnvCommandRunner{output: []byte("Request ID: circle_request_secret_text_123")},
+	})
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry, agent.CircleOnboardingStarter{
+		Enabled:      true,
+		Runner:       onboardingRunner,
+		RequestStore: requestStore,
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_text_output",
+		"user_email": "desi@example.com"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Onboarding       agentOnboardingSessionResponse `json:"onboarding"`
+		NextStep         string                         `json:"next_step"`
+		RequestReference string                         `json:"request_reference"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Onboarding.OnboardingID == "" {
+		t.Fatal("expected onboarding_id")
+	}
+	if body.NextStep != "circle_otp_required" {
+		t.Fatalf("unexpected next step %q", body.NextStep)
+	}
+	if body.RequestReference != body.Onboarding.OnboardingID {
+		t.Fatalf("expected onboarding id request reference, got %q", body.RequestReference)
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_text_123")) {
+		t.Fatalf("response must not expose raw request_id: %s", response.Body.String())
+	}
+
+	stored := sessionRegistry.onboardingSessions[body.Onboarding.OnboardingID]
+	if stored.CircleRequestIDHash.String != agent.HashCircleRequestID("circle_request_secret_text_123") {
+		t.Fatalf("unexpected stored request hash %q", stored.CircleRequestIDHash.String)
+	}
+	if requestID, ok := requestStore.Get(body.Onboarding.OnboardingID); !ok || requestID != "circle_request_secret_text_123" {
+		t.Fatalf("expected in-memory request id for verify, got %q, %v", requestID, ok)
 	}
 }
 

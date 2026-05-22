@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -180,6 +181,8 @@ func (err *CircleOnboardingCommandError) Unwrap() error {
 	return err.Err
 }
 
+var circleRequestIDLinePattern = regexp.MustCompile(`(?im)\brequest[\s_-]*id\b\s*[:=]\s*([^\s,"'{}]+)`)
+
 type CircleCLIOnboardingRunner struct {
 	cfg CircleCLIOnboardingRunnerConfig
 }
@@ -218,17 +221,20 @@ func (runner *CircleCLIOnboardingRunner) StartOTP(parent context.Context, email 
 	args := []string{"wallet", "login", email, "--init", "--type", "agent", "--testnet", "--output", "json"}
 	output, err := runner.cfg.CommandRunner.RunWithEnv(ctx, runner.cfg.CLIPath, args, []string{"CIRCLE_ACCEPT_TERMS=1"})
 	if err != nil {
-		return CircleOTPStartResult{}, ErrCircleOnboardingCommandFailed
+		return CircleOTPStartResult{}, runner.circleOnboardingStartError(err, output, email)
 	}
 	if len(output) == 0 {
+		runner.logCircleOTPStartFailure("", "", email)
 		return CircleOTPStartResult{}, ErrCircleOnboardingCommandReturnedNoOutput
 	}
 
 	requestID, ok := findCircleOTPRequestID(output)
 	if !ok {
+		runner.logCircleOTPStartFailure(string(output), "", email)
 		return CircleOTPStartResult{}, ErrCircleOnboardingRequestIDNotDocumented
 	}
 	if strings.TrimSpace(requestID) == "" {
+		runner.logCircleOTPStartFailure(string(output), "", email)
 		return CircleOTPStartResult{}, ErrCircleOnboardingRequestIDMissing
 	}
 
@@ -236,6 +242,27 @@ func (runner *CircleCLIOnboardingRunner) StartOTP(parent context.Context, email 
 		RequestID: strings.TrimSpace(requestID),
 		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
 	}, nil
+}
+
+func (runner *CircleCLIOnboardingRunner) circleOnboardingStartError(err error, output []byte, email string) error {
+	sanitizedOutput := runner.logCircleOTPStartFailure(string(output), err.Error(), email)
+	return &CircleOnboardingCommandError{
+		Operation:       "circle_otp_start",
+		SanitizedOutput: sanitizedOutput,
+		Err:             ErrCircleOnboardingCommandFailed,
+	}
+}
+
+func (runner *CircleCLIOnboardingRunner) logCircleOTPStartFailure(output string, errText string, email string) string {
+	requestID, _ := findCircleOTPRequestID([]byte(output))
+	sanitizedOutput := sanitizeCircleOnboardingText(output, requestID, email)
+	sanitizedError := sanitizeCircleOnboardingText(errText, requestID, email)
+	log.Error().
+		Str("operation", "circle_otp_start").
+		Str("output", sanitizedOutput).
+		Str("error", sanitizedError).
+		Msg("Circle CLI OTP start failed")
+	return sanitizedOutput
 }
 
 func (runner *CircleCLIOnboardingRunner) VerifyOTP(parent context.Context, requestID string, otp string) error {
@@ -290,10 +317,26 @@ func sanitizeCircleOnboardingText(value string, secrets ...string) string {
 
 func findCircleOTPRequestID(output []byte) (string, bool) {
 	var decoded any
-	if err := json.Unmarshal(output, &decoded); err != nil {
+	if err := json.Unmarshal(output, &decoded); err == nil {
+		// Circle documents that --init returns a request ID, but the exact JSON
+		// field name is unknown / not documented in the official pages reviewed.
+		if requestID, ok := findValue(decoded, []string{"request_id", "requestId", "requestID", "id"}); ok {
+			return requestID, true
+		}
+	}
+	return findCircleOTPRequestIDFromText(string(output))
+}
+
+func findCircleOTPRequestIDFromText(output string) (string, bool) {
+	output = strings.TrimSpace(output)
+	if output == "" {
 		return "", false
 	}
-	// Circle documents that --init returns a request ID, but the exact JSON
-	// field name is unknown / not documented in the official pages reviewed.
-	return findValue(decoded, []string{"request_id", "requestId", "requestID", "id"})
+	if match := circleRequestIDLinePattern.FindStringSubmatch(output); len(match) == 2 {
+		return strings.TrimSpace(match[1]), true
+	}
+	if !strings.ContainsAny(output, " \t\r\n") && !strings.ContainsAny(output, "{}[]:=") {
+		return output, true
+	}
+	return "", false
 }

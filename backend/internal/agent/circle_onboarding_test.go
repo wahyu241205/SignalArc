@@ -13,15 +13,23 @@ import (
 )
 
 type fakeEnvCommandRunner struct {
-	name string
-	args []string
-	env  []string
+	name   string
+	args   []string
+	env    []string
+	output []byte
+	err    error
 }
 
 func (runner *fakeEnvCommandRunner) RunWithEnv(_ context.Context, name string, args []string, env []string) ([]byte, error) {
 	runner.name = name
 	runner.args = append([]string{}, args...)
 	runner.env = append([]string{}, env...)
+	if runner.err != nil {
+		return runner.output, runner.err
+	}
+	if runner.output != nil {
+		return runner.output, nil
+	}
 	return []byte(`{"ok":true}`), nil
 }
 
@@ -55,6 +63,92 @@ func TestCircleCLIOnboardingRunnerVerifyOTPUsesDocumentedCommandShape(t *testing
 	}
 	if !slices.Contains(commandRunner.env, "CIRCLE_ACCEPT_TERMS=1") {
 		t.Fatalf("expected CIRCLE_ACCEPT_TERMS=1 env, got %#v", commandRunner.env)
+	}
+}
+
+func TestFindCircleOTPRequestIDFromJSONRequestID(t *testing.T) {
+	requestID, ok := findCircleOTPRequestID([]byte(`{"request_id":"request-json-123"}`))
+	if !ok {
+		t.Fatal("expected request id")
+	}
+	if requestID != "request-json-123" {
+		t.Fatalf("unexpected request id %q", requestID)
+	}
+}
+
+func TestFindCircleOTPRequestIDFromJSONRequestId(t *testing.T) {
+	requestID, ok := findCircleOTPRequestID([]byte(`{"requestId":"request-camel-123"}`))
+	if !ok {
+		t.Fatal("expected request id")
+	}
+	if requestID != "request-camel-123" {
+		t.Fatalf("unexpected request id %q", requestID)
+	}
+}
+
+func TestFindCircleOTPRequestIDFromTextLabel(t *testing.T) {
+	requestID, ok := findCircleOTPRequestID([]byte("OTP email sent\nRequest ID: request-text-123\nExpires in 10 minutes"))
+	if !ok {
+		t.Fatal("expected request id")
+	}
+	if requestID != "request-text-123" {
+		t.Fatalf("unexpected request id %q", requestID)
+	}
+}
+
+func TestFindCircleOTPRequestIDFromPlainTextID(t *testing.T) {
+	requestID, ok := findCircleOTPRequestID([]byte("request-plain-123"))
+	if !ok {
+		t.Fatal("expected request id")
+	}
+	if requestID != "request-plain-123" {
+		t.Fatalf("unexpected request id %q", requestID)
+	}
+}
+
+func TestCircleCLIOnboardingRunnerStartOTPSanitizesFailureDiagnostics(t *testing.T) {
+	requestID := "request-secret-123"
+	email := "desi@example.com"
+	commandRunner := &fakeEnvCommandRunner{
+		output: []byte("OTP sent to desi@example.com\nRequest ID: request-secret-123"),
+		err:    errors.New("exit status 1 for desi@example.com request-secret-123"),
+	}
+	runner := NewCircleCLIOnboardingRunner(CircleCLIOnboardingRunnerConfig{
+		CLIPath:       "circle",
+		Chain:         ChainArcTestnet,
+		CommandRunner: commandRunner,
+	})
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	defer func() {
+		log.Logger = previousLogger
+	}()
+
+	_, err := runner.StartOTP(context.Background(), email)
+	if err == nil {
+		t.Fatal("expected start error")
+	}
+	if !errors.Is(err, ErrCircleOnboardingCommandFailed) {
+		t.Fatalf("expected command failed error, got %v", err)
+	}
+
+	errorText := err.Error()
+	logText := logs.String()
+	for _, text := range []string{errorText, logText} {
+		if strings.Contains(text, requestID) {
+			t.Fatalf("sanitized diagnostics exposed request ID: %s", text)
+		}
+		if strings.Contains(text, email) {
+			t.Fatalf("sanitized diagnostics exposed email: %s", text)
+		}
+		if !strings.Contains(text, "OTP sent to [redacted]") {
+			t.Fatalf("expected sanitized start output detail, got %s", text)
+		}
+	}
+	if !strings.Contains(logText, "Circle CLI OTP start failed") {
+		t.Fatalf("expected start failure log message, got %s", logText)
 	}
 }
 
