@@ -575,6 +575,12 @@ Current checkpoint state:
   - `/agent/onboarding/verify` accepted the emailed OTP and returned status `verified`.
   - Backend returned expected boundary `agent_wallet_resolution_not_implemented`.
   - No market, intent, confirmation, execution, or user wallet request was performed.
+- Post-OTP wallet/session activation added.
+- Verified OTP onboarding can now resolve a Circle Agent Wallet address from read-only Circle CLI list output.
+- Backend registers the resolved wallet and creates an active agent session.
+- Backend exposes read-only wallet/session status and balance for Custom GPT.
+- No funding, transfer, market creation, or transaction execution is performed by the activation step.
+- Validation: `go test ./...` passed.
 - Added read-only onboarding/session status APIs: `GET /agent/onboarding/{onboarding_id}` and `GET /agent/sessions/{agent_id}`.
 - Multi-tenant/session isolation state now separates user email, user wallet, source client, channel, pending onboarding, and activated agent-session boundaries without storing Circle session secrets.
 - Backend now registers agent wallets through DB-backed `POST /agent/wallets` in production routing.
@@ -705,8 +711,8 @@ Current non-claims:
 - No production readiness claim.
 - No mainnet claim.
 - No Circle policy limit claim on `ARC-TESTNET`.
-- Circle OTP verification, Circle wallet provisioning completion, and Circle session storage are not implemented.
-- Agent wallet resolution and `agent_sessions` creation after OTP verification are not implemented.
+- Circle session storage is not implemented.
+- Circle wallet provisioning readback beyond read-only CLI wallet list output is unknown / not documented.
 - Custom GPT / Claude / Telegram / WA onboarding schemas should not require `user_wallet` for start-agent onboarding.
 - Backend restart before OTP verify requires onboarding restart because raw request IDs are not stored in the database.
 - No real Circle CLI run was performed for the OTP start skeleton tests.

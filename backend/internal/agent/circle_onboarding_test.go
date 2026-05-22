@@ -181,6 +181,74 @@ func TestSanitizeCircleOnboardingTextRedactsCommandRequestID(t *testing.T) {
 	}
 }
 
+func TestCircleCLIWalletResolverResolveAgentWalletUsesReadOnlyList(t *testing.T) {
+	commandRunner := &fakeEnvCommandRunner{
+		output: []byte(`{"data":{"wallets":[{"address":"0xa9914bca9123ba0079be8c968f632c0db6400fe7","chain":"ARC-TESTNET"}]}}`),
+	}
+	resolver := NewCircleCLIWalletResolver(CircleCLIWalletResolverConfig{
+		CLIPath:       "circle",
+		Chain:         ChainArcTestnet,
+		CommandRunner: commandRunner,
+	})
+
+	wallet, err := resolver.ResolveAgentWallet(context.Background(), "desi@example.com")
+	if err != nil {
+		t.Fatalf("resolve wallet: %v", err)
+	}
+	if wallet.Address != "0xa9914bca9123ba0079be8c968f632c0db6400fe7" {
+		t.Fatalf("unexpected wallet address %q", wallet.Address)
+	}
+	expectedArgs := []string{"wallet", "list", "--type", "agent", "--chain", ChainArcTestnet, "--output", "json"}
+	if !slices.Equal(commandRunner.args, expectedArgs) {
+		t.Fatalf("unexpected args %#v", commandRunner.args)
+	}
+	if slices.Contains(commandRunner.args, "execute") {
+		t.Fatalf("resolver must not use write commands: %#v", commandRunner.args)
+	}
+}
+
+func TestCircleCLIWalletResolverAmbiguousAgentWallets(t *testing.T) {
+	commandRunner := &fakeEnvCommandRunner{
+		output: []byte(`{"data":{"wallets":[{"address":"0xa9914bca9123ba0079be8c968f632c0db6400fe7"},{"address":"0x96d5051a005547eba149f71604ccf58ae1a7c950"}]}}`),
+	}
+	resolver := NewCircleCLIWalletResolver(CircleCLIWalletResolverConfig{
+		CLIPath:       "circle",
+		Chain:         ChainArcTestnet,
+		CommandRunner: commandRunner,
+	})
+
+	_, err := resolver.ResolveAgentWallet(context.Background(), "desi@example.com")
+	if !errors.Is(err, ErrCircleAgentWalletResolutionAmbiguous) {
+		t.Fatalf("expected ambiguous wallet error, got %v", err)
+	}
+}
+
+func TestCircleCLIWalletResolverBalancesUsesReadOnlyBalance(t *testing.T) {
+	commandRunner := &fakeEnvCommandRunner{
+		output: []byte(`{"data":{"balances":[]}}`),
+	}
+	resolver := NewCircleCLIWalletResolver(CircleCLIWalletResolverConfig{
+		CLIPath:       "circle",
+		Chain:         ChainArcTestnet,
+		CommandRunner: commandRunner,
+	})
+
+	balances, err := resolver.GetAgentWalletBalances(context.Background(), "0xa9914bca9123ba0079be8c968f632c0db6400fe7")
+	if err != nil {
+		t.Fatalf("get balances: %v", err)
+	}
+	if len(balances.Balances) != 0 {
+		t.Fatalf("expected empty balances, got %#v", balances.Balances)
+	}
+	expectedArgs := []string{"wallet", "balance", "--address", "0xa9914bca9123ba0079be8c968f632c0db6400fe7", "--chain", ChainArcTestnet, "--output", "json"}
+	if !slices.Equal(commandRunner.args, expectedArgs) {
+		t.Fatalf("unexpected args %#v", commandRunner.args)
+	}
+	if slices.Contains(commandRunner.args, "execute") {
+		t.Fatalf("balance resolver must not use write commands: %#v", commandRunner.args)
+	}
+}
+
 func TestCircleCLIOnboardingRunnerStartOTPSanitizesFailureDiagnostics(t *testing.T) {
 	email := "desi@example.com"
 	commandRunner := &fakeEnvCommandRunner{

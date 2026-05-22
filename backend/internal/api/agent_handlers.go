@@ -85,6 +85,13 @@ type agentSessionRegistry interface {
 	GetAgentSessionBySessionID(context.Context, string) (repository.AgentSession, error)
 }
 
+type agentWalletBalanceResponse struct {
+	AgentID            string `json:"agent_id"`
+	AgentWalletAddress string `json:"agent_wallet_address"`
+	Chain              string `json:"chain"`
+	Balances           []any  `json:"balances"`
+}
+
 type agentWalletResponse struct {
 	ID                 string            `json:"id"`
 	AgentID            string            `json:"agent_id"`
@@ -223,6 +230,7 @@ type transactionRequestResponse struct {
 func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegistry agentWalletRegistry, executor agent.Executor, extras ...any) {
 	var sessionRegistry agentSessionRegistry
 	var onboardingStarter agent.CircleOnboardingStarter
+	var walletResolver agent.CircleWalletResolver
 	for _, extra := range extras {
 		if registry, ok := extra.(agentSessionRegistry); ok {
 			sessionRegistry = registry
@@ -230,6 +238,10 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 		}
 		if starter, ok := extra.(agent.CircleOnboardingStarter); ok {
 			onboardingStarter = starter
+			continue
+		}
+		if resolver, ok := extra.(agent.CircleWalletResolver); ok {
+			walletResolver = resolver
 		}
 	}
 
@@ -387,9 +399,48 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			onboardingStarter.RequestStore.Delete(onboarding.OnboardingID)
 		}
 
+		if walletResolver == nil {
+			httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+				"onboarding": newAgentOnboardingSessionResponse(verified),
+				"next_step":  "agent_wallet_resolution_not_implemented",
+			})
+			return
+		}
+
+		resolvedWallet, err := walletResolver.ResolveAgentWallet(r.Context(), verified.UserEmail)
+		if err != nil {
+			switch {
+			case errors.Is(err, agent.ErrCircleAgentWalletNotFound):
+				httpjson.WriteError(w, http.StatusConflict, "circle_agent_wallet_not_found", "Circle Agent Wallet not found after OTP verification")
+			case errors.Is(err, agent.ErrCircleAgentWalletResolutionAmbiguous):
+				httpjson.WriteError(w, http.StatusConflict, "circle_agent_wallet_resolution_ambiguous", "Circle Agent Wallet resolution is ambiguous")
+			default:
+				httpjson.WriteError(w, http.StatusBadGateway, "circle_agent_wallet_resolution_failed", "Circle Agent Wallet resolution failed")
+			}
+			return
+		}
+
+		registeredWallet, err := walletRegistry.RegisterAgentWallet(r.Context(), newAgentWalletActivationInput(verified, resolvedWallet.Address))
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_register_failed", "failed to register agent wallet")
+			return
+		}
+		agentSessionInput, err := newAgentSessionActivationInput(verified, registeredWallet.AgentWalletAddress)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_session_id_failed", "failed to create agent session id")
+			return
+		}
+		agentSession, err := sessionRegistry.CreateAgentSession(r.Context(), agentSessionInput)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_session_create_failed", "failed to create agent session")
+			return
+		}
+
 		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
-			"onboarding": newAgentOnboardingSessionResponse(verified),
-			"next_step":  "agent_wallet_resolution_not_implemented",
+			"onboarding":    newAgentOnboardingSessionResponse(verified),
+			"agent_wallet":  newAgentWalletResponse(registeredWallet),
+			"agent_session": newAgentSessionResponse(agentSession),
+			"next_step":     "agent_session_active",
 		})
 	})
 
@@ -508,6 +559,35 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 
 		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
 			"agent_wallet": newAgentWalletResponse(wallet),
+		})
+	})
+
+	router.Get("/agent/wallets/{agent_id}/balance", func(w http.ResponseWriter, r *http.Request) {
+		if walletResolver == nil {
+			httpjson.WriteError(w, http.StatusNotImplemented, "circle_agent_wallet_balance_not_configured", "Circle Agent Wallet balance lookup is not configured")
+			return
+		}
+		wallet, err := walletRegistry.GetAgentWalletByAgentID(r.Context(), chi.URLParam(r, "agent_id"))
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_wallet_not_found", "agent wallet not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_get_failed", "failed to get agent wallet")
+			return
+		}
+		balances, err := walletResolver.GetAgentWalletBalances(r.Context(), wallet.AgentWalletAddress)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusBadGateway, "circle_agent_wallet_balance_failed", "Circle Agent Wallet balance lookup failed")
+			return
+		}
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"agent_wallet_balance": agentWalletBalanceResponse{
+				AgentID:            wallet.AgentID,
+				AgentWalletAddress: wallet.AgentWalletAddress,
+				Chain:              wallet.Chain,
+				Balances:           balances.Balances,
+			},
 		})
 	})
 
@@ -810,6 +890,70 @@ func newAgentOnboardingRegistrationInput(request registerAgentOnboardingRequest)
 	return input, errors
 }
 
+func newAgentWalletActivationInput(onboarding repository.AgentOnboardingSession, agentWalletAddress string) repository.UpsertAgentWalletInput {
+	policyMetadata, _ := json.Marshal(map[string]string{
+		"note": "activated after Circle Agent Wallet OTP verification",
+	})
+	return repository.UpsertAgentWalletInput{
+		AgentID:            onboarding.AgentID,
+		UserWallet:         onboarding.UserWallet.String,
+		UserEmail:          sql.NullString{String: onboarding.UserEmail, Valid: onboarding.UserEmail != ""},
+		AgentWalletAddress: strings.TrimSpace(agentWalletAddress),
+		WalletProvider:     agent.WalletProviderCircleAgentWallet,
+		Chain:              agent.ChainArcTestnet,
+		Status:             agent.WalletStatusActive,
+		AllowedActions:     defaultAgentWalletAllowedActions(),
+		PolicyMetadata:     policyMetadata,
+		SourceClient:       onboarding.SourceClient,
+	}
+}
+
+func newAgentSessionActivationInput(onboarding repository.AgentOnboardingSession, agentWalletAddress string) (repository.CreateAgentSessionInput, error) {
+	sessionID, err := newPublicID("agent_session")
+	if err != nil {
+		return repository.CreateAgentSessionInput{}, err
+	}
+	sessionMetadata, _ := json.Marshal(map[string]string{
+		"note": "Circle Agent Wallet OTP verified; wallet resolution source is read-only Circle CLI list output",
+	})
+	return repository.CreateAgentSessionInput{
+		SessionID:          sessionID,
+		AgentID:            onboarding.AgentID,
+		UserEmail:          onboarding.UserEmail,
+		UserWallet:         onboarding.UserWallet.String,
+		AgentWalletAddress: strings.TrimSpace(agentWalletAddress),
+		WalletProvider:     agent.WalletProviderCircleAgentWallet,
+		Chain:              agent.ChainArcTestnet,
+		Status:             repository.AgentSessionStatusActive,
+		AllowedActions:     defaultAgentWalletAllowedActions(),
+		AllowedChannels:    defaultAgentSessionAllowedChannels(onboarding),
+		SessionMetadata:    sessionMetadata,
+	}, nil
+}
+
+func defaultAgentSessionAllowedChannels(onboarding repository.AgentOnboardingSession) []string {
+	channels := []string{}
+	for _, value := range []string{onboarding.Channel.String, onboarding.SourceClient.String} {
+		value = strings.TrimSpace(value)
+		if value != "" && !stringSliceContains(channels, value) {
+			channels = append(channels, value)
+		}
+	}
+	if len(channels) == 0 {
+		channels = append(channels, "unknown")
+	}
+	return channels
+}
+
+func stringSliceContains(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func newAgentWalletRegistrationInput(request registerAgentWalletRequest) (repository.UpsertAgentWalletInput, []string) {
 	input := repository.UpsertAgentWalletInput{
 		AgentID:            strings.TrimSpace(request.AgentID),
@@ -896,6 +1040,13 @@ func newPublicID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(bytes), nil
 }
 
+func nullStringValue(value sql.NullString) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
+}
+
 func nullableString(value string) sql.NullString {
 	value = strings.TrimSpace(value)
 	return sql.NullString{String: value, Valid: value != ""}
@@ -947,7 +1098,7 @@ func newAgentWalletResponse(wallet repository.AgentWallet) agentWalletResponse {
 	return agentWalletResponse{
 		ID:                 wallet.ID,
 		AgentID:            wallet.AgentID,
-		UserWallet:         wallet.UserWallet,
+		UserWallet:         nullStringValue(wallet.UserWallet),
 		UserEmail:          wallet.UserEmail.String,
 		AgentWalletAddress: wallet.AgentWalletAddress,
 		WalletProvider:     wallet.WalletProvider,
@@ -1119,7 +1270,7 @@ func validateAgentWalletForExecution(intent agent.Intent, wallet repository.Agen
 	if equalAddress(wallet.AgentWalletAddress, knownDeployerResolverWallet()) {
 		return errors.New("agent wallet must not equal the deployer/resolver wallet")
 	}
-	if wallet.UserWallet != "" && equalAddress(wallet.AgentWalletAddress, wallet.UserWallet) {
+	if wallet.UserWallet.Valid && equalAddress(wallet.AgentWalletAddress, wallet.UserWallet.String) {
 		return errors.New("agent wallet must not equal the user wallet unless a documented user-controlled custody link is implemented")
 	}
 	for _, forbidden := range configuredForbiddenAgentWallets() {

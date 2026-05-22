@@ -45,6 +45,11 @@ func NewRouter(db *database.DB) http.Handler {
 		}),
 		RequestStore: agent.NewCircleOTPRequestStore(),
 	}
+	circleWalletResolver := agent.NewCircleCLIWalletResolver(agent.CircleCLIWalletResolverConfig{
+		CLIPath: cfg.CircleCLIPath,
+		Chain:   cfg.CircleAgentWalletChain,
+		Timeout: time.Duration(cfg.CircleAgentWalletTimeoutSeconds) * time.Second,
+	})
 
 	registerStatusRoutes(router, db)
 	registerArcRoutes(router)
@@ -53,7 +58,7 @@ func NewRouter(db *database.DB) http.Handler {
 	registerPositionRoutes(router, positionsRepository)
 	registerResolutionRoutes(router, resolutionsRepository)
 	registerSettlementRoutes(router, settlementsRepository)
-	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, circleExecutor, agentSessionsRepository, circleOnboardingStarter)
+	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, circleExecutor, agentSessionsRepository, circleOnboardingStarter, circleWalletResolver)
 
 	return router
 }

@@ -308,7 +308,6 @@ func validateCreateAgentSessionInput(input CreateAgentSessionInput) error {
 	if strings.TrimSpace(input.SessionID) == "" ||
 		strings.TrimSpace(input.AgentID) == "" ||
 		strings.TrimSpace(input.UserEmail) == "" ||
-		strings.TrimSpace(input.UserWallet) == "" ||
 		strings.TrimSpace(input.AgentWalletAddress) == "" {
 		return ErrInvalidAgentSession
 	}
@@ -324,7 +323,7 @@ func validateCreateAgentSessionInput(input CreateAgentSessionInput) error {
 	if len(input.AllowedActions) == 0 || len(input.AllowedChannels) == 0 {
 		return ErrInvalidAgentSession
 	}
-	if strings.EqualFold(strings.TrimSpace(input.AgentWalletAddress), strings.TrimSpace(input.UserWallet)) {
+	if strings.TrimSpace(input.UserWallet) != "" && strings.EqualFold(strings.TrimSpace(input.AgentWalletAddress), strings.TrimSpace(input.UserWallet)) {
 		return ErrInvalidAgentSession
 	}
 	return nil

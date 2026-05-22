@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/wahyu241205/SignalArc/backend/internal/database"
@@ -12,7 +13,7 @@ import (
 type AgentWallet struct {
 	ID                 string          `json:"id"`
 	AgentID            string          `json:"agent_id"`
-	UserWallet         string          `json:"user_wallet"`
+	UserWallet         sql.NullString  `json:"user_wallet"`
 	UserEmail          sql.NullString  `json:"user_email"`
 	AgentWalletAddress string          `json:"agent_wallet_address"`
 	WalletProvider     string          `json:"wallet_provider"`
@@ -90,7 +91,7 @@ func (r *AgentWalletsRepository) RegisterAgentWallet(ctx context.Context, input 
 			updated_at
 	`,
 		input.AgentID,
-		input.UserWallet,
+		nullableText(input.UserWallet),
 		input.UserEmail,
 		input.AgentWalletAddress,
 		input.WalletProvider,
@@ -187,4 +188,9 @@ func nullableJSON(value json.RawMessage) any {
 		return nil
 	}
 	return value
+}
+
+func nullableText(value string) sql.NullString {
+	value = strings.TrimSpace(value)
+	return sql.NullString{String: value, Valid: value != ""}
 }

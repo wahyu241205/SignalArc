@@ -34,6 +34,17 @@ type stubCircleOnboardingRunner struct {
 	verifyCalled bool
 }
 
+type stubCircleWalletResolver struct {
+	wallet         agent.CircleAgentWallet
+	balances       agent.CircleAgentWalletBalances
+	err            error
+	balanceErr     error
+	resolveCalled  bool
+	balanceCalled  bool
+	email          string
+	balanceAddress string
+}
+
 func (runner *stubCircleOnboardingRunner) StartOTP(_ context.Context, email string) (agent.CircleOTPStartResult, error) {
 	runner.startCalled = true
 	runner.email = email
@@ -51,6 +62,24 @@ func (runner *stubCircleOnboardingRunner) VerifyOTP(_ context.Context, requestID
 		return runner.err
 	}
 	return nil
+}
+
+func (resolver *stubCircleWalletResolver) ResolveAgentWallet(_ context.Context, email string) (agent.CircleAgentWallet, error) {
+	resolver.resolveCalled = true
+	resolver.email = email
+	if resolver.err != nil {
+		return agent.CircleAgentWallet{}, resolver.err
+	}
+	return resolver.wallet, nil
+}
+
+func (resolver *stubCircleWalletResolver) GetAgentWalletBalances(_ context.Context, address string) (agent.CircleAgentWalletBalances, error) {
+	resolver.balanceCalled = true
+	resolver.balanceAddress = address
+	if resolver.balanceErr != nil {
+		return agent.CircleAgentWalletBalances{}, resolver.balanceErr
+	}
+	return resolver.balances, nil
 }
 
 type testEnvCommandRunner struct {
@@ -162,7 +191,7 @@ func (registry *testAgentWalletRegistry) RegisterAgentWallet(_ context.Context, 
 	wallet := repository.AgentWallet{
 		ID:                 "agent_wallet_test_1",
 		AgentID:            input.AgentID,
-		UserWallet:         input.UserWallet,
+		UserWallet:         sql.NullString{String: input.UserWallet, Valid: strings.TrimSpace(input.UserWallet) != ""},
 		UserEmail:          input.UserEmail,
 		AgentWalletAddress: input.AgentWalletAddress,
 		WalletProvider:     input.WalletProvider,
@@ -928,10 +957,21 @@ func TestVerifyAgentOnboardingMissingMemoryRequestID(t *testing.T) {
 func TestVerifyAgentOnboardingEnabledSuccess(t *testing.T) {
 	sessionRegistry := newTestAgentSessionRegistry()
 	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_verify_success")
+	onboarding.UserWallet = sql.NullString{}
+	onboarding.SourceClient = sql.NullString{String: "chatgpt_custom_action", Valid: true}
+	onboarding.Channel = sql.NullString{String: "chatgpt", Valid: true}
+	sessionRegistry.onboardingSessions[onboarding.OnboardingID] = onboarding
 	store := agent.NewCircleOTPRequestStore()
 	store.Save(onboarding.OnboardingID, "circle_request_secret_123")
 	runner := &stubCircleOnboardingRunner{}
-	router := newVerifyEnabledRouter(sessionRegistry, runner, store)
+	walletRegistry := newTestAgentWalletRegistry()
+	resolver := &stubCircleWalletResolver{
+		wallet: agent.CircleAgentWallet{
+			Address: "0xa9914bca9123ba0079be8c968f632c0db6400fe7",
+			Chain:   agent.ChainArcTestnet,
+		},
+	}
+	router := newVerifyEnabledRouterWithWalletRegistryAndResolver(sessionRegistry, walletRegistry, runner, store, resolver)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
@@ -955,10 +995,18 @@ func TestVerifyAgentOnboardingEnabledSuccess(t *testing.T) {
 	if _, ok := store.Get(onboarding.OnboardingID); ok {
 		t.Fatal("expected request id to be consumed after successful verification")
 	}
+	if !resolver.resolveCalled {
+		t.Fatal("expected wallet resolver to be called")
+	}
+	if resolver.email != "desi@example.com" {
+		t.Fatalf("expected resolver email, got %q", resolver.email)
+	}
 
 	var body struct {
-		Onboarding agentOnboardingSessionResponse `json:"onboarding"`
-		NextStep   string                         `json:"next_step"`
+		Onboarding   agentOnboardingSessionResponse `json:"onboarding"`
+		AgentWallet  agentWalletResponse            `json:"agent_wallet"`
+		AgentSession agentSessionResponse           `json:"agent_session"`
+		NextStep     string                         `json:"next_step"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -966,11 +1014,37 @@ func TestVerifyAgentOnboardingEnabledSuccess(t *testing.T) {
 	if body.Onboarding.Status != repository.AgentOnboardingStatusVerified {
 		t.Fatalf("expected verified status, got %q", body.Onboarding.Status)
 	}
-	if body.NextStep != "agent_wallet_resolution_not_implemented" {
+	if body.NextStep != "agent_session_active" {
 		t.Fatalf("unexpected next step %q", body.NextStep)
+	}
+	if body.AgentWallet.AgentWalletAddress != "0xa9914bca9123ba0079be8c968f632c0db6400fe7" {
+		t.Fatalf("unexpected agent wallet address %q", body.AgentWallet.AgentWalletAddress)
+	}
+	if body.AgentSession.Status != repository.AgentSessionStatusActive {
+		t.Fatalf("expected active session, got %q", body.AgentSession.Status)
+	}
+	if body.AgentSession.AgentWalletAddress != body.AgentWallet.AgentWalletAddress {
+		t.Fatalf("session wallet mismatch %q", body.AgentSession.AgentWalletAddress)
 	}
 	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) || bytes.Contains(response.Body.Bytes(), []byte("B1X-123456")) {
 		t.Fatalf("response should not expose raw request id or otp: %s", response.Body.String())
+	}
+
+	sessionResponse := httptest.NewRecorder()
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/agent/sessions/agent_verify_test", nil)
+	router.ServeHTTP(sessionResponse, sessionRequest)
+	if sessionResponse.Code != http.StatusOK {
+		t.Fatalf("expected session status %d, got %d: %s", http.StatusOK, sessionResponse.Code, sessionResponse.Body.String())
+	}
+
+	walletResponse := httptest.NewRecorder()
+	walletRequest := httptest.NewRequest(http.MethodGet, "/agent/wallets/agent_verify_test", nil)
+	router.ServeHTTP(walletResponse, walletRequest)
+	if walletResponse.Code != http.StatusOK {
+		t.Fatalf("expected wallet status %d, got %d: %s", http.StatusOK, walletResponse.Code, walletResponse.Body.String())
+	}
+	if !bytes.Contains(walletResponse.Body.Bytes(), []byte("0xa9914bca9123ba0079be8c968f632c0db6400fe7")) {
+		t.Fatalf("expected wallet address response, got %s", walletResponse.Body.String())
 	}
 }
 
@@ -1001,6 +1075,71 @@ func TestVerifyAgentOnboardingKeepsRequestIDWhenVerifiedUpdateFails(t *testing.T
 	}
 	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) || bytes.Contains(response.Body.Bytes(), []byte("B1X-123456")) {
 		t.Fatalf("response should not expose raw request id or otp: %s", response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingMissingResolvedWalletDoesNotCreateSession(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_missing_wallet")
+	store := agent.NewCircleOTPRequestStore()
+	store.Save(onboarding.OnboardingID, "circle_request_secret_123")
+	runner := &stubCircleOnboardingRunner{}
+	walletRegistry := newTestAgentWalletRegistry()
+	resolver := &stubCircleWalletResolver{err: agent.ErrCircleAgentWalletNotFound}
+	router := newVerifyEnabledRouterWithWalletRegistryAndResolver(sessionRegistry, walletRegistry, runner, store, resolver)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_missing_wallet",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("circle_agent_wallet_not_found")) {
+		t.Fatalf("expected wallet not found code, got %s", response.Body.String())
+	}
+	if _, err := sessionRegistry.GetAgentSessionByAgentID(context.Background(), onboarding.AgentID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected no agent session, got %v", err)
+	}
+	if _, err := walletRegistry.GetAgentWalletByAgentID(context.Background(), onboarding.AgentID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected no agent wallet, got %v", err)
+	}
+	if sessionRegistry.onboardingSessions[onboarding.OnboardingID].Status != repository.AgentOnboardingStatusVerified {
+		t.Fatalf("expected onboarding to remain verified after OTP success, got %q", sessionRegistry.onboardingSessions[onboarding.OnboardingID].Status)
+	}
+}
+
+func TestVerifyAgentOnboardingAmbiguousResolvedWalletDoesNotCreateSession(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_ambiguous_wallet")
+	store := agent.NewCircleOTPRequestStore()
+	store.Save(onboarding.OnboardingID, "circle_request_secret_123")
+	runner := &stubCircleOnboardingRunner{}
+	walletRegistry := newTestAgentWalletRegistry()
+	resolver := &stubCircleWalletResolver{err: agent.ErrCircleAgentWalletResolutionAmbiguous}
+	router := newVerifyEnabledRouterWithWalletRegistryAndResolver(sessionRegistry, walletRegistry, runner, store, resolver)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_ambiguous_wallet",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("circle_agent_wallet_resolution_ambiguous")) {
+		t.Fatalf("expected ambiguous wallet code, got %s", response.Body.String())
+	}
+	if _, err := sessionRegistry.GetAgentSessionByAgentID(context.Background(), onboarding.AgentID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected no agent session, got %v", err)
+	}
+	if sessionRegistry.onboardingSessions[onboarding.OnboardingID].Status != repository.AgentOnboardingStatusVerified {
+		t.Fatalf("expected onboarding to remain verified after OTP success, got %q", sessionRegistry.onboardingSessions[onboarding.OnboardingID].Status)
 	}
 }
 
@@ -1338,6 +1477,65 @@ func TestGetAgentWalletByAgentID(t *testing.T) {
 	}
 	if !containsString(body.AgentWallet.AllowedActions, agent.ActionBuyYes) {
 		t.Fatalf("expected buy_yes in allowed actions, got %#v", body.AgentWallet.AllowedActions)
+	}
+}
+
+func TestGetAgentWalletBalanceReturnsEmptyBalances(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionCreateMarket)
+	resolver := &stubCircleWalletResolver{
+		balances: agent.CircleAgentWalletBalances{Balances: []any{}},
+	}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil, newTestAgentSessionRegistry(), agent.CircleOnboardingStarter{}, resolver)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/wallets/agent_test_1/balance", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !resolver.balanceCalled {
+		t.Fatal("expected balance resolver to be called")
+	}
+	if resolver.balanceAddress != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("unexpected balance address %q", resolver.balanceAddress)
+	}
+
+	var body struct {
+		Balance agentWalletBalanceResponse `json:"agent_wallet_balance"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode balance response: %v", err)
+	}
+	if body.Balance.AgentWalletAddress != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("unexpected balance wallet %q", body.Balance.AgentWalletAddress)
+	}
+	if len(body.Balance.Balances) != 0 {
+		t.Fatalf("expected empty balances, got %#v", body.Balance.Balances)
+	}
+}
+
+func TestGetAgentWalletBalanceFailureIsGeneric(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionCreateMarket)
+	resolver := &stubCircleWalletResolver{balanceErr: agent.ErrCircleAgentWalletBalanceFailed}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil, newTestAgentSessionRegistry(), agent.CircleOnboardingStarter{}, resolver)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/wallets/agent_test_1/balance", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadGateway, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("circle_agent_wallet_balance_failed")) {
+		t.Fatalf("expected generic balance failure, got %s", response.Body.String())
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("token")) || bytes.Contains(response.Body.Bytes(), []byte("request_id")) {
+		t.Fatalf("response should not expose secret-like diagnostics: %s", response.Body.String())
 	}
 }
 
@@ -2513,6 +2711,16 @@ func newVerifyEnabledRouter(sessionRegistry *testAgentSessionRegistry, runner *s
 		Runner:       runner,
 		RequestStore: store,
 	})
+	return router
+}
+
+func newVerifyEnabledRouterWithWalletRegistryAndResolver(sessionRegistry *testAgentSessionRegistry, walletRegistry *testAgentWalletRegistry, runner *stubCircleOnboardingRunner, store *agent.CircleOTPRequestStore, resolver agent.CircleWalletResolver) http.Handler {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil, sessionRegistry, agent.CircleOnboardingStarter{
+		Enabled:      true,
+		Runner:       runner,
+		RequestStore: store,
+	}, resolver)
 	return router
 }
 
