@@ -147,6 +147,7 @@ Multi-tenant onboarding/session foundation:
 - When enabled for controlled host-shell/dev runtime, the OTP start skeleton uses a Circle onboarding runner abstraction, stores only `circle_request_id_hash` and expiry, and keeps any raw request ID in local process memory only until restart.
 - Circle Agent Wallet OTP verify skeleton is added behind the same disabled-by-default onboarding OTP flag.
 - Verify uses the in-memory request ID from start, consumes it on success, and updates onboarding status to `verified`.
+- Verify uses the documented Circle completion command shape: `circle wallet login --request <request-id> --otp <code>`.
 - Backend restart before verify requires onboarding restart because raw request IDs are not stored in the database.
 - Agent wallet resolution, wallet provisioning readback, `agent_sessions` creation, and Circle session persistence are not implemented.
 

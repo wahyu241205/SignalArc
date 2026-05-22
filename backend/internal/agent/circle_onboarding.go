@@ -232,7 +232,7 @@ func (runner *CircleCLIOnboardingRunner) VerifyOTP(parent context.Context, reque
 	ctx, cancel := context.WithTimeout(parent, runner.cfg.Timeout)
 	defer cancel()
 
-	args := []string{"wallet", "login", "--request", requestID, "--otp", otp, "--type", "agent", "--testnet", "--output", "json"}
+	args := []string{"wallet", "login", "--request", requestID, "--otp", otp}
 	_, err := runner.cfg.CommandRunner.RunWithEnv(ctx, runner.cfg.CLIPath, args, []string{"CIRCLE_ACCEPT_TERMS=1"})
 	if err != nil {
 		return ErrCircleOnboardingCommandFailed
