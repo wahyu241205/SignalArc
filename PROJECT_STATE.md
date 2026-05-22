@@ -568,6 +568,13 @@ Current checkpoint state:
 - Updated OTP start handling to extract request IDs from completion-command output and treat that as success even if the CLI runner returned an error.
 - Strengthened sanitized diagnostics to redact request IDs embedded in command text.
 - Validation: `go test ./...` passed.
+- Runtime validation after commit `65cebdb` passed through Custom GPT/ngrok:
+  - `/agent/onboarding/start` returned `pending_otp` and `next_step=circle_otp_required`.
+  - Onboarding ID: `agent_onboarding_ad068b4c0538605db092819aa55df08d`.
+  - Agent ID: `agent_adenhusen65_chatgpt_008`.
+  - `/agent/onboarding/verify` accepted the emailed OTP and returned status `verified`.
+  - Backend returned expected boundary `agent_wallet_resolution_not_implemented`.
+  - No market, intent, confirmation, execution, or user wallet request was performed.
 - Added read-only onboarding/session status APIs: `GET /agent/onboarding/{onboarding_id}` and `GET /agent/sessions/{agent_id}`.
 - Multi-tenant/session isolation state now separates user email, user wallet, source client, channel, pending onboarding, and activated agent-session boundaries without storing Circle session secrets.
 - Backend now registers agent wallets through DB-backed `POST /agent/wallets` in production routing.
