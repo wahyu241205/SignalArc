@@ -552,6 +552,7 @@ Current checkpoint state:
 - `POST /agent/onboarding/register` remains a registry-only convenience endpoint for creating the final agent wallet mapping; it does not model OTP or Circle session isolation by itself.
 - Added `POST /agent/onboarding/start` as the pending-session foundation for per-user, per-agent onboarding. It creates `pending_otp` state only and returns `circle_otp_verification_not_implemented`.
 - Added disabled-by-default Circle Agent Wallet OTP start skeleton behind `CIRCLE_AGENT_ONBOARDING_OTP_START_ENABLED=false` by default. When enabled for a controlled dev runtime, it can call the Circle CLI login init runner, store only a hashed request reference plus expiry, and return `circle_otp_required` without exposing the raw request ID.
+- Added disabled-by-default Circle Agent Wallet OTP verify skeleton at `POST /agent/onboarding/verify`. It uses the in-memory request ID from OTP start, consumes it on successful fake-runner verification, updates onboarding status to `verified`, and returns `agent_wallet_resolution_not_implemented`.
 - Added read-only onboarding/session status APIs: `GET /agent/onboarding/{onboarding_id}` and `GET /agent/sessions/{agent_id}`.
 - Multi-tenant/session isolation state now separates user email, user wallet, source client, channel, pending onboarding, and activated agent-session boundaries without storing Circle session secrets.
 - Backend now registers agent wallets through DB-backed `POST /agent/wallets` in production routing.
@@ -683,6 +684,8 @@ Current non-claims:
 - No mainnet claim.
 - No Circle policy limit claim on `ARC-TESTNET`.
 - Circle OTP verification, Circle wallet provisioning completion, and Circle session storage are not implemented.
+- Agent wallet resolution and `agent_sessions` creation after OTP verification are not implemented.
+- Backend restart before OTP verify requires onboarding restart because raw request IDs are not stored in the database.
 - No real Circle CLI run was performed for the OTP start skeleton tests.
 - The temporary ngrok tunnel is not a production API endpoint.
 - Circle CLI command shapes in `project-roadmap/agent-mcp.md` are official-doc/help-discovery shapes only unless accompanied by exact authenticated output and onchain evidence.

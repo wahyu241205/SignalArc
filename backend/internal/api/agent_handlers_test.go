@@ -25,19 +25,32 @@ type stubAgentExecutor struct {
 }
 
 type stubCircleOnboardingRunner struct {
-	result agent.CircleOTPStartResult
-	err    error
-	email  string
-	called bool
+	result       agent.CircleOTPStartResult
+	err          error
+	email        string
+	requestID    string
+	otp          string
+	startCalled  bool
+	verifyCalled bool
 }
 
 func (runner *stubCircleOnboardingRunner) StartOTP(_ context.Context, email string) (agent.CircleOTPStartResult, error) {
-	runner.called = true
+	runner.startCalled = true
 	runner.email = email
 	if runner.err != nil {
 		return agent.CircleOTPStartResult{}, runner.err
 	}
 	return runner.result, nil
+}
+
+func (runner *stubCircleOnboardingRunner) VerifyOTP(_ context.Context, requestID string, otp string) error {
+	runner.verifyCalled = true
+	runner.requestID = requestID
+	runner.otp = otp
+	if runner.err != nil {
+		return runner.err
+	}
+	return nil
 }
 
 func (executor *stubAgentExecutor) ExecuteCreateMarket(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
@@ -120,6 +133,7 @@ type testAgentSessionRegistry struct {
 	onboardingSessions map[string]repository.AgentOnboardingSession
 	agentSessions      map[string]repository.AgentSession
 	sessionsByID       map[string]repository.AgentSession
+	failStatusUpdate   bool
 }
 
 func newTestAgentWalletRegistry() *testAgentWalletRegistry {
@@ -208,6 +222,9 @@ func (registry *testAgentSessionRegistry) GetAgentOnboardingSessionByOnboardingI
 }
 
 func (registry *testAgentSessionRegistry) UpdateAgentOnboardingSessionStatus(_ context.Context, onboardingID string, status string, failureReason sql.NullString) (repository.AgentOnboardingSession, error) {
+	if registry.failStatusUpdate {
+		return repository.AgentOnboardingSession{}, errors.New("status update failed")
+	}
 	session, ok := registry.onboardingSessions[onboardingID]
 	if !ok {
 		return repository.AgentOnboardingSession{}, sql.ErrNoRows
@@ -527,7 +544,7 @@ func TestStartAgentOnboardingDisabledDoesNotCallRunner(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
 	}
-	if runner.called {
+	if runner.startCalled {
 		t.Fatal("runner should not be called while OTP start is disabled")
 	}
 
@@ -569,7 +586,7 @@ func TestStartAgentOnboardingEnabledCallsRunner(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
 	}
-	if !runner.called {
+	if !runner.startCalled {
 		t.Fatal("expected runner to be called")
 	}
 	if runner.email != "desi@example.com" {
@@ -636,6 +653,251 @@ func TestStartAgentOnboardingEnabledFailureIsSanitized(t *testing.T) {
 	}
 	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) || bytes.Contains(response.Body.Bytes(), []byte("B1X-123456")) {
 		t.Fatalf("response should not expose raw request_id or OTP: %s", response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingDisabledReturnsNotEnabled(t *testing.T) {
+	runner := &stubCircleOnboardingRunner{}
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry, agent.CircleOnboardingStarter{
+		Enabled: false,
+		Runner:  runner,
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_missing",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotImplemented {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotImplemented, response.Code, response.Body.String())
+	}
+	if runner.verifyCalled {
+		t.Fatal("verifier should not be called while disabled")
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("circle_otp_verify_not_enabled")) {
+		t.Fatalf("expected not-enabled error code, got %s", response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingRejectsMissingOnboardingID(t *testing.T) {
+	router := newVerifyEnabledRouter(newTestAgentSessionRegistry(), &stubCircleOnboardingRunner{}, agent.NewCircleOTPRequestStore())
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{"otp":"B1X-123456"}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingRejectsMissingOTP(t *testing.T) {
+	router := newVerifyEnabledRouter(newTestAgentSessionRegistry(), &stubCircleOnboardingRunner{}, agent.NewCircleOTPRequestStore())
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{"onboarding_id":"agent_onboarding_1"}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingUnknownIDReturnsNotFound(t *testing.T) {
+	router := newVerifyEnabledRouter(newTestAgentSessionRegistry(), &stubCircleOnboardingRunner{}, agent.NewCircleOTPRequestStore())
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_missing",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, response.Code, response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingRejectsNonPendingStatus(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_verified")
+	onboarding.Status = repository.AgentOnboardingStatusVerified
+	sessionRegistry.onboardingSessions[onboarding.OnboardingID] = onboarding
+	store := agent.NewCircleOTPRequestStore()
+	store.Save(onboarding.OnboardingID, "circle_request_secret_123")
+	router := newVerifyEnabledRouter(sessionRegistry, &stubCircleOnboardingRunner{}, store)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_verified",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, response.Code, response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingRejectsExpiredRequest(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_expired")
+	onboarding.CircleRequestExpiresAt = sql.NullTime{Time: time.Now().UTC().Add(-time.Minute), Valid: true}
+	sessionRegistry.onboardingSessions[onboarding.OnboardingID] = onboarding
+	store := agent.NewCircleOTPRequestStore()
+	store.Save(onboarding.OnboardingID, "circle_request_secret_123")
+	runner := &stubCircleOnboardingRunner{}
+	router := newVerifyEnabledRouter(sessionRegistry, runner, store)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_expired",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, response.Code, response.Body.String())
+	}
+	if runner.verifyCalled {
+		t.Fatal("verifier should not be called for expired request")
+	}
+	if sessionRegistry.onboardingSessions[onboarding.OnboardingID].Status != repository.AgentOnboardingStatusExpired {
+		t.Fatalf("expected expired status, got %q", sessionRegistry.onboardingSessions[onboarding.OnboardingID].Status)
+	}
+}
+
+func TestVerifyAgentOnboardingMissingMemoryRequestID(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_no_request")
+	onboarding.CircleRequestIDHash = sql.NullString{String: agent.HashCircleRequestID("circle_request_secret_123"), Valid: true}
+	sessionRegistry.onboardingSessions[onboarding.OnboardingID] = onboarding
+	router := newVerifyEnabledRouter(sessionRegistry, &stubCircleOnboardingRunner{}, agent.NewCircleOTPRequestStore())
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_no_request",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("circle_otp_request_not_available")) {
+		t.Fatalf("expected request unavailable code, got %s", response.Body.String())
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) || bytes.Contains(response.Body.Bytes(), []byte(onboarding.CircleRequestIDHash.String)) {
+		t.Fatalf("response should not expose raw request id or stored hash: %s", response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingEnabledSuccess(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_verify_success")
+	store := agent.NewCircleOTPRequestStore()
+	store.Save(onboarding.OnboardingID, "circle_request_secret_123")
+	runner := &stubCircleOnboardingRunner{}
+	router := newVerifyEnabledRouter(sessionRegistry, runner, store)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_verify_success",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !runner.verifyCalled {
+		t.Fatal("expected verifier to be called")
+	}
+	if runner.requestID != "circle_request_secret_123" {
+		t.Fatalf("unexpected request id %q", runner.requestID)
+	}
+	if runner.otp != "B1X-123456" {
+		t.Fatalf("unexpected otp %q", runner.otp)
+	}
+	if _, ok := store.Get(onboarding.OnboardingID); ok {
+		t.Fatal("expected request id to be consumed after successful verification")
+	}
+
+	var body struct {
+		Onboarding agentOnboardingSessionResponse `json:"onboarding"`
+		NextStep   string                         `json:"next_step"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Onboarding.Status != repository.AgentOnboardingStatusVerified {
+		t.Fatalf("expected verified status, got %q", body.Onboarding.Status)
+	}
+	if body.NextStep != "agent_wallet_resolution_not_implemented" {
+		t.Fatalf("unexpected next step %q", body.NextStep)
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) || bytes.Contains(response.Body.Bytes(), []byte("B1X-123456")) {
+		t.Fatalf("response should not expose raw request id or otp: %s", response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingKeepsRequestIDWhenVerifiedUpdateFails(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_verify_update_fails")
+	sessionRegistry.failStatusUpdate = true
+	store := agent.NewCircleOTPRequestStore()
+	store.Save(onboarding.OnboardingID, "circle_request_secret_123")
+	runner := &stubCircleOnboardingRunner{}
+	router := newVerifyEnabledRouter(sessionRegistry, runner, store)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_verify_update_fails",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusInternalServerError, response.Code, response.Body.String())
+	}
+	if !runner.verifyCalled {
+		t.Fatal("expected verifier to be called before status update")
+	}
+	if requestID, ok := store.Get(onboarding.OnboardingID); !ok || requestID != "circle_request_secret_123" {
+		t.Fatalf("expected request id to remain available after failed verified update, got %q, %v", requestID, ok)
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) || bytes.Contains(response.Body.Bytes(), []byte("B1X-123456")) {
+		t.Fatalf("response should not expose raw request id or otp: %s", response.Body.String())
+	}
+}
+
+func TestVerifyAgentOnboardingFailureIsSanitized(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	onboarding := insertTestOnboardingSession(sessionRegistry, "agent_onboarding_verify_failure")
+	store := agent.NewCircleOTPRequestStore()
+	store.Save(onboarding.OnboardingID, "circle_request_secret_123")
+	runner := &stubCircleOnboardingRunner{err: errors.New("raw request_id circle_request_secret_123 otp B1X-123456")}
+	router := newVerifyEnabledRouter(sessionRegistry, runner, store)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/verify", bytes.NewBufferString(`{
+		"onboarding_id": "agent_onboarding_verify_failure",
+		"otp": "B1X-123456"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadGateway, response.Code, response.Body.String())
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) || bytes.Contains(response.Body.Bytes(), []byte("B1X-123456")) {
+		t.Fatalf("response should not expose raw request id or otp: %s", response.Body.String())
+	}
+	if sessionRegistry.onboardingSessions[onboarding.OnboardingID].Status != repository.AgentOnboardingStatusFailed {
+		t.Fatalf("expected failed status, got %q", sessionRegistry.onboardingSessions[onboarding.OnboardingID].Status)
 	}
 }
 
@@ -2113,6 +2375,33 @@ func assertAgentOnboardingRegistrationFails(t *testing.T, payload string) {
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
 	}
+}
+
+func newVerifyEnabledRouter(sessionRegistry *testAgentSessionRegistry, runner *stubCircleOnboardingRunner, store *agent.CircleOTPRequestStore) http.Handler {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry, agent.CircleOnboardingStarter{
+		Enabled:      true,
+		Runner:       runner,
+		RequestStore: store,
+	})
+	return router
+}
+
+func insertTestOnboardingSession(registry *testAgentSessionRegistry, onboardingID string) repository.AgentOnboardingSession {
+	onboarding, err := registry.CreateAgentOnboardingSession(context.Background(), repository.CreateAgentOnboardingSessionInput{
+		OnboardingID:   onboardingID,
+		AgentID:        "agent_verify_test",
+		UserEmail:      "desi@example.com",
+		UserWallet:     "0x1111111111111111111111111111111111111111",
+		Chain:          agent.ChainArcTestnet,
+		WalletProvider: agent.WalletProviderCircleAgentWallet,
+		Status:         repository.AgentOnboardingStatusPendingOTP,
+		PolicyMetadata: json.RawMessage(`{"note":"test"}`),
+	})
+	if err != nil {
+		panic(err)
+	}
+	return onboarding
 }
 
 func registerTestAgentWallet(t *testing.T, registry *testAgentWalletRegistry, allowedActions ...string) {

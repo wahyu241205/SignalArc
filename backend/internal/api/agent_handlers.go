@@ -64,6 +64,11 @@ type startAgentOnboardingRequest struct {
 	Channel      string `json:"channel"`
 }
 
+type verifyAgentOnboardingRequest struct {
+	OnboardingID string `json:"onboarding_id"`
+	OTP          string `json:"otp"`
+}
+
 type agentWalletRegistry interface {
 	RegisterAgentWallet(context.Context, repository.UpsertAgentWalletInput) (repository.AgentWallet, error)
 	GetAgentWalletByAgentID(context.Context, string) (repository.AgentWallet, error)
@@ -297,6 +302,94 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 		httpjson.WriteJSON(w, http.StatusCreated, map[string]any{
 			"onboarding": newAgentOnboardingSessionResponse(onboarding),
 			"next_step":  "circle_otp_verification_not_implemented",
+		})
+	})
+
+	router.Post("/agent/onboarding/verify", func(w http.ResponseWriter, r *http.Request) {
+		if !onboardingStarter.Enabled {
+			httpjson.WriteError(w, http.StatusNotImplemented, "circle_otp_verify_not_enabled", "Circle Agent Wallet OTP verification is not enabled")
+			return
+		}
+		if sessionRegistry == nil {
+			httpjson.WriteError(w, http.StatusNotImplemented, "agent_onboarding_sessions_not_configured", "agent onboarding session storage is not configured")
+			return
+		}
+
+		var request verifyAgentOnboardingRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+			return
+		}
+
+		onboardingID := strings.TrimSpace(request.OnboardingID)
+		otp := strings.TrimSpace(request.OTP)
+		validationErrors := []string{}
+		if onboardingID == "" {
+			validationErrors = append(validationErrors, "onboarding_id is required")
+		}
+		if otp == "" {
+			validationErrors = append(validationErrors, "otp is required")
+		}
+		if len(validationErrors) > 0 {
+			httpjson.WriteJSON(w, http.StatusBadRequest, map[string]any{
+				"error": map[string]any{
+					"code":    "agent_onboarding_verify_invalid",
+					"message": "agent onboarding verification validation failed",
+					"details": validationErrors,
+				},
+			})
+			return
+		}
+
+		onboarding, err := sessionRegistry.GetAgentOnboardingSessionByOnboardingID(r.Context(), onboardingID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_onboarding_not_found", "agent onboarding session not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_onboarding_get_failed", "failed to get agent onboarding session")
+			return
+		}
+		if onboarding.Status != repository.AgentOnboardingStatusPendingOTP {
+			httpjson.WriteError(w, http.StatusConflict, "circle_otp_status_invalid", "agent onboarding session is not pending OTP verification")
+			return
+		}
+		if onboarding.CircleRequestExpiresAt.Valid && time.Now().UTC().After(onboarding.CircleRequestExpiresAt.Time) {
+			_, _ = sessionRegistry.UpdateAgentOnboardingSessionStatus(r.Context(), onboarding.OnboardingID, repository.AgentOnboardingStatusExpired, nullableString("Circle Agent Wallet OTP request expired"))
+			httpjson.WriteError(w, http.StatusConflict, "circle_otp_request_expired", "Circle Agent Wallet OTP request expired")
+			return
+		}
+
+		attempted, err := onboardingStarter.VerifyOTP(r.Context(), onboarding.OnboardingID, otp)
+		if err != nil {
+			if errors.Is(err, agent.ErrCircleOnboardingRequestIDNotAvailable) {
+				httpjson.WriteError(w, http.StatusConflict, "circle_otp_request_not_available", "Circle OTP request is not available; backend restart requires onboarding restart")
+				return
+			}
+			if attempted {
+				_, _ = sessionRegistry.UpdateAgentOnboardingSessionStatus(
+					r.Context(),
+					onboarding.OnboardingID,
+					repository.AgentOnboardingStatusFailed,
+					nullableString("Circle Agent Wallet OTP verification failed"),
+				)
+			}
+			httpjson.WriteError(w, http.StatusBadGateway, "circle_otp_verify_failed", "Circle Agent Wallet OTP verification failed")
+			return
+		}
+
+		verified, err := sessionRegistry.UpdateAgentOnboardingSessionStatus(r.Context(), onboarding.OnboardingID, repository.AgentOnboardingStatusVerified, sql.NullString{})
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_onboarding_verify_update_failed", "failed to update agent onboarding verification status")
+			return
+		}
+		if onboardingStarter.RequestStore != nil {
+			onboardingStarter.RequestStore.Delete(onboarding.OnboardingID)
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"onboarding": newAgentOnboardingSessionResponse(verified),
+			"next_step":  "agent_wallet_resolution_not_implemented",
 		})
 	})
 

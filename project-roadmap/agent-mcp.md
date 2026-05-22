@@ -145,7 +145,10 @@ Multi-tenant onboarding/session foundation:
 - State is keyed by explicit user email, user wallet, agent id, source client, and channel so external clients do not imply one shared global Circle Agent Wallet session.
 - Circle Agent Wallet OTP start skeleton is added behind `CIRCLE_AGENT_ONBOARDING_OTP_START_ENABLED=false` by default.
 - When enabled for controlled host-shell/dev runtime, the OTP start skeleton uses a Circle onboarding runner abstraction, stores only `circle_request_id_hash` and expiry, and keeps any raw request ID in local process memory only until restart.
-- Circle OTP verification, Circle wallet provisioning completion, and Circle session persistence are not implemented.
+- Circle Agent Wallet OTP verify skeleton is added behind the same disabled-by-default onboarding OTP flag.
+- Verify uses the in-memory request ID from start, consumes it on success, and updates onboarding status to `verified`.
+- Backend restart before verify requires onboarding restart because raw request IDs are not stored in the database.
+- Agent wallet resolution, wallet provisioning readback, `agent_sessions` creation, and Circle session persistence are not implemented.
 
 No private keys, Circle OTPs, secret tokens, or undocumented Circle session material are stored.
 
@@ -157,7 +160,13 @@ No private keys, Circle OTPs, secret tokens, or undocumented Circle session mate
 - With OTP start disabled, returns `circle_otp_verification_not_implemented` and does not call Circle CLI.
 - With OTP start explicitly enabled, calls the Circle onboarding runner and returns `circle_otp_required` with expiry and non-secret request reference.
 - Does not expose or store raw OTP or raw request ID.
-- Does not implement OTP verification.
+
+`POST /agent/onboarding/verify`
+- Disabled by default unless onboarding OTP start is enabled.
+- Completes the OTP skeleton using the in-memory request ID from `POST /agent/onboarding/start`.
+- Returns `agent_wallet_resolution_not_implemented` after marking onboarding `verified`.
+- Does not expose or store raw OTP or raw request ID.
+- Does not create an agent session or resolve an agent wallet address yet.
 
 `GET /agent/onboarding/{onboarding_id}`
 - Returns pending onboarding status.

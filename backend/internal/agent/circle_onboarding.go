@@ -18,10 +18,12 @@ var (
 	ErrCircleOnboardingRequestIDNotDocumented  = errors.New("Circle CLI OTP start request_id field is unknown / not documented")
 	ErrCircleOnboardingRequestIDMissing        = errors.New("Circle CLI OTP start request_id not found")
 	ErrCircleOnboardingRequestIDEmpty          = errors.New("Circle CLI OTP start request_id is empty")
+	ErrCircleOnboardingRequestIDNotAvailable   = errors.New("Circle OTP request is not available; backend restart requires onboarding restart")
 	ErrCircleOnboardingCommandFailed           = errors.New("Circle CLI OTP start command failed")
 	ErrCircleOnboardingCommandReturnedNoOutput = errors.New("Circle CLI OTP start command returned empty output")
 	ErrCircleOnboardingUnsupportedChain        = errors.New("Circle Agent Wallet onboarding chain must be ARC-TESTNET")
 	ErrCircleOnboardingEmailRequired           = errors.New("user_email is required for Circle Agent Wallet OTP onboarding")
+	ErrCircleOnboardingOTPRequired             = errors.New("otp is required for Circle Agent Wallet OTP verification")
 )
 
 type CircleOTPStartResult struct {
@@ -31,6 +33,7 @@ type CircleOTPStartResult struct {
 
 type CircleOnboardingRunner interface {
 	StartOTP(context.Context, string) (CircleOTPStartResult, error)
+	VerifyOTP(context.Context, string, string) error
 }
 
 type CircleOnboardingStarter struct {
@@ -66,6 +69,27 @@ func (starter CircleOnboardingStarter) StartOTP(ctx context.Context, onboardingI
 	return result, requestIDHash, true, nil
 }
 
+func (starter CircleOnboardingStarter) VerifyOTP(ctx context.Context, onboardingID string, otp string) (bool, error) {
+	if !starter.Enabled {
+		return false, ErrCircleOnboardingDisabled
+	}
+	if starter.Runner == nil {
+		return true, ErrCircleOnboardingCommandFailed
+	}
+	otp = strings.TrimSpace(otp)
+	if otp == "" {
+		return true, ErrCircleOnboardingOTPRequired
+	}
+	requestID, ok := starter.RequestStore.Get(onboardingID)
+	if !ok {
+		return true, ErrCircleOnboardingRequestIDNotAvailable
+	}
+	if err := starter.Runner.VerifyOTP(ctx, requestID, otp); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
 type CircleOTPRequestStore struct {
 	mu                      sync.RWMutex
 	requestIDByOnboardingID map[string]string
@@ -92,6 +116,15 @@ func (store *CircleOTPRequestStore) Get(onboardingID string) (string, bool) {
 	defer store.mu.RUnlock()
 	requestID, ok := store.requestIDByOnboardingID[strings.TrimSpace(onboardingID)]
 	return requestID, ok
+}
+
+func (store *CircleOTPRequestStore) Delete(onboardingID string) {
+	if store == nil {
+		return
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	delete(store.requestIDByOnboardingID, strings.TrimSpace(onboardingID))
 }
 
 func HashCircleRequestID(requestID string) string {
@@ -178,6 +211,33 @@ func (runner *CircleCLIOnboardingRunner) StartOTP(parent context.Context, email 
 		RequestID: strings.TrimSpace(requestID),
 		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
 	}, nil
+}
+
+func (runner *CircleCLIOnboardingRunner) VerifyOTP(parent context.Context, requestID string, otp string) error {
+	if runner == nil {
+		return ErrCircleOnboardingCommandFailed
+	}
+	requestID = strings.TrimSpace(requestID)
+	otp = strings.TrimSpace(otp)
+	if requestID == "" {
+		return ErrCircleOnboardingRequestIDEmpty
+	}
+	if otp == "" {
+		return ErrCircleOnboardingOTPRequired
+	}
+	if runner.cfg.Chain != ChainArcTestnet {
+		return ErrCircleOnboardingUnsupportedChain
+	}
+
+	ctx, cancel := context.WithTimeout(parent, runner.cfg.Timeout)
+	defer cancel()
+
+	args := []string{"wallet", "login", "--request", requestID, "--otp", otp, "--type", "agent", "--testnet", "--output", "json"}
+	_, err := runner.cfg.CommandRunner.RunWithEnv(ctx, runner.cfg.CLIPath, args, []string{"CIRCLE_ACCEPT_TERMS=1"})
+	if err != nil {
+		return ErrCircleOnboardingCommandFailed
+	}
+	return nil
 }
 
 func findCircleOTPRequestID(output []byte) (string, bool) {
