@@ -522,7 +522,7 @@ Done:
 
 ## Current Last Completed Step
 
-- ChatGPT Custom GPT external client trigger validated through a temporary ngrok HTTPS tunnel to the host-shell backend on `APP_PORT=4001`, executing `create_market` through the Circle Agent Wallet CLI provider on Arc Testnet.
+- Multi-tenant agent onboarding session foundation added for isolated pending onboarding sessions and durable per-agent session boundaries. Circle OTP/provisioning remains not implemented.
 
 ## Live AI Agent Transaction MVP
 
@@ -548,6 +548,11 @@ Current checkpoint state:
 - User-provided buy NO evidence recorded approve tx `0x6ea6a10293a4df5d7ed50e077821115571787d8e9d6b9507a984ebf33fc52a9b`, buy tx `0xaefe8bcdcec794c811d615517f0dfa800b9e263631200a74c85d000374aa8f24`, and readback `noPositions(agent wallet) == 1000000`, `totalNo == 1000000`, `totalCollateral == 2000000`, `USDC.balanceOf(market) == 2000000`.
 - Continuation from this Codex shell is blocked because Circle CLI returns `AUTH_REQUIRED` or no active agent session for status/list/balance, even when `CIRCLE_ACCEPT_TERMS=1` is set for the process.
 - Added persistent `agent_wallets` migration for user-owned Circle Agent Wallet onboarding.
+- Added migration `000016_create_agent_onboarding_sessions` for `agent_onboarding_sessions` and `agent_sessions`.
+- `POST /agent/onboarding/register` remains a registry-only convenience endpoint for creating the final agent wallet mapping; it does not model OTP or Circle session isolation by itself.
+- Added `POST /agent/onboarding/start` as the pending-session foundation for per-user, per-agent onboarding. It creates `pending_otp` state only and returns `circle_otp_verification_not_implemented`.
+- Added read-only onboarding/session status APIs: `GET /agent/onboarding/{onboarding_id}` and `GET /agent/sessions/{agent_id}`.
+- Multi-tenant/session isolation state now separates user email, user wallet, source client, channel, pending onboarding, and activated agent-session boundaries without storing Circle session secrets.
 - Backend now registers agent wallets through DB-backed `POST /agent/wallets` in production routing.
 - Backend now returns registered wallet metadata through `GET /agent/wallets/{agent_id}`.
 - Backend now disables registered wallets through `POST /agent/wallets/{agent_id}/disable`.
@@ -676,6 +681,7 @@ Current non-claims:
 - No production readiness claim.
 - No mainnet claim.
 - No Circle policy limit claim on `ARC-TESTNET`.
+- Circle OTP start, OTP verification, Circle wallet provisioning, and Circle session storage are not implemented.
 - The temporary ngrok tunnel is not a production API endpoint.
 - Circle CLI command shapes in `project-roadmap/agent-mcp.md` are official-doc/help-discovery shapes only unless accompanied by exact authenticated output and onchain evidence.
 - The phase is not complete.

@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -53,10 +55,27 @@ type registerAgentOnboardingRequest struct {
 	SourceClient       string `json:"source_client"`
 }
 
+type startAgentOnboardingRequest struct {
+	AgentID      string `json:"agent_id"`
+	UserEmail    string `json:"user_email"`
+	UserWallet   string `json:"user_wallet"`
+	SourceClient string `json:"source_client"`
+	Channel      string `json:"channel"`
+}
+
 type agentWalletRegistry interface {
 	RegisterAgentWallet(context.Context, repository.UpsertAgentWalletInput) (repository.AgentWallet, error)
 	GetAgentWalletByAgentID(context.Context, string) (repository.AgentWallet, error)
 	DisableAgentWallet(context.Context, string) (repository.AgentWallet, error)
+}
+
+type agentSessionRegistry interface {
+	CreateAgentOnboardingSession(context.Context, repository.CreateAgentOnboardingSessionInput) (repository.AgentOnboardingSession, error)
+	GetAgentOnboardingSessionByOnboardingID(context.Context, string) (repository.AgentOnboardingSession, error)
+	UpdateAgentOnboardingSessionStatus(context.Context, string, string, sql.NullString) (repository.AgentOnboardingSession, error)
+	CreateAgentSession(context.Context, repository.CreateAgentSessionInput) (repository.AgentSession, error)
+	GetAgentSessionByAgentID(context.Context, string) (repository.AgentSession, error)
+	GetAgentSessionBySessionID(context.Context, string) (repository.AgentSession, error)
 }
 
 type agentWalletResponse struct {
@@ -71,6 +90,39 @@ type agentWalletResponse struct {
 	Status             string            `json:"status"`
 	PolicyMetadata     map[string]string `json:"policy_metadata,omitempty"`
 	SourceClient       string            `json:"source_client,omitempty"`
+	CreatedAt          string            `json:"created_at"`
+	UpdatedAt          string            `json:"updated_at"`
+}
+
+type agentOnboardingSessionResponse struct {
+	OnboardingID                string            `json:"onboarding_id"`
+	AgentID                     string            `json:"agent_id"`
+	UserEmail                   string            `json:"user_email"`
+	UserWallet                  string            `json:"user_wallet"`
+	RequestedAgentWalletAddress string            `json:"requested_agent_wallet_address,omitempty"`
+	SourceClient                string            `json:"source_client,omitempty"`
+	Channel                     string            `json:"channel,omitempty"`
+	Chain                       string            `json:"chain"`
+	WalletProvider              string            `json:"wallet_provider"`
+	Status                      string            `json:"status"`
+	FailureReason               string            `json:"failure_reason,omitempty"`
+	PolicyMetadata              map[string]string `json:"policy_metadata,omitempty"`
+	CreatedAt                   string            `json:"created_at"`
+	UpdatedAt                   string            `json:"updated_at"`
+}
+
+type agentSessionResponse struct {
+	SessionID          string            `json:"session_id"`
+	AgentID            string            `json:"agent_id"`
+	UserEmail          string            `json:"user_email"`
+	UserWallet         string            `json:"user_wallet"`
+	AgentWalletAddress string            `json:"agent_wallet_address"`
+	WalletProvider     string            `json:"wallet_provider"`
+	Chain              string            `json:"chain"`
+	Status             string            `json:"status"`
+	AllowedActions     []string          `json:"allowed_actions"`
+	AllowedChannels    []string          `json:"allowed_channels"`
+	SessionMetadata    map[string]string `json:"session_metadata,omitempty"`
 	CreatedAt          string            `json:"created_at"`
 	UpdatedAt          string            `json:"updated_at"`
 }
@@ -161,7 +213,52 @@ type transactionRequestResponse struct {
 	BroadcastPerformed bool     `json:"broadcast_performed"`
 }
 
-func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegistry agentWalletRegistry, executor agent.Executor) {
+func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegistry agentWalletRegistry, executor agent.Executor, sessionRegistries ...agentSessionRegistry) {
+	var sessionRegistry agentSessionRegistry
+	if len(sessionRegistries) > 0 {
+		sessionRegistry = sessionRegistries[0]
+	}
+
+	router.Post("/agent/onboarding/start", func(w http.ResponseWriter, r *http.Request) {
+		if sessionRegistry == nil {
+			httpjson.WriteError(w, http.StatusNotImplemented, "agent_onboarding_sessions_not_configured", "agent onboarding session storage is not configured")
+			return
+		}
+
+		var request startAgentOnboardingRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+			return
+		}
+
+		input, validationErrors, err := newAgentOnboardingSessionInput(request)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_onboarding_id_failed", "failed to create onboarding id")
+			return
+		}
+		if len(validationErrors) > 0 {
+			httpjson.WriteJSON(w, http.StatusBadRequest, map[string]any{
+				"error": map[string]any{
+					"code":    "agent_onboarding_invalid",
+					"message": "agent onboarding validation failed",
+					"details": validationErrors,
+				},
+			})
+			return
+		}
+
+		onboarding, err := sessionRegistry.CreateAgentOnboardingSession(r.Context(), input)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_onboarding_create_failed", "failed to create agent onboarding session")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusCreated, map[string]any{
+			"onboarding": newAgentOnboardingSessionResponse(onboarding),
+			"next_step":  "circle_otp_verification_not_implemented",
+		})
+	})
+
 	router.Post("/agent/onboarding/register", func(w http.ResponseWriter, r *http.Request) {
 		var request registerAgentOnboardingRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -189,6 +286,48 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 
 		httpjson.WriteJSON(w, http.StatusCreated, map[string]any{
 			"agent_wallet": newAgentWalletResponse(wallet),
+		})
+	})
+
+	router.Get("/agent/onboarding/{onboarding_id}", func(w http.ResponseWriter, r *http.Request) {
+		if sessionRegistry == nil {
+			httpjson.WriteError(w, http.StatusNotImplemented, "agent_onboarding_sessions_not_configured", "agent onboarding session storage is not configured")
+			return
+		}
+
+		onboarding, err := sessionRegistry.GetAgentOnboardingSessionByOnboardingID(r.Context(), chi.URLParam(r, "onboarding_id"))
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_onboarding_not_found", "agent onboarding session not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_onboarding_get_failed", "failed to get agent onboarding session")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"onboarding": newAgentOnboardingSessionResponse(onboarding),
+		})
+	})
+
+	router.Get("/agent/sessions/{agent_id}", func(w http.ResponseWriter, r *http.Request) {
+		if sessionRegistry == nil {
+			httpjson.WriteError(w, http.StatusNotImplemented, "agent_sessions_not_configured", "agent session storage is not configured")
+			return
+		}
+
+		session, err := sessionRegistry.GetAgentSessionByAgentID(r.Context(), chi.URLParam(r, "agent_id"))
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_session_not_found", "agent session not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_session_get_failed", "failed to get agent session")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"agent_session": newAgentSessionResponse(session),
 		})
 	})
 
@@ -470,6 +609,55 @@ func isBackendExecutableAgentAction(action string) bool {
 	}
 }
 
+func newAgentOnboardingSessionInput(request startAgentOnboardingRequest) (repository.CreateAgentOnboardingSessionInput, []string, error) {
+	onboardingID, err := newPublicID("agent_onboarding")
+	if err != nil {
+		return repository.CreateAgentOnboardingSessionInput{}, nil, err
+	}
+	policyMetadata, _ := json.Marshal(map[string]string{
+		"note": "pending Circle Agent Wallet OTP onboarding",
+	})
+
+	input := repository.CreateAgentOnboardingSessionInput{
+		OnboardingID:   onboardingID,
+		AgentID:        strings.TrimSpace(request.AgentID),
+		UserEmail:      strings.TrimSpace(request.UserEmail),
+		UserWallet:     strings.TrimSpace(request.UserWallet),
+		SourceClient:   nullableString(request.SourceClient),
+		Channel:        nullableString(request.Channel),
+		Chain:          agent.ChainArcTestnet,
+		WalletProvider: agent.WalletProviderCircleAgentWallet,
+		Status:         repository.AgentOnboardingStatusPendingOTP,
+		PolicyMetadata: policyMetadata,
+	}
+
+	validationErrors := validateAgentOnboardingSessionInput(input)
+	return input, validationErrors, nil
+}
+
+func validateAgentOnboardingSessionInput(input repository.CreateAgentOnboardingSessionInput) []string {
+	errors := []string{}
+	if input.AgentID == "" {
+		errors = append(errors, "agent_id is required")
+	}
+	if input.UserEmail == "" {
+		errors = append(errors, "user_email is required")
+	}
+	if input.UserWallet == "" {
+		errors = append(errors, "user_wallet is required")
+	}
+	if input.Chain != agent.ChainArcTestnet {
+		errors = append(errors, "chain must be ARC-TESTNET")
+	}
+	if input.WalletProvider != agent.WalletProviderCircleAgentWallet {
+		errors = append(errors, "wallet_provider must be circle_agent_wallet")
+	}
+	if input.Status != repository.AgentOnboardingStatusPendingOTP {
+		errors = append(errors, "status must be pending_otp")
+	}
+	return errors
+}
+
 func newAgentOnboardingRegistrationInput(request registerAgentOnboardingRequest) (repository.UpsertAgentWalletInput, []string) {
 	policyMetadata, _ := json.Marshal(map[string]string{
 		"note": "default ARC-TESTNET onboarding policy",
@@ -569,6 +757,14 @@ func validateAgentWalletRegistrationInput(input repository.UpsertAgentWalletInpu
 	return errors
 }
 
+func newPublicID(prefix string) (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return prefix + "_" + hex.EncodeToString(bytes), nil
+}
+
 func nullableString(value string) sql.NullString {
 	value = strings.TrimSpace(value)
 	return sql.NullString{String: value, Valid: value != ""}
@@ -631,6 +827,53 @@ func newAgentWalletResponse(wallet repository.AgentWallet) agentWalletResponse {
 		SourceClient:       wallet.SourceClient.String,
 		CreatedAt:          wallet.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 		UpdatedAt:          wallet.UpdatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+	}
+}
+
+func newAgentOnboardingSessionResponse(onboarding repository.AgentOnboardingSession) agentOnboardingSessionResponse {
+	policyMetadata := map[string]string{}
+	if len(onboarding.PolicyMetadata) > 0 {
+		_ = json.Unmarshal(onboarding.PolicyMetadata, &policyMetadata)
+	}
+
+	return agentOnboardingSessionResponse{
+		OnboardingID:                onboarding.OnboardingID,
+		AgentID:                     onboarding.AgentID,
+		UserEmail:                   onboarding.UserEmail,
+		UserWallet:                  onboarding.UserWallet,
+		RequestedAgentWalletAddress: onboarding.RequestedAgentWalletAddress.String,
+		SourceClient:                onboarding.SourceClient.String,
+		Channel:                     onboarding.Channel.String,
+		Chain:                       onboarding.Chain,
+		WalletProvider:              onboarding.WalletProvider,
+		Status:                      onboarding.Status,
+		FailureReason:               onboarding.FailureReason.String,
+		PolicyMetadata:              policyMetadata,
+		CreatedAt:                   onboarding.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+		UpdatedAt:                   onboarding.UpdatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+	}
+}
+
+func newAgentSessionResponse(session repository.AgentSession) agentSessionResponse {
+	sessionMetadata := map[string]string{}
+	if len(session.SessionMetadata) > 0 {
+		_ = json.Unmarshal(session.SessionMetadata, &sessionMetadata)
+	}
+
+	return agentSessionResponse{
+		SessionID:          session.SessionID,
+		AgentID:            session.AgentID,
+		UserEmail:          session.UserEmail,
+		UserWallet:         session.UserWallet,
+		AgentWalletAddress: session.AgentWalletAddress,
+		WalletProvider:     session.WalletProvider,
+		Chain:              session.Chain,
+		Status:             session.Status,
+		AllowedActions:     session.AllowedActions,
+		AllowedChannels:    session.AllowedChannels,
+		SessionMetadata:    sessionMetadata,
+		CreatedAt:          session.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+		UpdatedAt:          session.UpdatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 	}
 }
 

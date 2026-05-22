@@ -139,9 +139,35 @@ Persistent backend model added for:
 
 Current implementation uses the DB-backed `agent_wallets` table for production routing. Test code uses an in-memory registry with the same interface for handler coverage only.
 
+Multi-tenant onboarding/session foundation:
+- `agent_onboarding_sessions` stores pending per-user, per-agent onboarding state before final wallet registration.
+- `agent_sessions` stores activated per-agent runtime ownership/session boundaries without Circle session secrets.
+- State is keyed by explicit user email, user wallet, agent id, source client, and channel so external clients do not imply one shared global Circle Agent Wallet session.
+- Circle OTP start, OTP verification, Circle wallet provisioning, and Circle session persistence are not implemented.
+
 No private keys, Circle OTPs, secret tokens, or undocumented Circle session material are stored.
 
 ### Agent Wallet Onboarding API
+
+`POST /agent/onboarding/start`
+- Creates a pending onboarding session only.
+- Defaults to `chain == ARC-TESTNET`, `wallet_provider == circle_agent_wallet`, and `status == pending_otp`.
+- Returns `circle_otp_verification_not_implemented`.
+- Does not call Circle CLI.
+- Does not send OTP.
+- Does not claim OTP was sent.
+
+`GET /agent/onboarding/{onboarding_id}`
+- Returns pending onboarding status.
+- Does not return Circle secrets.
+
+`GET /agent/sessions/{agent_id}`
+- Returns the known activated agent-session boundary if one exists.
+- Does not return Circle secrets.
+
+`POST /agent/onboarding/register`
+- Registry-only convenience endpoint for final agent wallet mapping with default Arc Testnet Circle provider policy.
+- Does not create a pending OTP session and does not authenticate Circle.
 
 `POST /agent/wallets`
 - Registers an already-created user-owned Circle Agent Wallet with SignalArc.
@@ -210,6 +236,7 @@ Client responsibilities:
 
 Backend responsibilities:
 - Maintain the user/agent wallet registry.
+- Maintain pending onboarding sessions and activated agent-session boundaries without storing Circle secrets.
 - Validate intent shape and registered wallet state.
 - Enforce provider, chain, status, and action allowlist checks.
 - Return an execution plan or execution readiness failure.

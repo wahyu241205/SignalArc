@@ -99,8 +99,22 @@ type testAgentWalletRegistry struct {
 	wallets map[string]repository.AgentWallet
 }
 
+type testAgentSessionRegistry struct {
+	onboardingSessions map[string]repository.AgentOnboardingSession
+	agentSessions      map[string]repository.AgentSession
+	sessionsByID       map[string]repository.AgentSession
+}
+
 func newTestAgentWalletRegistry() *testAgentWalletRegistry {
 	return &testAgentWalletRegistry{wallets: map[string]repository.AgentWallet{}}
+}
+
+func newTestAgentSessionRegistry() *testAgentSessionRegistry {
+	return &testAgentSessionRegistry{
+		onboardingSessions: map[string]repository.AgentOnboardingSession{},
+		agentSessions:      map[string]repository.AgentSession{},
+		sessionsByID:       map[string]repository.AgentSession{},
+	}
 }
 
 func (registry *testAgentWalletRegistry) RegisterAgentWallet(_ context.Context, input repository.UpsertAgentWalletInput) (repository.AgentWallet, error) {
@@ -141,6 +155,90 @@ func (registry *testAgentWalletRegistry) DisableAgentWallet(_ context.Context, a
 	wallet.UpdatedAt = wallet.UpdatedAt.Add(time.Minute)
 	registry.wallets[agentID] = wallet
 	return wallet, nil
+}
+
+func (registry *testAgentSessionRegistry) CreateAgentOnboardingSession(_ context.Context, input repository.CreateAgentOnboardingSessionInput) (repository.AgentOnboardingSession, error) {
+	now := time.Date(2026, 5, 22, 0, 0, 0, 0, time.UTC)
+	session := repository.AgentOnboardingSession{
+		ID:                          "agent_onboarding_row_1",
+		OnboardingID:                input.OnboardingID,
+		AgentID:                     input.AgentID,
+		UserEmail:                   input.UserEmail,
+		UserWallet:                  input.UserWallet,
+		RequestedAgentWalletAddress: input.RequestedAgentWalletAddress,
+		SourceClient:                input.SourceClient,
+		Channel:                     input.Channel,
+		Chain:                       input.Chain,
+		WalletProvider:              input.WalletProvider,
+		Status:                      input.Status,
+		CircleRequestIDHash:         input.CircleRequestIDHash,
+		CircleRequestExpiresAt:      input.CircleRequestExpiresAt,
+		FailureReason:               input.FailureReason,
+		PolicyMetadata:              input.PolicyMetadata,
+		CreatedAt:                   now,
+		UpdatedAt:                   now,
+	}
+	registry.onboardingSessions[session.OnboardingID] = session
+	return session, nil
+}
+
+func (registry *testAgentSessionRegistry) GetAgentOnboardingSessionByOnboardingID(_ context.Context, onboardingID string) (repository.AgentOnboardingSession, error) {
+	session, ok := registry.onboardingSessions[onboardingID]
+	if !ok {
+		return repository.AgentOnboardingSession{}, sql.ErrNoRows
+	}
+	return session, nil
+}
+
+func (registry *testAgentSessionRegistry) UpdateAgentOnboardingSessionStatus(_ context.Context, onboardingID string, status string, failureReason sql.NullString) (repository.AgentOnboardingSession, error) {
+	session, ok := registry.onboardingSessions[onboardingID]
+	if !ok {
+		return repository.AgentOnboardingSession{}, sql.ErrNoRows
+	}
+	session.Status = status
+	session.FailureReason = failureReason
+	session.UpdatedAt = session.UpdatedAt.Add(time.Minute)
+	registry.onboardingSessions[onboardingID] = session
+	return session, nil
+}
+
+func (registry *testAgentSessionRegistry) CreateAgentSession(_ context.Context, input repository.CreateAgentSessionInput) (repository.AgentSession, error) {
+	now := time.Date(2026, 5, 22, 1, 0, 0, 0, time.UTC)
+	session := repository.AgentSession{
+		ID:                 "agent_session_row_1",
+		SessionID:          input.SessionID,
+		AgentID:            input.AgentID,
+		UserEmail:          input.UserEmail,
+		UserWallet:         input.UserWallet,
+		AgentWalletAddress: input.AgentWalletAddress,
+		WalletProvider:     input.WalletProvider,
+		Chain:              input.Chain,
+		Status:             input.Status,
+		AllowedActions:     input.AllowedActions,
+		AllowedChannels:    input.AllowedChannels,
+		SessionMetadata:    input.SessionMetadata,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	registry.agentSessions[session.AgentID] = session
+	registry.sessionsByID[session.SessionID] = session
+	return session, nil
+}
+
+func (registry *testAgentSessionRegistry) GetAgentSessionByAgentID(_ context.Context, agentID string) (repository.AgentSession, error) {
+	session, ok := registry.agentSessions[agentID]
+	if !ok {
+		return repository.AgentSession{}, sql.ErrNoRows
+	}
+	return session, nil
+}
+
+func (registry *testAgentSessionRegistry) GetAgentSessionBySessionID(_ context.Context, sessionID string) (repository.AgentSession, error) {
+	session, ok := registry.sessionsByID[sessionID]
+	if !ok {
+		return repository.AgentSession{}, sql.ErrNoRows
+	}
+	return session, nil
 }
 
 func TestCreateAgentIntentPreview(t *testing.T) {
@@ -230,6 +328,241 @@ func TestRegisterAgentWallet(t *testing.T) {
 	}
 	if body.AgentWallet.WalletProvider != agent.WalletProviderCircleAgentWallet {
 		t.Fatalf("unexpected wallet provider %q", body.AgentWallet.WalletProvider)
+	}
+}
+
+func TestStartAgentOnboardingMinimalPayload(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_1",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Onboarding agentOnboardingSessionResponse `json:"onboarding"`
+		NextStep   string                         `json:"next_step"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Onboarding.OnboardingID == "" {
+		t.Fatal("expected onboarding_id")
+	}
+	if body.Onboarding.AgentID != "agent_start_1" {
+		t.Fatalf("expected agent id, got %q", body.Onboarding.AgentID)
+	}
+	if body.Onboarding.Status != repository.AgentOnboardingStatusPendingOTP {
+		t.Fatalf("expected pending_otp status, got %q", body.Onboarding.Status)
+	}
+	if body.NextStep != "circle_otp_verification_not_implemented" {
+		t.Fatalf("unexpected next step %q", body.NextStep)
+	}
+}
+
+func TestStartAgentOnboardingAppliesDefaults(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_defaults",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Onboarding agentOnboardingSessionResponse `json:"onboarding"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Onboarding.Chain != agent.ChainArcTestnet {
+		t.Fatalf("expected ARC-TESTNET chain, got %q", body.Onboarding.Chain)
+	}
+	if body.Onboarding.WalletProvider != agent.WalletProviderCircleAgentWallet {
+		t.Fatalf("expected circle agent wallet provider, got %q", body.Onboarding.WalletProvider)
+	}
+	if body.Onboarding.PolicyMetadata["note"] != "pending Circle Agent Wallet OTP onboarding" {
+		t.Fatalf("unexpected policy metadata %#v", body.Onboarding.PolicyMetadata)
+	}
+}
+
+func TestStartAgentOnboardingPreservesSourceClientAndChannel(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_channel",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"source_client": "chatgpt_custom_action",
+		"channel": "chatgpt"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Onboarding agentOnboardingSessionResponse `json:"onboarding"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Onboarding.SourceClient != "chatgpt_custom_action" {
+		t.Fatalf("unexpected source client %q", body.Onboarding.SourceClient)
+	}
+	if body.Onboarding.Channel != "chatgpt" {
+		t.Fatalf("unexpected channel %q", body.Onboarding.Channel)
+	}
+}
+
+func TestStartAgentOnboardingRejectsMissingRequiredFields(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+}
+
+func TestStartAgentOnboardingDoesNotCallExecutor(t *testing.T) {
+	executor := &stubAgentExecutor{}
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), executor, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_no_execute",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+	if executor.called {
+		t.Fatal("executor should not be called during onboarding start")
+	}
+}
+
+func TestGetAgentOnboardingByOnboardingID(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	createResponse := httptest.NewRecorder()
+	createRequest := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_fetch",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111"
+	}`))
+	router.ServeHTTP(createResponse, createRequest)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("expected create status %d, got %d: %s", http.StatusCreated, createResponse.Code, createResponse.Body.String())
+	}
+
+	var createBody struct {
+		Onboarding agentOnboardingSessionResponse `json:"onboarding"`
+	}
+	if err := json.NewDecoder(createResponse.Body).Decode(&createBody); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	getResponse := httptest.NewRecorder()
+	getRequest := httptest.NewRequest(http.MethodGet, "/agent/onboarding/"+createBody.Onboarding.OnboardingID, nil)
+	router.ServeHTTP(getResponse, getRequest)
+
+	if getResponse.Code != http.StatusOK {
+		t.Fatalf("expected get status %d, got %d: %s", http.StatusOK, getResponse.Code, getResponse.Body.String())
+	}
+
+	var getBody struct {
+		Onboarding agentOnboardingSessionResponse `json:"onboarding"`
+	}
+	if err := json.NewDecoder(getResponse.Body).Decode(&getBody); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	if getBody.Onboarding.OnboardingID != createBody.Onboarding.OnboardingID {
+		t.Fatalf("expected onboarding id %q, got %q", createBody.Onboarding.OnboardingID, getBody.Onboarding.OnboardingID)
+	}
+}
+
+func TestGetUnknownAgentOnboardingReturnsNotFound(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/onboarding/missing", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, response.Code, response.Body.String())
+	}
+}
+
+func TestCreateAgentSessionRejectsUserWalletReuse(t *testing.T) {
+	sessionsRepository := repository.NewAgentSessionsRepository(nil)
+	_, err := sessionsRepository.CreateAgentSession(context.Background(), repository.CreateAgentSessionInput{
+		SessionID:          "agent_session_bad",
+		AgentID:            "agent_bad",
+		UserEmail:          "desi@example.com",
+		UserWallet:         "0x9999999999999999999999999999999999999999",
+		AgentWalletAddress: "0x9999999999999999999999999999999999999999",
+		WalletProvider:     agent.WalletProviderCircleAgentWallet,
+		Chain:              agent.ChainArcTestnet,
+		Status:             repository.AgentSessionStatusActive,
+		AllowedActions:     []string{agent.ActionCreateMarket},
+		AllowedChannels:    []string{"chatgpt"},
+	})
+	if !errors.Is(err, repository.ErrInvalidAgentSession) {
+		t.Fatalf("expected invalid agent session error, got %v", err)
+	}
+}
+
+func TestGetMissingAgentSessionReturnsNotFound(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/sessions/agent_missing", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, response.Code, response.Body.String())
 	}
 }
 
