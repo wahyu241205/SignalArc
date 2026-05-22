@@ -18,7 +18,7 @@ Agent can later:
 
 ## Live AI Agent Transaction MVP
 
-Status: IN PROGRESS - backend Circle Agent Wallet provider create_market, buy_yes, and buy_no are validated by real Arc Testnet runtime evidence; lifecycle executor support is implemented in backend logic/tests but not yet runtime-validated; Docker/Cloud Run Circle CLI/session strategy, production readiness, mainnet readiness, and external client trigger remain pending.
+Status: IN PROGRESS - backend Circle Agent Wallet provider create_market, buy_yes, buy_no, close_market, resolve_market, claim_payout, cancel_market, and claim_refund are validated by real Arc Testnet runtime evidence; Docker/Cloud Run Circle CLI/session strategy, production readiness, mainnet readiness, and external client trigger remain pending.
 
 Primary objective:
 - A user owns or controls an agent.
@@ -281,7 +281,6 @@ Runtime requirement:
 
 Not complete:
 - WhatsApp, Telegram, ChatGPT, and Claude live client triggers have not been tested yet.
-- Lifecycle actions are implemented in backend logic/tests but are not runtime-validated on Arc Testnet yet: `close_market`, `resolve_market`, `claim_payout`, `cancel_market`, `claim_refund`.
 - Docker/Cloud Run runtime does not yet include a Circle CLI/session strategy.
 - SignalArc is not mainnet ready.
 - SignalArc makes no production readiness claim.
@@ -290,9 +289,9 @@ Not complete:
 
 ### User-Proven Circle Agent Wallet Evidence
 
-Status: BACKEND PROVIDER CORE TRADING FLOW VALIDATED ON ARC TESTNET.
+Status: BACKEND PROVIDER FULL MARKET LIFECYCLE VALIDATED ON ARC TESTNET.
 
-This evidence supersedes the earlier deployer-signed smoke tests and the manual Circle CLI-only checkpoint for the create-market and buy-position portions of the Live AI Agent Transaction MVP. It does not complete lifecycle actions, external-agent-client validation, Docker/Cloud Run runtime strategy, production readiness, mainnet readiness, or Circle policy-limit validation.
+This evidence supersedes the earlier deployer-signed smoke tests and the manual Circle CLI-only checkpoint for create-market, buy-position, payout, cancel, and refund lifecycle portions of the Live AI Agent Transaction MVP. It does not complete external-agent-client validation, Docker/Cloud Run runtime strategy, production readiness, mainnet readiness, or Circle policy-limit validation.
 
 Runtime setup:
 - Backend was run from the host shell on port `4001`, not Docker.
@@ -300,6 +299,8 @@ Runtime setup:
 - Host Circle Agent Wallet session was valid.
 - DB migration was advanced to version `15`, `dirty=false`.
 - Agent wallet was registered through DB-backed `POST /agent/wallets`.
+- Latest full lifecycle validation also used host shell runtime with `APP_PORT=4001`.
+- Execution mode: `circle_agent_wallet_cli`.
 
 Agent wallet:
 - Agent ID: `agent_desi_001`
@@ -350,15 +351,76 @@ Backend provider `buy_no`:
   - `total_collateral == 2000000`
   - `USDC.balanceOf(market) == 2000000`
 
+Backend provider resolved payout lifecycle:
+- `create_market`
+  - Intent ID: `agent_intent_ecc88160f7e2b908fc498c3dff66fbe7`
+  - Execution mode: `circle_agent_wallet_cli`
+  - Transaction: `0x7913fd51b38b147cfc6936da7eb7166a97a156351c9ccce4264d48d31fc91ae9`
+  - Created market: `0x38D4317fcB0C82e5EC2407a89c311b3Be8059CD0`
+  - Readback: `market_count == 10`, `is_market == true`
+- `buy_yes`
+  - Intent ID: `agent_intent_e1d3889f3252ac318b7b435b2a789d9d`
+  - USDC approve transaction: `0x9c66332ad2d798126118b961ad9005ab7f2055649b46d808cc979ccf40eee3f7`
+  - `buyYes` transaction: `0xdd4448fdf237f13bc9e90737f27b7a1e912ee8d34195bae311cc2bac15aaa95d`
+  - Readback: `yes_positions == 1000000`, `total_yes == 1000000`, `total_collateral == 1000000`, `USDC.balanceOf(market) == 1000000`
+- `close_market`
+  - Intent ID: `agent_intent_6cab73b950296ac2dcc3a5414f4e1613`
+  - Transaction: `0x5accb4dafee2a27be032709e427e25eede4e7eb67f54a06bdf0ba82e5f4a013e`
+  - Readback: `market_status == 1`, `is_open == false`
+- `resolve_market`
+  - Intent ID: `agent_intent_4073e0f29f842a0110a1e099d9fa50b0`
+  - Transaction: `0xc45d8612768591736425a743520b5e432b9a424ef9552cfbbc1bb04d785c874b`
+  - Readback: `market_status == 2`, `winning_outcome == 1`, `claimable_payout == 1000000`, `has_claimed == false`, `USDC.balanceOf(market) == 1000000`
+- `claim_payout`
+  - Intent ID: `agent_intent_65284f22e52fce32d6a3efc2fa6163cd`
+  - Transaction: `0xc80bb9dd7f6924c93c1722d7c5f1136c076403d052ed792f98ed2d7abd59568f`
+  - Readback: `market_status == 2`, `winning_outcome == 1`, `claimable_payout == 1000000`, `has_claimed == true`, `USDC.balanceOf(market) == 0`
+
+Backend provider refund lifecycle:
+- `create_market`
+  - Intent ID: `agent_intent_b167e466b198c7f909c388c76b683f5d`
+  - Transaction: `0x1340817f922aaa7ae181789bbaf2b7bff13a426b0397524150d01ae869d2a033`
+  - Created market: `0xbfd93169DAFf0610EA10E1221B9a2a6552379648`
+  - Readback: `market_count == 11`, `is_market == true`
+- `buy_yes`
+  - Intent ID: `agent_intent_b06dd357e62778ed1a0527800690473a`
+  - USDC approve transaction: `0x83bdc164512979296c385f51b4b6b1df51c741f2157cc93944b7f15c1328f487`
+  - `buyYes` transaction: `0xa85c60d903a1b1e30f39da95a37ca356d61d11cc20c942aaa22f0740a06945ab`
+  - Readback: `yes_positions == 1000000`, `total_yes == 1000000`, `total_collateral == 1000000`, `USDC.balanceOf(market) == 1000000`
+- First backend provider `cancel_market` attempt failed.
+  - Intent ID: `agent_intent_634dad5fc81b7a155e3854d8e14bb135`
+  - Backend response: `502 agent_execution_failed`
+  - Onchain check after failure showed the market still Open.
+  - This is recorded as a failed backend attempt, not validated backend cancel evidence.
+- Manual Circle CLI `cancelMarket` succeeded on the refund market.
+  - Transaction: `0xbf8b98862ed691c0023643ab72ee71d8422e434868b2806f3390b4ffc88fe21b`
+  - This was manual Circle CLI, not backend provider evidence.
+- Backend provider `claim_refund` succeeded after manual cancel.
+  - Intent ID: `agent_intent_c519c98114f8a5c113ab4bc6dfefbcae`
+  - Transaction: `0x40f3f4e1737340dbbbff92e3020d0cfa6dbd7d7bbca8a1ecb580b1c0cdc43dfd`
+  - Readback: `market_status == 3`, `claimable_refund == 1000000`, `has_claimed == true`, `USDC.balanceOf(market) == 0`
+
+Backend provider cancel-only validation:
+- `create_market`
+  - Intent ID: `agent_intent_666c781a7a3fe2f939bd5342e331fd67`
+  - Transaction: `0x62f5f43b834a09f4f4c78e3bb365403a2b76374d0030a91ccd3e3571fd3c9d12`
+  - Created market: `0x928F3F9Cb43811837C0e8D4FA40c24A4f083B3Ed`
+  - Readback: `market_count == 12`, `is_market == true`
+- `cancel_market`
+  - Intent ID: `agent_intent_34f54290e5f59ffaff4a167986868c56`
+  - Transaction: `0x3eae0d0508397e5ea515d417bdc5be5c38f40f3b0296b1cf424d99060cb92de4`
+  - Readback: `market_status == 3`, `claimable_refund == 0`, `has_claimed == false`, `USDC.balanceOf(market) == 0`
+
 Current proven status:
 - Backend Circle provider `create_market` validated with a real Arc Testnet transaction.
 - Backend Circle provider `buy_yes` validated with a real Arc Testnet transaction.
 - Backend Circle provider `buy_no` validated with a real Arc Testnet transaction.
-- Backend-to-Circle-to-Arc path is proven for the core trading flow.
-
-Current implementation-only status:
-- Backend Circle provider lifecycle actions are implemented and covered by fake-runner tests only.
-- No real Circle CLI lifecycle command or onchain lifecycle transaction was run in this implementation step.
+- Backend Circle provider `close_market` validated with a real Arc Testnet transaction.
+- Backend Circle provider `resolve_market` validated with a real Arc Testnet transaction.
+- Backend Circle provider `claim_payout` validated with a real Arc Testnet transaction.
+- Backend Circle provider `cancel_market` validated after one failed backend provider attempt on the refund market and a later successful backend-only cancel-only test.
+- Backend Circle provider `claim_refund` validated after manual Circle CLI cancellation of the refund market.
+- Backend-to-Circle-to-Arc path is proven for create, trade, close, resolve, payout claim, cancel, and refund claim flows on Arc Testnet.
 
 ## Core Rule
 
@@ -433,8 +495,8 @@ If not documented, mark as unknown / not documented.
 3. Agent factory deploy on Arc Testnet — DONE
 4. Backend Agent API intent model — DONE
 5. Backend execution path to agent contract - DONE
-6. Circle Agent Wallet proof of concept - DONE for core trading flow
-7. Backend Circle Agent Wallet lifecycle executor - IMPLEMENTED, fake-runner tested, not runtime-validated
+6. Circle Agent Wallet proof of concept - DONE for full backend provider lifecycle on Arc Testnet
+7. Backend Circle Agent Wallet lifecycle executor - DONE for host-shell Arc Testnet runtime validation
 8. Policy-limited agent wallet execution - PENDING
 
 
