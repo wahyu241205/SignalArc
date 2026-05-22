@@ -555,6 +555,7 @@ Current checkpoint state:
 - Added disabled-by-default Circle Agent Wallet OTP start skeleton behind `CIRCLE_AGENT_ONBOARDING_OTP_START_ENABLED=false` by default. When enabled for a controlled dev runtime, it can call the Circle CLI login init runner, store only a hashed request reference plus expiry, and return `circle_otp_required` without exposing the raw request ID.
 - Added disabled-by-default Circle Agent Wallet OTP verify skeleton at `POST /agent/onboarding/verify`. It uses the in-memory request ID from OTP start, consumes it on successful fake-runner verification, updates onboarding status to `verified`, and returns `agent_wallet_resolution_not_implemented`.
 - Corrected OTP verify CLI completion command shape to the documented Circle form: `circle wallet login --request <request-id> --otp <code>`.
+- Added sanitized server-side diagnostics for Circle OTP verify CLI failures; diagnostics redact the raw request ID and OTP and the API response remains the generic `circle_otp_verify_failed` error.
 - Added read-only onboarding/session status APIs: `GET /agent/onboarding/{onboarding_id}` and `GET /agent/sessions/{agent_id}`.
 - Multi-tenant/session isolation state now separates user email, user wallet, source client, channel, pending onboarding, and activated agent-session boundaries without storing Circle session secrets.
 - Backend now registers agent wallets through DB-backed `POST /agent/wallets` in production routing.

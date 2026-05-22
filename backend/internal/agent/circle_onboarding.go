@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -148,11 +150,34 @@ type ExecEnvCommandRunner struct{}
 func (runner ExecEnvCommandRunner) RunWithEnv(ctx context.Context, name string, args []string, env []string) ([]byte, error) {
 	command := exec.CommandContext(ctx, name, args...)
 	command.Env = append(os.Environ(), env...)
-	output, err := command.Output()
+	output, err := command.CombinedOutput()
 	if err != nil {
-		return nil, ErrCircleOnboardingCommandFailed
+		return output, ErrCircleOnboardingCommandFailed
 	}
 	return output, nil
+}
+
+type CircleOnboardingCommandError struct {
+	Operation       string
+	SanitizedOutput string
+	Err             error
+}
+
+func (err *CircleOnboardingCommandError) Error() string {
+	if err == nil {
+		return ErrCircleOnboardingCommandFailed.Error()
+	}
+	if strings.TrimSpace(err.SanitizedOutput) == "" {
+		return ErrCircleOnboardingCommandFailed.Error()
+	}
+	return ErrCircleOnboardingCommandFailed.Error() + ": " + err.SanitizedOutput
+}
+
+func (err *CircleOnboardingCommandError) Unwrap() error {
+	if err == nil || err.Err == nil {
+		return ErrCircleOnboardingCommandFailed
+	}
+	return err.Err
 }
 
 type CircleCLIOnboardingRunner struct {
@@ -233,11 +258,34 @@ func (runner *CircleCLIOnboardingRunner) VerifyOTP(parent context.Context, reque
 	defer cancel()
 
 	args := []string{"wallet", "login", "--request", requestID, "--otp", otp}
-	_, err := runner.cfg.CommandRunner.RunWithEnv(ctx, runner.cfg.CLIPath, args, []string{"CIRCLE_ACCEPT_TERMS=1"})
+	output, err := runner.cfg.CommandRunner.RunWithEnv(ctx, runner.cfg.CLIPath, args, []string{"CIRCLE_ACCEPT_TERMS=1"})
 	if err != nil {
-		return ErrCircleOnboardingCommandFailed
+		sanitizedOutput := sanitizeCircleOnboardingText(string(output), requestID, otp)
+		sanitizedError := sanitizeCircleOnboardingText(err.Error(), requestID, otp)
+		log.Error().
+			Str("operation", "circle_otp_verify").
+			Str("output", sanitizedOutput).
+			Str("error", sanitizedError).
+			Msg("Circle CLI OTP verify failed")
+		return &CircleOnboardingCommandError{
+			Operation:       "circle_otp_verify",
+			SanitizedOutput: sanitizedOutput,
+			Err:             ErrCircleOnboardingCommandFailed,
+		}
 	}
 	return nil
+}
+
+func sanitizeCircleOnboardingText(value string, secrets ...string) string {
+	sanitized := value
+	for _, secret := range secrets {
+		secret = strings.TrimSpace(secret)
+		if secret == "" {
+			continue
+		}
+		sanitized = strings.ReplaceAll(sanitized, secret, "[redacted]")
+	}
+	return strings.TrimSpace(sanitized)
 }
 
 func findCircleOTPRequestID(output []byte) (string, bool) {

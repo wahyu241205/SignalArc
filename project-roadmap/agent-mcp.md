@@ -148,6 +148,7 @@ Multi-tenant onboarding/session foundation:
 - Circle Agent Wallet OTP verify skeleton is added behind the same disabled-by-default onboarding OTP flag.
 - Verify uses the in-memory request ID from start, consumes it on success, and updates onboarding status to `verified`.
 - Verify uses the documented Circle completion command shape: `circle wallet login --request <request-id> --otp <code>`.
+- Verify failures now emit sanitized server-side diagnostics for Circle CLI output while redacting the raw request ID and OTP; API responses remain generic.
 - Backend restart before verify requires onboarding restart because raw request IDs are not stored in the database.
 - Agent wallet resolution, wallet provisioning readback, `agent_sessions` creation, and Circle session persistence are not implemented.
 
