@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -125,9 +126,43 @@ func (resolver *CircleCLIWalletResolver) logResolutionFailure(operation string, 
 		Msg("Circle CLI wallet read failed")
 }
 
+// extractJSONFromCLIOutput finds the first JSON object or array in raw CLI
+// output that may be prefixed with non-JSON text such as Node.js deprecation
+// warnings. It returns the byte slice starting at the first '{' or '[' that
+// successfully parses as JSON. If no valid JSON envelope is found, it returns
+// nil and an error.
+func extractJSONFromCLIOutput(raw []byte) ([]byte, error) {
+	// Fast path: if the output starts with JSON, return as-is.
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+		var probe json.RawMessage
+		if json.Unmarshal(trimmed, &probe) == nil {
+			return trimmed, nil
+		}
+	}
+
+	// Scan for each '{' or '[' and try to parse from that position.
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '{' && raw[i] != '[' {
+			continue
+		}
+		candidate := raw[i:]
+		var probe json.RawMessage
+		if json.Unmarshal(candidate, &probe) == nil {
+			return candidate, nil
+		}
+	}
+
+	return nil, errors.New("no valid JSON object or array found in CLI output")
+}
+
 func parseCircleAgentWallets(output []byte) ([]CircleAgentWallet, error) {
+	cleaned, extractErr := extractJSONFromCLIOutput(output)
+	if extractErr != nil {
+		return nil, extractErr
+	}
 	var decoded any
-	if err := json.Unmarshal(output, &decoded); err != nil {
+	if err := json.Unmarshal(cleaned, &decoded); err != nil {
 		return nil, err
 	}
 	seen := map[string]CircleAgentWallet{}
@@ -177,8 +212,12 @@ func circleWalletChainFromMap(value map[string]any) string {
 }
 
 func parseCircleAgentWalletBalances(output []byte) ([]any, error) {
+	cleaned, extractErr := extractJSONFromCLIOutput(output)
+	if extractErr != nil {
+		return nil, extractErr
+	}
 	var decoded any
-	if err := json.Unmarshal(output, &decoded); err != nil {
+	if err := json.Unmarshal(cleaned, &decoded); err != nil {
 		return nil, err
 	}
 	balances, ok := findBalancesArray(decoded)

@@ -340,3 +340,66 @@ func TestCircleCLIOnboardingRunnerVerifyOTPSanitizesFailureDiagnostics(t *testin
 		t.Fatalf("expected redacted request ID and OTP in log text, got %s", logText)
 	}
 }
+
+func TestParseCircleAgentWalletsWithNodeWarningPrefix(t *testing.T) {
+	output := []byte("(node:12345) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n{\"data\": {\"wallets\": [{\"type\": \"agent\",\"address\": \"0xa9914bca9123ba0079be8c968f632c0db6400fe7\",\"blockchain\": \"ARC-TESTNET\",\"createDate\": \"2026-05-22T16:04:04Z\"}]}}")
+	wallets, err := parseCircleAgentWallets(output)
+	if err != nil {
+		t.Fatalf("expected successful parse with warning prefix, got error: %v", err)
+	}
+	if len(wallets) != 1 {
+		t.Fatalf("expected 1 wallet, got %d", len(wallets))
+	}
+	if wallets[0].Address != "0xa9914bca9123ba0079be8c968f632c0db6400fe7" {
+		t.Fatalf("unexpected wallet address %q", wallets[0].Address)
+	}
+}
+
+func TestParseCircleAgentWalletBalancesWithNodeWarningPrefix(t *testing.T) {
+	output := []byte("(node:67890) [DEP0040] DeprecationWarning: The `punycode` module is deprecated.\n{\"data\":{\"balances\":[{\"token\":\"USDC\",\"amount\":\"20.00\"}]}}")
+	balances, err := parseCircleAgentWalletBalances(output)
+	if err != nil {
+		t.Fatalf("expected successful parse with warning prefix, got error: %v", err)
+	}
+	if len(balances) != 1 {
+		t.Fatalf("expected 1 balance entry, got %d", len(balances))
+	}
+}
+
+func TestParseCircleAgentWalletsInvalidOutputWithoutJSON(t *testing.T) {
+	output := []byte("(node:12345) [DEP0040] DeprecationWarning: something\nError: authentication required\nPlease login first.")
+	_, err := parseCircleAgentWallets(output)
+	if err == nil {
+		t.Fatal("expected parse error for output without JSON")
+	}
+}
+
+func TestParseCircleAgentWalletBalancesInvalidOutputWithoutJSON(t *testing.T) {
+	output := []byte("Error: wallet not found\nPlease check the address.")
+	_, err := parseCircleAgentWalletBalances(output)
+	if err == nil {
+		t.Fatal("expected parse error for output without JSON")
+	}
+}
+
+func TestParseCircleAgentWalletsCleanJSONStillWorks(t *testing.T) {
+	output := []byte(`{"data":{"wallets":[{"address":"0xa9914bca9123ba0079be8c968f632c0db6400fe7","chain":"ARC-TESTNET"}]}}`)
+	wallets, err := parseCircleAgentWallets(output)
+	if err != nil {
+		t.Fatalf("expected successful parse for clean JSON, got error: %v", err)
+	}
+	if len(wallets) != 1 {
+		t.Fatalf("expected 1 wallet, got %d", len(wallets))
+	}
+}
+
+func TestParseCircleAgentWalletBalancesCleanJSONStillWorks(t *testing.T) {
+	output := []byte(`{"data":{"balances":[{"token":"USDC","amount":"10.00"}]}}`)
+	balances, err := parseCircleAgentWalletBalances(output)
+	if err != nil {
+		t.Fatalf("expected successful parse for clean JSON, got error: %v", err)
+	}
+	if len(balances) != 1 {
+		t.Fatalf("expected 1 balance entry, got %d", len(balances))
+	}
+}

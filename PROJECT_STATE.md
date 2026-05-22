@@ -720,6 +720,21 @@ Current non-claims:
 - Circle CLI command shapes in `project-roadmap/agent-mcp.md` are official-doc/help-discovery shapes only unless accompanied by exact authenticated output and onchain evidence.
 - The phase is not complete.
 
+## Circle CLI Warning-Prefix Wallet Resolver Fix
+
+Status: COMPLETE.
+
+Done:
+
+- Runtime verification after commit `5697295` reached wallet resolution but failed because Circle CLI prepended Node deprecation warning text before JSON output.
+- Root cause: `parseCircleAgentWallets` and `parseCircleAgentWalletBalances` in `circle_wallet_resolver.go` called `json.Unmarshal` directly on raw CLI output, which fails when Node.js prints `(node:...) [DEP0040] DeprecationWarning...` lines before the JSON payload.
+- Added `extractJSONFromCLIOutput` helper that scans for the first `{` or `[` that starts valid JSON, skipping warning text and bracket characters in deprecation labels like `[DEP0040]`.
+- Updated `parseCircleAgentWallets` and `parseCircleAgentWalletBalances` to use the helper before unmarshalling.
+- Clean JSON output still parses identically (fast path).
+- Output without any valid JSON object/array still returns a parse error.
+- Sanitized diagnostics behavior unchanged.
+- Validation: `go test ./...` passed.
+
 ## Next Recommended Step
 
 - Design and validate the Docker/Cloud Run Circle CLI/session strategy before treating the backend provider as deployable. Do not capture OTP or store Circle session material in SignalArc.
