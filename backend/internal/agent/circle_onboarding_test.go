@@ -106,12 +106,86 @@ func TestFindCircleOTPRequestIDFromPlainTextID(t *testing.T) {
 	}
 }
 
-func TestCircleCLIOnboardingRunnerStartOTPSanitizesFailureDiagnostics(t *testing.T) {
-	requestID := "request-secret-123"
+func TestFindCircleOTPRequestIDFromNestedJSONCompletionCommand(t *testing.T) {
+	output := []byte(`{"data":{"message":"OTP code sent to desi@example.com\nPlease run: circle wallet login --request request-nested-123 --otp <code>"}}`)
+	requestID, ok := findCircleOTPRequestID(output)
+	if !ok {
+		t.Fatal("expected request id")
+	}
+	if requestID != "request-nested-123" {
+		t.Fatalf("unexpected request id %q", requestID)
+	}
+}
+
+func TestFindCircleOTPRequestIDFromTextCompletionCommand(t *testing.T) {
+	output := []byte("Please run: circle wallet login --request request-command-123 --otp <code>")
+	requestID, ok := findCircleOTPRequestID(output)
+	if !ok {
+		t.Fatal("expected request id")
+	}
+	if requestID != "request-command-123" {
+		t.Fatalf("unexpected request id %q", requestID)
+	}
+}
+
+func TestCircleCLIOnboardingRunnerStartOTPSucceedsWhenFailedCommandPrintedRequestID(t *testing.T) {
+	requestID := "request-start-command-123"
 	email := "desi@example.com"
 	commandRunner := &fakeEnvCommandRunner{
-		output: []byte("OTP sent to desi@example.com\nRequest ID: request-secret-123"),
-		err:    errors.New("exit status 1 for desi@example.com request-secret-123"),
+		output: []byte(`{"data":{"message":"OTP code sent to desi@example.com\nPlease run: circle wallet login --request request-start-command-123 --otp <code>"}}`),
+		err:    errors.New("exit status 1 for desi@example.com request-start-command-123"),
+	}
+	runner := NewCircleCLIOnboardingRunner(CircleCLIOnboardingRunnerConfig{
+		CLIPath:       "circle",
+		Chain:         ChainArcTestnet,
+		CommandRunner: commandRunner,
+	})
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	defer func() {
+		log.Logger = previousLogger
+	}()
+
+	result, err := runner.StartOTP(context.Background(), email)
+	if err != nil {
+		t.Fatalf("start otp: %v", err)
+	}
+	if result.RequestID != requestID {
+		t.Fatalf("unexpected request id %q", result.RequestID)
+	}
+
+	logText := logs.String()
+	if strings.Contains(logText, requestID) {
+		t.Fatalf("sanitized diagnostics exposed request ID: %s", logText)
+	}
+	if strings.Contains(logText, email) {
+		t.Fatalf("sanitized diagnostics exposed email: %s", logText)
+	}
+	if !strings.Contains(logText, "Circle CLI OTP start failed") {
+		t.Fatalf("expected start diagnostic log, got %s", logText)
+	}
+}
+
+func TestSanitizeCircleOnboardingTextRedactsCommandRequestID(t *testing.T) {
+	sanitized := sanitizeCircleOnboardingText("Please run: circle wallet login --request request-secret-123 --otp SIN-232794")
+	if strings.Contains(sanitized, "request-secret-123") {
+		t.Fatalf("sanitized text exposed request ID: %s", sanitized)
+	}
+	if strings.Contains(sanitized, "SIN-232794") {
+		t.Fatalf("sanitized text exposed OTP: %s", sanitized)
+	}
+	if !strings.Contains(sanitized, "--request [redacted]") {
+		t.Fatalf("expected redacted request id, got %s", sanitized)
+	}
+}
+
+func TestCircleCLIOnboardingRunnerStartOTPSanitizesFailureDiagnostics(t *testing.T) {
+	email := "desi@example.com"
+	commandRunner := &fakeEnvCommandRunner{
+		output: []byte("OTP start failed for desi@example.com without request id"),
+		err:    errors.New("exit status 1 for desi@example.com"),
 	}
 	runner := NewCircleCLIOnboardingRunner(CircleCLIOnboardingRunnerConfig{
 		CLIPath:       "circle",
@@ -137,13 +211,10 @@ func TestCircleCLIOnboardingRunnerStartOTPSanitizesFailureDiagnostics(t *testing
 	errorText := err.Error()
 	logText := logs.String()
 	for _, text := range []string{errorText, logText} {
-		if strings.Contains(text, requestID) {
-			t.Fatalf("sanitized diagnostics exposed request ID: %s", text)
-		}
 		if strings.Contains(text, email) {
 			t.Fatalf("sanitized diagnostics exposed email: %s", text)
 		}
-		if !strings.Contains(text, "OTP sent to [redacted]") {
+		if !strings.Contains(text, "OTP start failed for [redacted]") {
 			t.Fatalf("expected sanitized start output detail, got %s", text)
 		}
 	}

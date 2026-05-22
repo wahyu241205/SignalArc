@@ -563,6 +563,11 @@ Current checkpoint state:
 - Added sanitized Circle CLI OTP start diagnostics that redact email and request ID.
 - Added tests for JSON/text request ID extraction, sanitized start diagnostics, and successful `/agent/onboarding/start` with text request ID output.
 - Validation: `go test ./...` passed.
+- After commit `a14f17d`, Custom GPT onboarding start still returned `circle_otp_start_failed` although the OTP email was delivered.
+- Observed Circle CLI output placed the request ID inside a nested message containing the documented completion command shape: `circle wallet login --request <id> --otp <code>`.
+- Updated OTP start handling to extract request IDs from completion-command output and treat that as success even if the CLI runner returned an error.
+- Strengthened sanitized diagnostics to redact request IDs embedded in command text.
+- Validation: `go test ./...` passed.
 - Added read-only onboarding/session status APIs: `GET /agent/onboarding/{onboarding_id}` and `GET /agent/sessions/{agent_id}`.
 - Multi-tenant/session isolation state now separates user email, user wallet, source client, channel, pending onboarding, and activated agent-session boundaries without storing Circle session secrets.
 - Backend now registers agent wallets through DB-backed `POST /agent/wallets` in production routing.

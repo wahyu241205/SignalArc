@@ -181,7 +181,11 @@ func (err *CircleOnboardingCommandError) Unwrap() error {
 	return err.Err
 }
 
-var circleRequestIDLinePattern = regexp.MustCompile(`(?im)\brequest[\s_-]*id\b\s*[:=]\s*([^\s,"'{}]+)`)
+var (
+	circleRequestIDLinePattern    = regexp.MustCompile(`(?im)\brequest[\s_-]*id\b\s*[:=]\s*([^\s,"'{}]+)`)
+	circleRequestIDCommandPattern = regexp.MustCompile(`(?im)--request\s+([^\s,"'{}]+)`)
+	circleOTPCommandPattern       = regexp.MustCompile(`(?im)--otp\s+([^\s,"'{}]+)`)
+)
 
 type CircleCLIOnboardingRunner struct {
 	cfg CircleCLIOnboardingRunnerConfig
@@ -220,15 +224,25 @@ func (runner *CircleCLIOnboardingRunner) StartOTP(parent context.Context, email 
 
 	args := []string{"wallet", "login", email, "--init", "--type", "agent", "--testnet", "--output", "json"}
 	output, err := runner.cfg.CommandRunner.RunWithEnv(ctx, runner.cfg.CLIPath, args, []string{"CIRCLE_ACCEPT_TERMS=1"})
-	if err != nil {
-		return CircleOTPStartResult{}, runner.circleOnboardingStartError(err, output, email)
-	}
 	if len(output) == 0 {
+		if err != nil {
+			return CircleOTPStartResult{}, runner.circleOnboardingStartError(err, output, email)
+		}
 		runner.logCircleOTPStartFailure("", "", email)
 		return CircleOTPStartResult{}, ErrCircleOnboardingCommandReturnedNoOutput
 	}
 
 	requestID, ok := findCircleOTPRequestID(output)
+	if err != nil {
+		if ok && strings.TrimSpace(requestID) != "" {
+			runner.logCircleOTPStartFailure(string(output), err.Error(), email)
+			return CircleOTPStartResult{
+				RequestID: strings.TrimSpace(requestID),
+				ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
+			}, nil
+		}
+		return CircleOTPStartResult{}, runner.circleOnboardingStartError(err, output, email)
+	}
 	if !ok {
 		runner.logCircleOTPStartFailure(string(output), "", email)
 		return CircleOTPStartResult{}, ErrCircleOnboardingRequestIDNotDocumented
@@ -312,7 +326,20 @@ func sanitizeCircleOnboardingText(value string, secrets ...string) string {
 		}
 		sanitized = strings.ReplaceAll(sanitized, secret, "[redacted]")
 	}
+	sanitized = redactCirclePatternCapture(sanitized, circleRequestIDCommandPattern)
+	sanitized = redactCirclePatternCapture(sanitized, circleRequestIDLinePattern)
+	sanitized = redactCirclePatternCapture(sanitized, circleOTPCommandPattern)
 	return strings.TrimSpace(sanitized)
+}
+
+func redactCirclePatternCapture(value string, pattern *regexp.Regexp) string {
+	return pattern.ReplaceAllStringFunc(value, func(match string) string {
+		parts := pattern.FindStringSubmatch(match)
+		if len(parts) != 2 {
+			return match
+		}
+		return strings.Replace(match, parts[1], "[redacted]", 1)
+	})
 }
 
 func findCircleOTPRequestID(output []byte) (string, bool) {
@@ -320,17 +347,68 @@ func findCircleOTPRequestID(output []byte) (string, bool) {
 	if err := json.Unmarshal(output, &decoded); err == nil {
 		// Circle documents that --init returns a request ID, but the exact JSON
 		// field name is unknown / not documented in the official pages reviewed.
-		if requestID, ok := findValue(decoded, []string{"request_id", "requestId", "requestID", "id"}); ok {
+		if requestID, ok := findCircleOTPRequestIDField(decoded); ok {
+			return requestID, true
+		}
+		if requestID, ok := findCircleOTPRequestIDInJSONStrings(decoded); ok {
 			return requestID, true
 		}
 	}
 	return findCircleOTPRequestIDFromText(string(output))
 }
 
+func findCircleOTPRequestIDField(value any) (string, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"request_id", "requestId", "requestID", "id"} {
+			if child, ok := typed[key]; ok {
+				if text, ok := scalarToString(child); ok {
+					return text, true
+				}
+			}
+		}
+		for _, child := range typed {
+			if text, ok := findCircleOTPRequestIDField(child); ok {
+				return text, true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if text, ok := findCircleOTPRequestIDField(child); ok {
+				return text, true
+			}
+		}
+	}
+	return "", false
+}
+
+func findCircleOTPRequestIDInJSONStrings(value any) (string, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, child := range typed {
+			if requestID, ok := findCircleOTPRequestIDInJSONStrings(child); ok {
+				return requestID, true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if requestID, ok := findCircleOTPRequestIDInJSONStrings(child); ok {
+				return requestID, true
+			}
+		}
+	case string:
+		return findCircleOTPRequestIDFromText(typed)
+	}
+	return "", false
+}
+
 func findCircleOTPRequestIDFromText(output string) (string, bool) {
 	output = strings.TrimSpace(output)
 	if output == "" {
 		return "", false
+	}
+	if match := circleRequestIDCommandPattern.FindStringSubmatch(output); len(match) == 2 {
+		return strings.TrimSpace(match[1]), true
 	}
 	if match := circleRequestIDLinePattern.FindStringSubmatch(output); len(match) == 2 {
 		return strings.TrimSpace(match[1]), true

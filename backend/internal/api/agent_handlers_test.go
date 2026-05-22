@@ -703,9 +703,12 @@ func TestStartAgentOnboardingEnabledAcceptsTextRequestIDOutput(t *testing.T) {
 	sessionRegistry := newTestAgentSessionRegistry()
 	requestStore := agent.NewCircleOTPRequestStore()
 	onboardingRunner := agent.NewCircleCLIOnboardingRunner(agent.CircleCLIOnboardingRunnerConfig{
-		CLIPath:       "circle",
-		Chain:         agent.ChainArcTestnet,
-		CommandRunner: testEnvCommandRunner{output: []byte("Request ID: circle_request_secret_text_123")},
+		CLIPath: "circle",
+		Chain:   agent.ChainArcTestnet,
+		CommandRunner: testEnvCommandRunner{
+			output: []byte(`{"data":{"message":"OTP code sent to desi@example.com\nPlease run: circle wallet login --request circle_request_secret_text_123 --otp <code>"}}`),
+			err:    errors.New("exit status 1 after sending OTP"),
+		},
 	})
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry, agent.CircleOnboardingStarter{
