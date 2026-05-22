@@ -156,6 +156,8 @@ No private keys, Circle OTPs, secret tokens, or undocumented Circle session mate
 
 `POST /agent/onboarding/start`
 - Creates a pending onboarding session only.
+- Requires `agent_id` and `user_email`.
+- Does not require `user_wallet`; user wallets belong to frontend wallet-connect and user transaction flows, not initial agent onboarding.
 - Defaults to `chain == ARC-TESTNET`, `wallet_provider == circle_agent_wallet`, and `status == pending_otp`.
 - With OTP start disabled, returns `circle_otp_verification_not_implemented` and does not call Circle CLI.
 - With OTP start explicitly enabled, calls the Circle onboarding runner and returns `circle_otp_required` with expiry and non-secret request reference.
@@ -167,6 +169,9 @@ No private keys, Circle OTPs, secret tokens, or undocumented Circle session mate
 - Returns `agent_wallet_resolution_not_implemented` after marking onboarding `verified`.
 - Does not expose or store raw OTP or raw request ID.
 - Does not create an agent session or resolve an agent wallet address yet.
+
+Custom GPT schema note:
+- `startAgentOnboarding` should not require `user_wallet`.
 
 `GET /agent/onboarding/{onboarding_id}`
 - Returns pending onboarding status.

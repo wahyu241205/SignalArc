@@ -105,7 +105,7 @@ type agentOnboardingSessionResponse struct {
 	OnboardingID                string            `json:"onboarding_id"`
 	AgentID                     string            `json:"agent_id"`
 	UserEmail                   string            `json:"user_email"`
-	UserWallet                  string            `json:"user_wallet"`
+	UserWallet                  string            `json:"user_wallet,omitempty"`
 	RequestedAgentWalletAddress string            `json:"requested_agent_wallet_address,omitempty"`
 	SourceClient                string            `json:"source_client,omitempty"`
 	Channel                     string            `json:"channel,omitempty"`
@@ -756,7 +756,7 @@ func newAgentOnboardingSessionInput(request startAgentOnboardingRequest) (reposi
 		OnboardingID:   onboardingID,
 		AgentID:        strings.TrimSpace(request.AgentID),
 		UserEmail:      strings.TrimSpace(request.UserEmail),
-		UserWallet:     strings.TrimSpace(request.UserWallet),
+		UserWallet:     nullableString(request.UserWallet),
 		SourceClient:   nullableString(request.SourceClient),
 		Channel:        nullableString(request.Channel),
 		Chain:          agent.ChainArcTestnet,
@@ -776,9 +776,6 @@ func validateAgentOnboardingSessionInput(input repository.CreateAgentOnboardingS
 	}
 	if input.UserEmail == "" {
 		errors = append(errors, "user_email is required")
-	}
-	if input.UserWallet == "" {
-		errors = append(errors, "user_wallet is required")
 	}
 	if input.Chain != agent.ChainArcTestnet {
 		errors = append(errors, "chain must be ARC-TESTNET")
@@ -974,7 +971,7 @@ func newAgentOnboardingSessionResponse(onboarding repository.AgentOnboardingSess
 		OnboardingID:                onboarding.OnboardingID,
 		AgentID:                     onboarding.AgentID,
 		UserEmail:                   onboarding.UserEmail,
-		UserWallet:                  onboarding.UserWallet,
+		UserWallet:                  onboarding.UserWallet.String,
 		RequestedAgentWalletAddress: onboarding.RequestedAgentWalletAddress.String,
 		SourceClient:                onboarding.SourceClient.String,
 		Channel:                     onboarding.Channel.String,

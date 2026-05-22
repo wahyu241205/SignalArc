@@ -31,7 +31,7 @@ type AgentOnboardingSession struct {
 	OnboardingID                string          `json:"onboarding_id"`
 	AgentID                     string          `json:"agent_id"`
 	UserEmail                   string          `json:"user_email"`
-	UserWallet                  string          `json:"user_wallet"`
+	UserWallet                  sql.NullString  `json:"user_wallet"`
 	RequestedAgentWalletAddress sql.NullString  `json:"requested_agent_wallet_address"`
 	SourceClient                sql.NullString  `json:"source_client"`
 	Channel                     sql.NullString  `json:"channel"`
@@ -50,7 +50,7 @@ type CreateAgentOnboardingSessionInput struct {
 	OnboardingID                string
 	AgentID                     string
 	UserEmail                   string
-	UserWallet                  string
+	UserWallet                  sql.NullString
 	RequestedAgentWalletAddress sql.NullString
 	SourceClient                sql.NullString
 	Channel                     sql.NullString

@@ -385,8 +385,7 @@ func TestStartAgentOnboardingMinimalPayload(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
 		"agent_id": "agent_start_1",
-		"user_email": "desi@example.com",
-		"user_wallet": "0x1111111111111111111111111111111111111111"
+		"user_email": "desi@example.com"
 	}`))
 
 	router.ServeHTTP(response, request)
@@ -411,6 +410,9 @@ func TestStartAgentOnboardingMinimalPayload(t *testing.T) {
 	if body.Onboarding.Status != repository.AgentOnboardingStatusPendingOTP {
 		t.Fatalf("expected pending_otp status, got %q", body.Onboarding.Status)
 	}
+	if body.Onboarding.UserWallet != "" {
+		t.Fatalf("expected empty user wallet when omitted, got %q", body.Onboarding.UserWallet)
+	}
 	if body.NextStep != "circle_otp_verification_not_implemented" {
 		t.Fatalf("unexpected next step %q", body.NextStep)
 	}
@@ -424,8 +426,7 @@ func TestStartAgentOnboardingAppliesDefaults(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
 		"agent_id": "agent_start_defaults",
-		"user_email": "desi@example.com",
-		"user_wallet": "0x1111111111111111111111111111111111111111"
+		"user_email": "desi@example.com"
 	}`))
 
 	router.ServeHTTP(response, request)
@@ -451,6 +452,35 @@ func TestStartAgentOnboardingAppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestStartAgentOnboardingPreservesOptionalUserWallet(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_with_wallet",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Onboarding agentOnboardingSessionResponse `json:"onboarding"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Onboarding.UserWallet != "0x1111111111111111111111111111111111111111" {
+		t.Fatalf("unexpected user wallet %q", body.Onboarding.UserWallet)
+	}
+}
+
 func TestStartAgentOnboardingPreservesSourceClientAndChannel(t *testing.T) {
 	sessionRegistry := newTestAgentSessionRegistry()
 	router := chi.NewRouter()
@@ -460,7 +490,6 @@ func TestStartAgentOnboardingPreservesSourceClientAndChannel(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
 		"agent_id": "agent_start_channel",
 		"user_email": "desi@example.com",
-		"user_wallet": "0x1111111111111111111111111111111111111111",
 		"source_client": "chatgpt_custom_action",
 		"channel": "chatgpt"
 	}`))
@@ -500,6 +529,40 @@ func TestStartAgentOnboardingRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
+func TestStartAgentOnboardingRejectsMissingAgentID(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"user_email": "desi@example.com"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+}
+
+func TestStartAgentOnboardingRejectsMissingUserEmail(t *testing.T) {
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_missing_email"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+}
+
 func TestStartAgentOnboardingDoesNotCallExecutor(t *testing.T) {
 	executor := &stubAgentExecutor{}
 	sessionRegistry := newTestAgentSessionRegistry()
@@ -509,8 +572,7 @@ func TestStartAgentOnboardingDoesNotCallExecutor(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
 		"agent_id": "agent_start_no_execute",
-		"user_email": "desi@example.com",
-		"user_wallet": "0x1111111111111111111111111111111111111111"
+		"user_email": "desi@example.com"
 	}`))
 
 	router.ServeHTTP(response, request)
@@ -535,8 +597,7 @@ func TestStartAgentOnboardingDisabledDoesNotCallRunner(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
 		"agent_id": "agent_start_disabled",
-		"user_email": "desi@example.com",
-		"user_wallet": "0x1111111111111111111111111111111111111111"
+		"user_email": "desi@example.com"
 	}`))
 
 	router.ServeHTTP(response, request)
@@ -577,8 +638,7 @@ func TestStartAgentOnboardingEnabledCallsRunner(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
 		"agent_id": "agent_start_enabled",
-		"user_email": "desi@example.com",
-		"user_wallet": "0x1111111111111111111111111111111111111111"
+		"user_email": "desi@example.com"
 	}`))
 
 	router.ServeHTTP(response, request)
@@ -2392,7 +2452,7 @@ func insertTestOnboardingSession(registry *testAgentSessionRegistry, onboardingI
 		OnboardingID:   onboardingID,
 		AgentID:        "agent_verify_test",
 		UserEmail:      "desi@example.com",
-		UserWallet:     "0x1111111111111111111111111111111111111111",
+		UserWallet:     nullableString("0x1111111111111111111111111111111111111111"),
 		Chain:          agent.ChainArcTestnet,
 		WalletProvider: agent.WalletProviderCircleAgentWallet,
 		Status:         repository.AgentOnboardingStatusPendingOTP,
