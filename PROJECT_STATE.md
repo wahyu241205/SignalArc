@@ -522,11 +522,11 @@ Done:
 
 ## Current Last Completed Step
 
-- Local frontend/backend MVP integration fix and usability smoke test completed.
+- ChatGPT Custom GPT external client trigger validated through a temporary ngrok HTTPS tunnel to the host-shell backend on `APP_PORT=4001`, executing `create_market` through the Circle Agent Wallet CLI provider on Arc Testnet.
 
 ## Live AI Agent Transaction MVP
 
-Status: IN PROGRESS - backend Circle Agent Wallet provider trading, payout, cancel, and refund lifecycle actions are validated on Arc Testnet from the host-shell backend runtime; external client trigger, Docker/Cloud Run runtime strategy, production readiness, and mainnet readiness remain pending.
+Status: IN PROGRESS - backend Circle Agent Wallet provider trading, payout, cancel, and refund lifecycle actions are validated on Arc Testnet from the host-shell backend runtime; ChatGPT Custom GPT external client trigger is validated for health, intent preview, confirm, and real `create_market` execution through a temporary ngrok tunnel; Docker/Cloud Run runtime strategy, production readiness, and mainnet readiness remain pending.
 
 Current checkpoint state:
 
@@ -628,23 +628,62 @@ Current checkpoint state:
   - Backend Circle provider `claim_payout` validated with a real Arc Testnet transaction.
   - Backend Circle provider `cancel_market` validated after one failed backend provider attempt on the refund market and a later successful backend-only cancel-only test.
   - Backend Circle provider `claim_refund` validated after manual Circle CLI cancellation of the refund market.
-  - Backend-to-Circle-to-Arc path is proven for create, trade, close, resolve, payout claim, cancel, and refund claim flows on Arc Testnet.
+- Backend-to-Circle-to-Arc path is proven for create, trade, close, resolve, payout claim, cancel, and refund claim flows on Arc Testnet.
+- ChatGPT Custom GPT Action external client trigger evidence:
+  - External client: ChatGPT Custom GPT Action.
+  - Temporary tunnel: ngrok HTTPS URL to local backend.
+  - Backend runtime: host shell on `APP_PORT=4001`.
+  - Execution mode: `circle_agent_wallet_cli`.
+  - Backend public test path: ChatGPT Custom GPT Action -> ngrok HTTPS -> `localhost:4001` SignalArc backend -> Circle Agent Wallet CLI provider -> Arc Testnet.
+  - Local backend health returned 200: `http://127.0.0.1:4001/health` -> `{"status":"ok"}`.
+  - Ngrok public health returned 200: `https://undamaged-commerce-juggling.ngrok-free.dev/health` -> `{"status":"ok"}`.
+  - Custom GPT `getHealth` action returned `{"status":"ok"}`.
+  - Custom GPT Action schema exposed `getHealth`, `createAgentIntent`, `confirmAgentIntent`, and `executeAgentIntent`.
+  - Authentication was set to None only for temporary local tunnel testing. This is not production API authentication.
+  - Initial intent preview and confirm were tested.
+  - One confirm failed due to a typo in a manually copied intent ID. This was a user/operator copy error, not a backend failure.
+  - One later execution attempt failed because `close_timestamp` was already in the past:
+    - `close_timestamp` used: `1779439999`
+    - current timestamp checked later: `1779452713`
+    - probable root cause: `createMarket` reverted due to `closeTimestamp <= block.timestamp`
+    - Circle Agent Wallet session was checked and testnet `tokenStatus` was `VALID`
+    - This is recorded as stale input evidence, not a proven provider failure.
+  - New valid preview used future `close_timestamp`: `1779456313`.
+- Successful ChatGPT Custom GPT external execution:
+  - Intent ID: `agent_intent_7d0bfd385329ba97cb7c1b88ada6f049`
+  - Action: `create_market`
+  - Status: `executed`
+  - Execution mode: `circle_agent_wallet_cli`
+  - Network: `arc_testnet`
+  - Agent factory: `0x69aE770e8b2F96297101FeC4dc123B3801dA7d80`
+  - Agent ID: `agent_desi_001`
+  - Agent wallet: `0x96d5051a005547eba149f71604ccf58ae1a7c950`
+  - Broadcast performed: `true`
+  - Transaction hash: `0x1062e254f8640ffdc2d75d368754e5d698d42cb935bc7bcb113547c7a501aec2`
+  - Created market: `0x6cef2f33F0F2a5e01E885176bAa17709d6A6a299`
+  - Readback:
+    - `market_count == 13`
+    - `is_market == true`
+- Current external client trigger status:
+  - ChatGPT Custom GPT trigger validated for health, create intent preview, confirm intent, and execute `create_market` real Arc Testnet transaction.
+  - WA, Telegram, and Claude triggers are still not tested.
 - No secrets, `.env` files, frontend code, production deployment config, commits, pushes, or deploys were changed.
 
 Current non-claims:
 
-- WhatsApp, Telegram, ChatGPT, and Claude live client triggers have not been tested yet.
+- WhatsApp, Telegram, and Claude live client triggers have not been tested yet.
 - Docker/Cloud Run runtime does not yet include a Circle CLI/session strategy.
 - No production readiness claim.
 - No mainnet claim.
 - No Circle policy limit claim on `ARC-TESTNET`.
+- The temporary ngrok tunnel is not a production API endpoint.
 - Circle CLI command shapes in `project-roadmap/agent-mcp.md` are official-doc/help-discovery shapes only unless accompanied by exact authenticated output and onchain evidence.
 - The phase is not complete.
 
 ## Next Recommended Step
 
 - Design and validate the Docker/Cloud Run Circle CLI/session strategy before treating the backend provider as deployable. Do not capture OTP or store Circle session material in SignalArc.
-- Validate an external client trigger through the existing backend-approved path when explicitly approved.
+- Validate WA, Telegram, or Claude external client triggers through the existing backend-approved path when explicitly approved.
 - Do not add Circle API keys, deployer/user private keys, DNS, live deployment, contract redeploy, frontend execution UI, or mainnet configuration yet.
 
 Do not start unrelated coding before checking:
