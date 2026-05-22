@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/wahyu241205/SignalArc/backend/internal/agent"
@@ -73,6 +74,7 @@ type agentSessionRegistry interface {
 	CreateAgentOnboardingSession(context.Context, repository.CreateAgentOnboardingSessionInput) (repository.AgentOnboardingSession, error)
 	GetAgentOnboardingSessionByOnboardingID(context.Context, string) (repository.AgentOnboardingSession, error)
 	UpdateAgentOnboardingSessionStatus(context.Context, string, string, sql.NullString) (repository.AgentOnboardingSession, error)
+	UpdateAgentOnboardingSessionOTPStart(context.Context, string, string, time.Time) (repository.AgentOnboardingSession, error)
 	CreateAgentSession(context.Context, repository.CreateAgentSessionInput) (repository.AgentSession, error)
 	GetAgentSessionByAgentID(context.Context, string) (repository.AgentSession, error)
 	GetAgentSessionBySessionID(context.Context, string) (repository.AgentSession, error)
@@ -213,10 +215,17 @@ type transactionRequestResponse struct {
 	BroadcastPerformed bool     `json:"broadcast_performed"`
 }
 
-func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegistry agentWalletRegistry, executor agent.Executor, sessionRegistries ...agentSessionRegistry) {
+func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegistry agentWalletRegistry, executor agent.Executor, extras ...any) {
 	var sessionRegistry agentSessionRegistry
-	if len(sessionRegistries) > 0 {
-		sessionRegistry = sessionRegistries[0]
+	var onboardingStarter agent.CircleOnboardingStarter
+	for _, extra := range extras {
+		if registry, ok := extra.(agentSessionRegistry); ok {
+			sessionRegistry = registry
+			continue
+		}
+		if starter, ok := extra.(agent.CircleOnboardingStarter); ok {
+			onboardingStarter = starter
+		}
 	}
 
 	router.Post("/agent/onboarding/start", func(w http.ResponseWriter, r *http.Request) {
@@ -250,6 +259,38 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 		onboarding, err := sessionRegistry.CreateAgentOnboardingSession(r.Context(), input)
 		if err != nil {
 			httpjson.WriteError(w, http.StatusInternalServerError, "agent_onboarding_create_failed", "failed to create agent onboarding session")
+			return
+		}
+
+		otpResult, requestIDHash, attempted, err := onboardingStarter.StartOTP(r.Context(), onboarding.OnboardingID, onboarding.UserEmail)
+		if err != nil && attempted {
+			_, _ = sessionRegistry.UpdateAgentOnboardingSessionStatus(
+				r.Context(),
+				onboarding.OnboardingID,
+				repository.AgentOnboardingStatusFailed,
+				nullableString("Circle Agent Wallet OTP start failed"),
+			)
+			httpjson.WriteError(w, http.StatusBadGateway, "circle_otp_start_failed", "Circle Agent Wallet OTP start failed")
+			return
+		}
+		if err == nil && attempted {
+			updated, updateErr := sessionRegistry.UpdateAgentOnboardingSessionOTPStart(r.Context(), onboarding.OnboardingID, requestIDHash, otpResult.ExpiresAt)
+			if updateErr != nil {
+				_, _ = sessionRegistry.UpdateAgentOnboardingSessionStatus(
+					r.Context(),
+					onboarding.OnboardingID,
+					repository.AgentOnboardingStatusFailed,
+					nullableString("Circle Agent Wallet OTP request metadata update failed"),
+				)
+				httpjson.WriteError(w, http.StatusInternalServerError, "circle_otp_start_update_failed", "failed to store Circle Agent Wallet OTP request metadata")
+				return
+			}
+			httpjson.WriteJSON(w, http.StatusCreated, map[string]any{
+				"onboarding":        newAgentOnboardingSessionResponse(updated),
+				"next_step":         "circle_otp_required",
+				"expires_at":        otpResult.ExpiresAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+				"request_reference": updated.OnboardingID,
+			})
 			return
 		}
 

@@ -143,7 +143,9 @@ Multi-tenant onboarding/session foundation:
 - `agent_onboarding_sessions` stores pending per-user, per-agent onboarding state before final wallet registration.
 - `agent_sessions` stores activated per-agent runtime ownership/session boundaries without Circle session secrets.
 - State is keyed by explicit user email, user wallet, agent id, source client, and channel so external clients do not imply one shared global Circle Agent Wallet session.
-- Circle OTP start, OTP verification, Circle wallet provisioning, and Circle session persistence are not implemented.
+- Circle Agent Wallet OTP start skeleton is added behind `CIRCLE_AGENT_ONBOARDING_OTP_START_ENABLED=false` by default.
+- When enabled for controlled host-shell/dev runtime, the OTP start skeleton uses a Circle onboarding runner abstraction, stores only `circle_request_id_hash` and expiry, and keeps any raw request ID in local process memory only until restart.
+- Circle OTP verification, Circle wallet provisioning completion, and Circle session persistence are not implemented.
 
 No private keys, Circle OTPs, secret tokens, or undocumented Circle session material are stored.
 
@@ -152,10 +154,10 @@ No private keys, Circle OTPs, secret tokens, or undocumented Circle session mate
 `POST /agent/onboarding/start`
 - Creates a pending onboarding session only.
 - Defaults to `chain == ARC-TESTNET`, `wallet_provider == circle_agent_wallet`, and `status == pending_otp`.
-- Returns `circle_otp_verification_not_implemented`.
-- Does not call Circle CLI.
-- Does not send OTP.
-- Does not claim OTP was sent.
+- With OTP start disabled, returns `circle_otp_verification_not_implemented` and does not call Circle CLI.
+- With OTP start explicitly enabled, calls the Circle onboarding runner and returns `circle_otp_required` with expiry and non-secret request reference.
+- Does not expose or store raw OTP or raw request ID.
+- Does not implement OTP verification.
 
 `GET /agent/onboarding/{onboarding_id}`
 - Returns pending onboarding status.

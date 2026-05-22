@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,22 @@ type stubAgentExecutor struct {
 	err    error
 	intent agent.Intent
 	called bool
+}
+
+type stubCircleOnboardingRunner struct {
+	result agent.CircleOTPStartResult
+	err    error
+	email  string
+	called bool
+}
+
+func (runner *stubCircleOnboardingRunner) StartOTP(_ context.Context, email string) (agent.CircleOTPStartResult, error) {
+	runner.called = true
+	runner.email = email
+	if runner.err != nil {
+		return agent.CircleOTPStartResult{}, runner.err
+	}
+	return runner.result, nil
 }
 
 func (executor *stubAgentExecutor) ExecuteCreateMarket(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
@@ -197,6 +214,18 @@ func (registry *testAgentSessionRegistry) UpdateAgentOnboardingSessionStatus(_ c
 	}
 	session.Status = status
 	session.FailureReason = failureReason
+	session.UpdatedAt = session.UpdatedAt.Add(time.Minute)
+	registry.onboardingSessions[onboardingID] = session
+	return session, nil
+}
+
+func (registry *testAgentSessionRegistry) UpdateAgentOnboardingSessionOTPStart(_ context.Context, onboardingID string, requestIDHash string, expiresAt time.Time) (repository.AgentOnboardingSession, error) {
+	session, ok := registry.onboardingSessions[onboardingID]
+	if !ok {
+		return repository.AgentOnboardingSession{}, sql.ErrNoRows
+	}
+	session.CircleRequestIDHash = sql.NullString{String: requestIDHash, Valid: requestIDHash != ""}
+	session.CircleRequestExpiresAt = sql.NullTime{Time: expiresAt, Valid: !expiresAt.IsZero()}
 	session.UpdatedAt = session.UpdatedAt.Add(time.Minute)
 	registry.onboardingSessions[onboardingID] = session
 	return session, nil
@@ -474,6 +503,139 @@ func TestStartAgentOnboardingDoesNotCallExecutor(t *testing.T) {
 	}
 	if executor.called {
 		t.Fatal("executor should not be called during onboarding start")
+	}
+}
+
+func TestStartAgentOnboardingDisabledDoesNotCallRunner(t *testing.T) {
+	runner := &stubCircleOnboardingRunner{}
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry, agent.CircleOnboardingStarter{
+		Enabled: false,
+		Runner:  runner,
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_disabled",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+	if runner.called {
+		t.Fatal("runner should not be called while OTP start is disabled")
+	}
+
+	var body struct {
+		NextStep string `json:"next_step"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.NextStep != "circle_otp_verification_not_implemented" {
+		t.Fatalf("unexpected next step %q", body.NextStep)
+	}
+}
+
+func TestStartAgentOnboardingEnabledCallsRunner(t *testing.T) {
+	expiresAt := time.Date(2026, 5, 22, 2, 10, 0, 0, time.UTC)
+	runner := &stubCircleOnboardingRunner{
+		result: agent.CircleOTPStartResult{
+			RequestID: "circle_request_secret_123",
+			ExpiresAt: expiresAt,
+		},
+	}
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry, agent.CircleOnboardingStarter{
+		Enabled: true,
+		Runner:  runner,
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_enabled",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+	if !runner.called {
+		t.Fatal("expected runner to be called")
+	}
+	if runner.email != "desi@example.com" {
+		t.Fatalf("expected runner email, got %q", runner.email)
+	}
+
+	var body struct {
+		Onboarding       agentOnboardingSessionResponse `json:"onboarding"`
+		NextStep         string                         `json:"next_step"`
+		ExpiresAt        string                         `json:"expires_at"`
+		RequestReference string                         `json:"request_reference"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.NextStep != "circle_otp_required" {
+		t.Fatalf("unexpected next step %q", body.NextStep)
+	}
+	if body.ExpiresAt == "" {
+		t.Fatal("expected expires_at")
+	}
+	if body.RequestReference != body.Onboarding.OnboardingID {
+		t.Fatalf("expected onboarding id request reference, got %q", body.RequestReference)
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) {
+		t.Fatal("response must not expose raw request_id")
+	}
+
+	stored := sessionRegistry.onboardingSessions[body.Onboarding.OnboardingID]
+	if !stored.CircleRequestIDHash.Valid {
+		t.Fatal("expected stored request id hash")
+	}
+	if stored.CircleRequestIDHash.String != agent.HashCircleRequestID("circle_request_secret_123") {
+		t.Fatalf("unexpected stored request hash %q", stored.CircleRequestIDHash.String)
+	}
+	if strings.Contains(stored.CircleRequestIDHash.String, "circle_request_secret_123") {
+		t.Fatal("stored request reference must be hashed")
+	}
+	if !stored.CircleRequestExpiresAt.Valid || !stored.CircleRequestExpiresAt.Time.Equal(expiresAt) {
+		t.Fatalf("unexpected stored expiry %#v", stored.CircleRequestExpiresAt)
+	}
+}
+
+func TestStartAgentOnboardingEnabledFailureIsSanitized(t *testing.T) {
+	runner := &stubCircleOnboardingRunner{err: errors.New("raw request_id circle_request_secret_123 otp B1X-123456")}
+	sessionRegistry := newTestAgentSessionRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, sessionRegistry, agent.CircleOnboardingStarter{
+		Enabled: true,
+		Runner:  runner,
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/start", bytes.NewBufferString(`{
+		"agent_id": "agent_start_failure",
+		"user_email": "desi@example.com",
+		"user_wallet": "0x1111111111111111111111111111111111111111"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadGateway, response.Code, response.Body.String())
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("circle_request_secret_123")) || bytes.Contains(response.Body.Bytes(), []byte("B1X-123456")) {
+		t.Fatalf("response should not expose raw request_id or OTP: %s", response.Body.String())
 	}
 }
 

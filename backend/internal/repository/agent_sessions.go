@@ -200,6 +200,37 @@ func (r *AgentSessionsRepository) UpdateAgentOnboardingSessionStatus(ctx context
 	return session, err
 }
 
+func (r *AgentSessionsRepository) UpdateAgentOnboardingSessionOTPStart(ctx context.Context, onboardingID string, requestIDHash string, expiresAt time.Time) (AgentOnboardingSession, error) {
+	var session AgentOnboardingSession
+	err := r.db.QueryRow(ctx, `
+		UPDATE agent_onboarding_sessions
+		SET circle_request_id_hash = $2,
+			circle_request_expires_at = $3,
+			updated_at = now()
+		WHERE onboarding_id = $1
+		RETURNING
+			id::text,
+			onboarding_id,
+			agent_id,
+			user_email,
+			user_wallet,
+			requested_agent_wallet_address,
+			source_client,
+			channel,
+			chain,
+			wallet_provider,
+			status,
+			circle_request_id_hash,
+			circle_request_expires_at,
+			failure_reason,
+			COALESCE(policy_metadata, '{}'::jsonb),
+			created_at,
+			updated_at
+	`, onboardingID, requestIDHash, expiresAt).Scan(agentOnboardingSessionScanDestinations(&session)...)
+
+	return session, err
+}
+
 func (r *AgentSessionsRepository) CreateAgentSession(ctx context.Context, input CreateAgentSessionInput) (AgentSession, error) {
 	if err := validateCreateAgentSessionInput(input); err != nil {
 		return AgentSession{}, err

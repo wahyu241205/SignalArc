@@ -36,6 +36,15 @@ func NewRouter(db *database.DB) http.Handler {
 		Timeout:      time.Duration(cfg.CircleAgentWalletTimeoutSeconds) * time.Second,
 		AgentFactory: agent.AgentFactoryAddress,
 	})
+	circleOnboardingStarter := agent.CircleOnboardingStarter{
+		Enabled: cfg.CircleAgentOnboardingOTPStartEnabled,
+		Runner: agent.NewCircleCLIOnboardingRunner(agent.CircleCLIOnboardingRunnerConfig{
+			CLIPath: cfg.CircleCLIPath,
+			Chain:   cfg.CircleAgentWalletChain,
+			Timeout: time.Duration(cfg.CircleAgentWalletTimeoutSeconds) * time.Second,
+		}),
+		RequestStore: agent.NewCircleOTPRequestStore(),
+	}
 
 	registerStatusRoutes(router, db)
 	registerArcRoutes(router)
@@ -44,7 +53,7 @@ func NewRouter(db *database.DB) http.Handler {
 	registerPositionRoutes(router, positionsRepository)
 	registerResolutionRoutes(router, resolutionsRepository)
 	registerSettlementRoutes(router, settlementsRepository)
-	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, circleExecutor, agentSessionsRepository)
+	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, circleExecutor, agentSessionsRepository, circleOnboardingStarter)
 
 	return router
 }
