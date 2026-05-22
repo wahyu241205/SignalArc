@@ -233,6 +233,200 @@ func TestRegisterAgentWallet(t *testing.T) {
 	}
 }
 
+func TestRegisterAgentOnboardingMinimalPayload(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/register", bytes.NewBufferString(`{
+		"agent_id": "agent_onboard_1",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"agent_wallet_address": "0x9999999999999999999999999999999999999999"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		AgentWallet agentWalletResponse `json:"agent_wallet"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if body.AgentWallet.AgentID != "agent_onboard_1" {
+		t.Fatalf("expected agent id, got %q", body.AgentWallet.AgentID)
+	}
+	if body.AgentWallet.UserWallet != "0x1111111111111111111111111111111111111111" {
+		t.Fatalf("unexpected user wallet %q", body.AgentWallet.UserWallet)
+	}
+	if body.AgentWallet.AgentWalletAddress != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("unexpected agent wallet address %q", body.AgentWallet.AgentWalletAddress)
+	}
+}
+
+func TestRegisterAgentOnboardingAppliesDefaults(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/register", bytes.NewBufferString(`{
+		"agent_id": "agent_onboard_defaults",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"agent_wallet_address": "0x9999999999999999999999999999999999999999"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		AgentWallet agentWalletResponse `json:"agent_wallet"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if body.AgentWallet.Chain != agent.ChainArcTestnet {
+		t.Fatalf("expected ARC-TESTNET chain, got %q", body.AgentWallet.Chain)
+	}
+	if body.AgentWallet.WalletProvider != agent.WalletProviderCircleAgentWallet {
+		t.Fatalf("expected circle agent wallet provider, got %q", body.AgentWallet.WalletProvider)
+	}
+	if body.AgentWallet.Status != agent.WalletStatusActive {
+		t.Fatalf("expected active status, got %q", body.AgentWallet.Status)
+	}
+	for _, action := range defaultAgentWalletAllowedActions() {
+		if !containsString(body.AgentWallet.AllowedActions, action) {
+			t.Fatalf("expected default action %q in %#v", action, body.AgentWallet.AllowedActions)
+		}
+	}
+	if body.AgentWallet.PolicyMetadata["note"] != "default ARC-TESTNET onboarding policy" {
+		t.Fatalf("unexpected policy metadata %#v", body.AgentWallet.PolicyMetadata)
+	}
+}
+
+func TestRegisterAgentOnboardingPreservesOptionalFields(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/register", bytes.NewBufferString(`{
+		"agent_id": "agent_onboard_optional",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"agent_wallet_address": "0x9999999999999999999999999999999999999999",
+		"user_email": "desi@example.com",
+		"source_client": "chatgpt_custom_action"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		AgentWallet agentWalletResponse `json:"agent_wallet"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if body.AgentWallet.UserEmail != "desi@example.com" {
+		t.Fatalf("unexpected user email %q", body.AgentWallet.UserEmail)
+	}
+	if body.AgentWallet.SourceClient != "chatgpt_custom_action" {
+		t.Fatalf("unexpected source client %q", body.AgentWallet.SourceClient)
+	}
+}
+
+func TestRegisterAgentOnboardingRejectsMissingRequiredFields(t *testing.T) {
+	assertAgentOnboardingRegistrationFails(t, `{}`)
+}
+
+func TestRegisterAgentOnboardingRejectsUserWalletReuse(t *testing.T) {
+	assertAgentOnboardingRegistrationFails(t, `{
+		"agent_id": "agent_onboard_bad",
+		"user_wallet": "0x9999999999999999999999999999999999999999",
+		"agent_wallet_address": "0x9999999999999999999999999999999999999999"
+	}`)
+}
+
+func TestRegisterAgentOnboardingDoesNotCallExecutor(t *testing.T) {
+	executor := &stubAgentExecutor{}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), executor)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/register", bytes.NewBufferString(`{
+		"agent_id": "agent_onboard_no_execute",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"agent_wallet_address": "0x9999999999999999999999999999999999999999"
+	}`))
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+	if executor.called {
+		t.Fatal("executor should not be called during onboarding")
+	}
+}
+
+func TestAgentOnboardingDoesNotBreakAgentWalletRegistration(t *testing.T) {
+	registry := newTestAgentWalletRegistry()
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), registry, nil)
+
+	onboardingResponse := httptest.NewRecorder()
+	onboardingRequest := httptest.NewRequest(http.MethodPost, "/agent/onboarding/register", bytes.NewBufferString(`{
+		"agent_id": "agent_onboard_then_wallet",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"agent_wallet_address": "0x9999999999999999999999999999999999999999"
+	}`))
+	router.ServeHTTP(onboardingResponse, onboardingRequest)
+	if onboardingResponse.Code != http.StatusCreated {
+		t.Fatalf("expected onboarding status %d, got %d: %s", http.StatusCreated, onboardingResponse.Code, onboardingResponse.Body.String())
+	}
+
+	walletResponse := httptest.NewRecorder()
+	walletRequest := httptest.NewRequest(http.MethodPost, "/agent/wallets", bytes.NewBufferString(`{
+		"agent_id": "agent_onboard_then_wallet",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"agent_wallet_address": "0x9999999999999999999999999999999999999999",
+		"wallet_provider": "circle_agent_wallet",
+		"chain": "ARC-TESTNET",
+		"allowed_actions": ["create_market", "buy_yes"],
+		"status": "active",
+		"policy_metadata": {
+			"source": "explicit registry update"
+		}
+	}`))
+	router.ServeHTTP(walletResponse, walletRequest)
+	if walletResponse.Code != http.StatusCreated {
+		t.Fatalf("expected wallet registration status %d, got %d: %s", http.StatusCreated, walletResponse.Code, walletResponse.Body.String())
+	}
+
+	var body struct {
+		AgentWallet agentWalletResponse `json:"agent_wallet"`
+	}
+	if err := json.NewDecoder(walletResponse.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !containsString(body.AgentWallet.AllowedActions, agent.ActionBuyYes) {
+		t.Fatalf("expected explicit wallet registration action, got %#v", body.AgentWallet.AllowedActions)
+	}
+	if containsString(body.AgentWallet.AllowedActions, agent.ActionClaimRefund) {
+		t.Fatalf("expected explicit /agent/wallets action set to be preserved, got %#v", body.AgentWallet.AllowedActions)
+	}
+}
+
 func TestGetAgentWalletByAgentID(t *testing.T) {
 	registry := newTestAgentWalletRegistry()
 	registerTestAgentWallet(t, registry, agent.ActionCreateMarket, agent.ActionBuyYes)
@@ -1404,6 +1598,21 @@ func assertAgentWalletRegistrationFails(t *testing.T, payload string) {
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/wallets", bytes.NewBufferString(payload))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+}
+
+func assertAgentOnboardingRegistrationFails(t *testing.T, payload string) {
+	t.Helper()
+
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/onboarding/register", bytes.NewBufferString(payload))
 	router.ServeHTTP(response, request)
 
 	if response.Code != http.StatusBadRequest {

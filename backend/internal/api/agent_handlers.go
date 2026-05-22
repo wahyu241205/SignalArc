@@ -45,6 +45,14 @@ type registerAgentWalletRequest struct {
 	SourceClient       string            `json:"source_client"`
 }
 
+type registerAgentOnboardingRequest struct {
+	AgentID            string `json:"agent_id"`
+	UserWallet         string `json:"user_wallet"`
+	AgentWalletAddress string `json:"agent_wallet_address"`
+	UserEmail          string `json:"user_email"`
+	SourceClient       string `json:"source_client"`
+}
+
 type agentWalletRegistry interface {
 	RegisterAgentWallet(context.Context, repository.UpsertAgentWalletInput) (repository.AgentWallet, error)
 	GetAgentWalletByAgentID(context.Context, string) (repository.AgentWallet, error)
@@ -154,6 +162,36 @@ type transactionRequestResponse struct {
 }
 
 func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegistry agentWalletRegistry, executor agent.Executor) {
+	router.Post("/agent/onboarding/register", func(w http.ResponseWriter, r *http.Request) {
+		var request registerAgentOnboardingRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+			return
+		}
+
+		input, validationErrors := newAgentOnboardingRegistrationInput(request)
+		if len(validationErrors) > 0 {
+			httpjson.WriteJSON(w, http.StatusBadRequest, map[string]any{
+				"error": map[string]any{
+					"code":    "agent_wallet_invalid",
+					"message": "agent wallet registration validation failed",
+					"details": validationErrors,
+				},
+			})
+			return
+		}
+
+		wallet, err := walletRegistry.RegisterAgentWallet(r.Context(), input)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_register_failed", "failed to register agent wallet")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusCreated, map[string]any{
+			"agent_wallet": newAgentWalletResponse(wallet),
+		})
+	})
+
 	router.Post("/agent/wallets", func(w http.ResponseWriter, r *http.Request) {
 		var request registerAgentWalletRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -432,6 +470,27 @@ func isBackendExecutableAgentAction(action string) bool {
 	}
 }
 
+func newAgentOnboardingRegistrationInput(request registerAgentOnboardingRequest) (repository.UpsertAgentWalletInput, []string) {
+	policyMetadata, _ := json.Marshal(map[string]string{
+		"note": "default ARC-TESTNET onboarding policy",
+	})
+	input := repository.UpsertAgentWalletInput{
+		AgentID:            strings.TrimSpace(request.AgentID),
+		UserWallet:         strings.TrimSpace(request.UserWallet),
+		UserEmail:          nullableString(request.UserEmail),
+		AgentWalletAddress: strings.TrimSpace(request.AgentWalletAddress),
+		WalletProvider:     agent.WalletProviderCircleAgentWallet,
+		Chain:              agent.ChainArcTestnet,
+		Status:             agent.WalletStatusActive,
+		AllowedActions:     defaultAgentWalletAllowedActions(),
+		PolicyMetadata:     policyMetadata,
+		SourceClient:       nullableString(request.SourceClient),
+	}
+
+	errors := validateAgentWalletRegistrationInput(input)
+	return input, errors
+}
+
 func newAgentWalletRegistrationInput(request registerAgentWalletRequest) (repository.UpsertAgentWalletInput, []string) {
 	input := repository.UpsertAgentWalletInput{
 		AgentID:            strings.TrimSpace(request.AgentID),
@@ -458,6 +517,19 @@ func newAgentWalletRegistrationInput(request registerAgentWalletRequest) (reposi
 
 	errors := validateAgentWalletRegistrationInput(input)
 	return input, errors
+}
+
+func defaultAgentWalletAllowedActions() []string {
+	return []string{
+		agent.ActionCreateMarket,
+		agent.ActionBuyYes,
+		agent.ActionBuyNo,
+		agent.ActionCloseMarket,
+		agent.ActionResolveMarket,
+		agent.ActionClaimPayout,
+		agent.ActionCancelMarket,
+		agent.ActionClaimRefund,
+	}
 }
 
 func validateAgentWalletRegistrationInput(input repository.UpsertAgentWalletInput) []string {
