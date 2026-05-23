@@ -907,3 +907,22 @@ Validation:
 - `go test ./...` passed.
 - `go vet ./...` passed.
 - `gofmt` clean on changed Go files.
+
+## Backend runtime hardening — Circle CLI Node engine
+
+Problem:
+- Cloud Build for image tag `948ca29` succeeded, but npm emitted `EBADENGINE` warnings.
+- `@circle-fin/cli@0.0.3` requires Node `>=20.18.2`.
+- The previous runtime image installed Node `v20.15.1` from `alpine:3.20`.
+- Because Circle CLI is a backend runtime dependency for Agent Wallet balance/execute paths, this mismatch is not acceptable as a long-term baseline.
+
+Completed:
+- Updated backend runtime Docker stage to use pinned `node:20.18.2-alpine3.20`.
+- Removed Alpine `nodejs`/`npm` package install from the runtime stage.
+- Kept `ca-certificates` and global `@circle-fin/cli` install.
+- No backend Go logic, frontend, OpenAPI, docs, contracts, migrations, or database behavior changed.
+
+Validation required before deploy:
+- Build backend image again.
+- Confirm the previous `EBADENGINE` warning is gone.
+- Deploy only the new image if build succeeds.

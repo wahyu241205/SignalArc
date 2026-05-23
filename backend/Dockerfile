@@ -19,15 +19,15 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /signalarc-api ./cmd/api
 
-FROM alpine:3.20
+FROM node:20.18.2-alpine3.20
 
 # Runtime dependencies:
 # - ca-certificates: required for outbound HTTPS calls
-# - nodejs, npm: required to install and run the global Circle CLI
+# - node/npm are provided by the pinned Node base image.
+#   Keep Node >=20.18.2 because @circle-fin/cli@0.0.3 declares that
+#   engine requirement and Circle CLI is a backend runtime dependency.
 RUN apk add --no-cache \
         ca-certificates \
-        nodejs \
-        npm \
     && npm install -g @circle-fin/cli \
     && npm cache clean --force
 
