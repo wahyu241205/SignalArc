@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://undamaged-commerce-juggling.ngrok-free.dev"
+      "url": "https://api.signalarc.fun"
     }
   ],
   "paths": {
