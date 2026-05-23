@@ -926,3 +926,33 @@ Validation required before deploy:
 - Build backend image again.
 - Confirm the previous `EBADENGINE` warning is gone.
 - Deploy only the new image if build succeeds.
+
+## Custom GPT Actions schema compatibility fix
+
+Problem:
+- Backend and Cloud Run were healthy.
+- `curl https://api.signalarc.fun/health` returned HTTP 200 with `{"status":"ok"}`.
+- A minimal Custom GPT Action schema containing only `GET /health` worked.
+- The full SignalArc OpenAPI schema failed in GPT Actions with `ClientResponseError` and `Failed to Parse JSON`.
+- Cloud Run logs showed that failing full-schema Action calls did not reach the backend.
+- Root cause was therefore schema compatibility with GPT Actions parser/runtime, not backend, Cloud Run, custom domain, or deploy.
+
+Completed:
+- Updated `project-roadmap/signalarc-custom-gpt-openapi.json` for GPT Actions compatibility.
+- Changed OpenAPI version from `3.1.0` to `3.0.3`.
+- Removed JSON Schema / OpenAPI 3.1 type arrays such as `["string", "null"]`.
+- Replaced nullable-style fields with plain string schemas where nullable behavior is not required for Action routing.
+- Replaced empty array item schema `{}` with explicit object item schema.
+- Replaced schema-level `examples` with OpenAPI 3.0-compatible `example`.
+- Preserved all 14 operationIds and kept server URL as `https://api.signalarc.fun`.
+
+Validation:
+- JSON parses successfully with Python.
+- All 14 operationIds are present and unique.
+- No `type` arrays remain.
+- No empty `items` schemas remain.
+- No `oneOf`, `anyOf`, or `allOf` remain.
+
+Important limitation:
+- Exact GPT Actions parser feature support is unknown / not documented.
+- This fix intentionally uses conservative OpenAPI 3.0.3-compatible schema constructs.
