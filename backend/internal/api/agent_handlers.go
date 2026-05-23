@@ -92,6 +92,15 @@ type agentWalletBalanceResponse struct {
 	Balances           []any  `json:"balances"`
 }
 
+type agentWalletFaucetResponse struct {
+	AgentID            string `json:"agent_id"`
+	AgentWalletAddress string `json:"agent_wallet_address"`
+	Chain              string `json:"chain"`
+	Token              string `json:"token"`
+	Status             string `json:"status"`
+	Result             any    `json:"result"`
+}
+
 type agentWalletResponse struct {
 	ID                 string            `json:"id"`
 	AgentID            string            `json:"agent_id"`
@@ -231,6 +240,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 	var sessionRegistry agentSessionRegistry
 	var onboardingStarter agent.CircleOnboardingStarter
 	var walletResolver agent.CircleWalletResolver
+	var faucetRunner agent.CircleAgentWalletFaucet
 	for _, extra := range extras {
 		if registry, ok := extra.(agentSessionRegistry); ok {
 			sessionRegistry = registry
@@ -242,6 +252,10 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 		}
 		if resolver, ok := extra.(agent.CircleWalletResolver); ok {
 			walletResolver = resolver
+			continue
+		}
+		if runner, ok := extra.(agent.CircleAgentWalletFaucet); ok {
+			faucetRunner = runner
 		}
 	}
 
@@ -588,6 +602,60 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 				Chain:              wallet.Chain,
 				Balances:           balances.Balances,
 			},
+		})
+	})
+
+	router.Post("/agent/wallets/{agent_id}/faucet", func(w http.ResponseWriter, r *http.Request) {
+		if faucetRunner == nil {
+			httpjson.WriteError(w, http.StatusNotImplemented, "circle_agent_wallet_faucet_not_configured", "Circle Agent Wallet faucet is not configured")
+			return
+		}
+		wallet, err := walletRegistry.GetAgentWalletByAgentID(r.Context(), chi.URLParam(r, "agent_id"))
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_wallet_not_found", "agent wallet not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_get_failed", "failed to get agent wallet")
+			return
+		}
+		if wallet.Status != agent.WalletStatusActive {
+			httpjson.WriteError(w, http.StatusConflict, "agent_wallet_status_invalid", "agent wallet is not active")
+			return
+		}
+		if wallet.Chain != agent.ChainArcTestnet {
+			httpjson.WriteError(w, http.StatusConflict, "agent_wallet_chain_invalid", "agent wallet chain is not ARC-TESTNET")
+			return
+		}
+
+		result, err := faucetRunner.RequestFaucet(r.Context(), wallet.AgentWalletAddress)
+		if err != nil {
+			if errors.Is(err, agent.ErrCircleAgentWalletFaucetNotConfigured) {
+				httpjson.WriteError(w, http.StatusNotImplemented, "circle_agent_wallet_faucet_not_configured", "Circle Agent Wallet faucet is not configured")
+				return
+			}
+			httpjson.WriteError(w, http.StatusBadGateway, "circle_agent_wallet_faucet_failed", "Circle Agent Wallet faucet request failed")
+			return
+		}
+
+		response := agentWalletFaucetResponse{
+			AgentID:            wallet.AgentID,
+			AgentWalletAddress: wallet.AgentWalletAddress,
+			Chain:              wallet.Chain,
+			Token:              agent.FaucetTokenUSDC,
+			Status:             agent.FaucetStatusRequested,
+		}
+		switch {
+		case result.JSON != nil:
+			response.Result = result.JSON
+		case result.Message != "":
+			response.Result = map[string]any{"message": result.Message}
+		default:
+			response.Result = map[string]any{}
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"agent_wallet_faucet": response,
 		})
 	})
 

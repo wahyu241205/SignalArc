@@ -14,6 +14,7 @@ type Config struct {
 	DatabaseURL                          string
 	CircleAgentWalletExecutionEnabled    bool
 	CircleAgentOnboardingOTPStartEnabled bool
+	CircleAgentWalletFaucetEnabled       bool
 	CircleCLIPath                        string
 	CircleAgentWalletChain               string
 	CircleAgentWalletTimeoutSeconds      int
@@ -28,6 +29,7 @@ func Load() Config {
 		DatabaseURL:                          os.Getenv("DATABASE_URL"),
 		CircleAgentWalletExecutionEnabled:    parseBool(os.Getenv("CIRCLE_AGENT_WALLET_EXECUTION_ENABLED")),
 		CircleAgentOnboardingOTPStartEnabled: parseBool(os.Getenv("CIRCLE_AGENT_ONBOARDING_OTP_START_ENABLED")),
+		CircleAgentWalletFaucetEnabled:       parseBool(os.Getenv("CIRCLE_AGENT_WALLET_FAUCET_ENABLED")),
 		CircleCLIPath:                        os.Getenv("CIRCLE_CLI_PATH"),
 		CircleAgentWalletChain:               os.Getenv("CIRCLE_AGENT_WALLET_CHAIN"),
 		CircleAgentWalletTimeoutSeconds:      parseInt(os.Getenv("CIRCLE_AGENT_WALLET_TIMEOUT_SECONDS"), 120),

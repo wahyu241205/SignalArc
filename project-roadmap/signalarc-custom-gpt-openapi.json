@@ -346,6 +346,67 @@
         }
       }
     },
+    "/agent/wallets/{agent_id}/faucet": {
+      "post": {
+        "operationId": "requestAgentWalletFaucet",
+        "summary": "Request ARC-TESTNET faucet funding for an active SignalArc agent wallet",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Faucet request was forwarded to the Circle CLI testnet faucet for the registered agent wallet address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agent_wallet_faucet": { "$ref": "#/components/schemas/AgentWalletFaucet" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent wallet not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "Agent wallet is not active or is not on ARC-TESTNET",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "501": {
+            "description": "Circle Agent Wallet faucet helper is not configured in this runtime",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "502": {
+            "description": "Circle Agent Wallet faucet request failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/agent/intents": {
       "post": {
         "operationId": "createAgentIntent",
@@ -680,6 +741,17 @@
             "type": "array",
             "items": {}
           }
+        }
+      },
+      "AgentWalletFaucet": {
+        "type": "object",
+        "properties": {
+          "agent_id": { "type": "string" },
+          "agent_wallet_address": { "type": "string" },
+          "chain": { "type": "string" },
+          "token": { "type": "string" },
+          "status": { "type": "string" },
+          "result": { "type": "object" }
         }
       },
       "AgentIntent": {

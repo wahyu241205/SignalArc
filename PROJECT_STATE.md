@@ -765,6 +765,50 @@ Not done:
 - Production deploy of the updated image to Cloud Run was not performed in this step.
 - Circle CLI session/login persistence inside Cloud Run is still unresolved.
 
+## ARC-TESTNET Faucet Helper Endpoint
+
+Status: COMPLETE.
+
+Done:
+
+- Added ARC-TESTNET faucet helper endpoint for active registered agent wallets at `POST /agent/wallets/{agent_id}/faucet`.
+- Endpoint uses the registered `agent_wallet_address` from the SignalArc database only and does not accept any arbitrary recipient address from the request body.
+- Endpoint requires the registered wallet to exist (`404 agent_wallet_not_found`), to be `active` (`409 agent_wallet_status_invalid`), and to be on `ARC-TESTNET` (`409 agent_wallet_chain_invalid`).
+- Endpoint calls only the documented Circle CLI testnet faucet command shape `circle wallet fund --address <registered_agent_wallet_address> --chain ARC-TESTNET --token usdc --output json`.
+- Endpoint never passes `--amount`, `--method`, `--open`, `--export`, `transfer`, `swap`, `execute`, or any mainnet funding option, and does not transfer, swap, execute contracts, create markets, or use mainnet funding.
+- Faucet runner is disabled by default behind `CIRCLE_AGENT_WALLET_FAUCET_ENABLED=false`. When disabled or not wired, the endpoint returns `501 circle_agent_wallet_faucet_not_configured`.
+- Provider failures return `502 circle_agent_wallet_faucet_failed` with sanitized API responses; CLI/runner output is never echoed back to clients and credential paths, tokens, OTP-like values, request IDs, session material, and emails are redacted from server-side diagnostics.
+- Output parser reuses the existing warning-prefixed JSON extraction helper used by wallet list/balance, so Node deprecation warnings before JSON still parse cleanly.
+- Successful JSON CLI output is returned under `result`. Successful text-only CLI output is returned under `result.message` after sanitization.
+- Updated Custom GPT OpenAPI schema `project-roadmap/signalarc-custom-gpt-openapi.json` with the `requestAgentWalletFaucet` action, including `404`, `409`, `501`, and `502` error responses; server URL remains `https://api.signalarc.fun` and `/agent/onboarding/register` was not re-added.
+- Validation: `go test ./...` passed.
+
+Not done:
+
+- Production deploy of the updated image to Cloud Run was not performed in this step.
+- No funding, transfer, swap, contract execution, market creation, mainnet funding, login/logout, or session persistence was added.
+
+## Public Documentation Refresh For Live Architecture And Faucet
+
+Status: COMPLETE.
+
+Done:
+
+- Updated `docs/index.mdx`, `docs/API.md`, `docs/AGENT_API.md`, `docs/DEPLOYMENT_PLAN.md`, `docs/ARCHITECTURE.md`, and `docs/GRANT_READINESS.md` to describe the live architecture: `https://signalarc.fun` on Vercel for the frontend, `https://api.signalarc.fun` on GCP Cloud Run service `signalarc-backend-api` for the backend, GCP Cloud SQL PostgreSQL migrated to version 18, and the Cloud Run image bundling Node/npm and the Circle CLI (`@circle-fin/cli`) on `PATH`.
+- Documented the agent flow `onboarding start -> OTP verify -> active session -> wallet -> balance -> faucet -> create intent -> confirm intent -> execute intent` in the agent API reference.
+- Documented the new `POST /agent/wallets/{agent_id}/faucet` endpoint, response shape, failure codes (`404 agent_wallet_not_found`, `409 agent_wallet_status_invalid`, `409 agent_wallet_chain_invalid`, `501 circle_agent_wallet_faucet_not_configured`, `502 circle_agent_wallet_faucet_failed`), token-fixed-to-USDC behavior, ARC-TESTNET-only behavior, and that the endpoint never accepts arbitrary recipient addresses, transfers, swaps, contract executions, market creations, or mainnet funding.
+- Added a judge/user testing guide that walks through opening the SignalArc GPT Agent, connecting an account, providing email, entering OTP, checking wallet, checking balance, requesting the faucet, creating a draft market intent, confirming, and executing only after explicit approval.
+- Documented the maintainer-only OpenAPI import URL `https://raw.githubusercontent.com/wahyu241205/SignalArc/main/project-roadmap/signalarc-custom-gpt-openapi.json` and clarified that judges/users do not need to import it because the published GPT Agent is already wired to https://api.signalarc.fun.
+- Refreshed the docs status table to show available capabilities (health, onboarding, OTP verify, session, wallet, balance, faucet, market intent lifecycle) and explicit out-of-scope capabilities (arbitrary transfer, withdraw/deposit, logout/session management, mainnet funding).
+- ngrok references in docs are now explicitly marked as local development only.
+- `docs/docs.json` navigation was reviewed; no structural change was required because API and AGENT_API are already linked.
+- Validation: `grep -R "ngrok-free\\|undamaged-commerce\\|signalarc-backend-973633221696\\|localhost:4001" docs project-roadmap/signalarc-custom-gpt-openapi.json` returned no matches.
+
+Not done:
+
+- No backend, frontend, or contract logic was changed.
+- No commits were created and nothing was pushed.
+
 ## Next Recommended Step
 
 - Design and validate the Docker/Cloud Run Circle CLI/session strategy before treating the backend provider as deployable. Do not capture OTP or store Circle session material in SignalArc.

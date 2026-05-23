@@ -2,74 +2,104 @@
 
 SignalArc is positioned as Arc-native prediction market infrastructure for USDC-settled event markets, market intelligence, resolver workflow, and agent-readable APIs.
 
-This document separates implemented work from testnet prototype behavior, planned work, and unknown / not documented behavior. It does not claim grant readiness is complete.
+This document separates implemented and live work from testnet prototype behavior, planned work, and unknown / not documented behavior. It documents current readiness honestly; it does not claim full grant submission completeness.
+
+## Live Surfaces
+
+| Surface | URL | Status |
+| --- | --- | --- |
+| Frontend | https://signalarc.fun | Live on Vercel. |
+| Backend API | https://api.signalarc.fun | Live on GCP Cloud Run service `signalarc-backend-api`. |
+| Production database | GCP Cloud SQL PostgreSQL, schema version 18. | Live. |
+| Custom GPT | Preconfigured to call https://api.signalarc.fun. | Live. |
+| Docs | https://docs.signalarc.fun | Documentation deployment target. |
+
+ngrok URLs are local development conveniences only and are never used by judges or end users.
 
 ## Implemented
 
 | Area | Current state |
 | --- | --- |
-| Frontend MVP | Local Next.js application exists and runs manually. |
-| Backend API | Go/Chi API implements health, readiness, schema validation, markets, trade intents, positions, resolutions, settlements, agent markets, and Arc contract metadata. |
+| Frontend MVP | Live Next.js app at https://signalarc.fun. Local development still supported via `pnpm dev:web`. |
+| Backend API | Live Go/Chi API at https://api.signalarc.fun implementing health, readiness, schema validation, markets, trade intents, positions, resolutions, settlements, agent markets, and Arc contract metadata. |
+| Agent surface | Live endpoints for onboarding start, OTP verify, onboarding lookup, session, wallet, balance, ARC-TESTNET faucet, and market intent preview/confirm/execute. |
+| Custom GPT | Preconfigured against the live API. End users and judges do not need to import OpenAPI manually. |
 | Local backend stack | Docker Compose runs PostgreSQL and backend. |
-| Database schema | Local schema is complete through migration version 13 according to project state. |
-| Agent-readable API | `GET /agent/markets` is implemented. |
-| Wallet frontend | Current working tree includes RainbowKit/Wagmi/Viem external wallet UI. |
-| Arc Testnet contract | `SignalArcMarket` prototype is deployed on Arc Testnet. |
+| Database schema | Production schema migrated to version 18 on GCP Cloud SQL. |
+| Backend container | Includes Node/npm and the global Circle CLI (`@circle-fin/cli`) so ARC-TESTNET agent flows run inside the container image. |
+| Wallet frontend | RainbowKit/Wagmi/Viem external wallet UI. |
+| Arc Testnet contracts | `SignalArcMarket`, `SignalArcAgentMarket`, and `SignalArcAgentMarketFactory` deployed on Arc Testnet. |
+
+## Available Capabilities
+
+| Capability | Status |
+| --- | --- |
+| Health | Available. |
+| Onboarding | Available. |
+| OTP verify | Available. |
+| Session | Available. |
+| Wallet | Available. |
+| Balance | Available. |
+| ARC-TESTNET faucet | Available. |
+| Market intent lifecycle (preview / confirm / execute) | Available. |
+
+## Out of Scope
+
+| Capability | Status |
+| --- | --- |
+| Arbitrary transfer | Not available. Out of scope. |
+| Withdraw / deposit | Not available. Out of scope. |
+| Logout / agent session management | Not available. Out of scope. |
+| Mainnet funding | Not available. Out of scope. |
+| Arc mainnet deployment | Not deployed. Out of scope. |
+| API key enforcement, paid access, autonomous trading, production SLA | Not implemented. |
 
 ## Testnet Prototype
 
 | Area | Current state |
 | --- | --- |
-| Contract | Arc Testnet `SignalArcMarket` prototype at `0xf4ccc11A9e24fb996679F946C23C04AFd2797F26`. |
-| Browser transaction flow | Current frontend working tree includes Arc Testnet USDC approval and `openPosition`. |
-| Explorer links | Current frontend generates Arcscan transaction links. |
-| Settlement | Prototype contract supports claim/refund paths in Solidity, but production settlement is not approved. |
+| Contracts | Arc Testnet `SignalArcMarket`, `SignalArcAgentMarket`, and `SignalArcAgentMarketFactory` prototypes. |
+| Browser transaction flow | Frontend includes Arc Testnet USDC approval and `openPosition`. |
+| Agent transaction flow | Backend Circle Agent Wallet provider handles agent-driven create/buy/close/resolve/claim/cancel/refund on Arc Testnet through the Circle CLI. |
+| Explorer links | Frontend generates Arcscan transaction links. |
+| Settlement | Prototype contracts support claim/refund paths in Solidity, but production settlement is not approved. |
 
 ## Circle Relevance
 
 | Area | Status |
 | --- | --- |
-| USDC collateral | Prototype contract uses a USDC-like ERC20 collateral model and Arc Testnet USDC interface address. |
-| Circle Developer Platform | Planned/possible only. Not implemented in the current repository. |
-| Circle Agents | Planned/possible only. Not implemented in the current repository. |
+| USDC collateral | Prototype contracts use a USDC-like ERC20 collateral model and the Arc Testnet USDC interface address. |
+| Circle Agent Wallet | Live in the agent flow on Arc Testnet through the Circle CLI bundled in the backend container. |
+| Circle Developer Platform | Used for ARC-TESTNET agent wallet operations only. |
+| Circle Agents | Used through the Custom GPT preconfigured to call the live API. |
 | Circle API keys | Must not be committed or exposed. |
 
-## Planned
+## Grant Submission Surface
 
-- Production frontend deployment at `https://signalarc.fun`.
-- Production API deployment at `https://api.signalarc.fun`.
-- Documentation hosting at `https://docs.signalarc.fun`.
-- Production database.
-- Production CORS configuration.
-- API keys and scoped agent access.
-- Rate limits.
-- Expanded agent-readable intelligence endpoints.
-- Circle integration only after official documentation review and explicit implementation approval.
+For grant judges, the recommended testing surface is:
 
-## Grant Gaps
+1. The published SignalArc GPT Agent (preconfigured to https://api.signalarc.fun).
+2. The live frontend at https://signalarc.fun.
+3. The live API at https://api.signalarc.fun.
 
-- Live app URL.
-- Verified deployed frontend.
-- Verified deployed backend API.
-- Configured DNS.
+Judges do not need to import OpenAPI manually. The end-to-end testing flow is documented in [Agent API](./AGENT_API.md#judge--user-testing-guide).
+
+## Remaining Gaps
+
 - Demo video.
-- Product README and technical README completeness.
-- Production deployment plan execution.
-- Risk/compliance disclaimer.
-- Circle integration depth.
-- Production monitoring/logging baseline.
-- Clear live demo flow.
-- Any required security review or audit status.
+- Product README and technical README completeness for grant submission packaging.
+- Production monitoring/logging baseline documentation.
+- Risk/compliance disclaimer for grant submission.
+- Audit status (none claimed).
+- Deeper Circle integration features beyond ARC-TESTNET agent flows.
 
 ## Unknown / Not Documented
 
 - Arc mainnet deployment path for SignalArc: unknown / not documented in this repository.
 - Production custody model: unknown / not documented.
 - Production settlement approval: unknown / not documented.
-- Circle SDK/API behavior inside SignalArc: not implemented.
-- Circle Agents behavior inside SignalArc: not implemented.
 - Compliance approval: unknown / not documented.
 
 ## Readiness Assessment
 
-SignalArc has a credible local MVP, an Arc Testnet contract prototype, and a clear API-first product direction. It is not yet grant-submission complete because live deployment, DNS, demo materials, production documentation, and deeper Circle integration evidence are still gaps.
+SignalArc has a live frontend, a live backend, a live ARC-TESTNET agent flow accessible through a published Custom GPT, an Arc Testnet contract prototype, and a clear API-first product direction. Remaining work is largely grant submission packaging and production monitoring/audit material, not core product implementation.
