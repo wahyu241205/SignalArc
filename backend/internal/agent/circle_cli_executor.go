@@ -21,9 +21,18 @@ type ExecCommandRunner struct{}
 
 func (runner ExecCommandRunner) Run(ctx context.Context, name string, args []string) ([]byte, error) {
 	command := exec.CommandContext(ctx, name, args...)
-	output, err := command.Output()
+	// CombinedOutput captures both stdout and stderr so AUTH_REQUIRED markers
+	// emitted on stderr can be classified by the caller. The classified error
+	// surfaced to API callers stays generic; raw output is only used to set
+	// a sanitized error class on the wrapped CircleCLIError.
+	output, err := command.CombinedOutput()
 	if err != nil {
-		return nil, errors.New("Circle CLI command failed")
+		return output, &CircleCLIError{
+			Operation:        "circle_cli_exec",
+			ErrorClass:       ClassifyCircleErrorOutput(string(output), err.Error()),
+			SanitizedSummary: "Circle CLI command failed",
+			Err:              errors.New("Circle CLI command failed"),
+		}
 	}
 	return output, nil
 }
@@ -479,10 +488,28 @@ func (executor *CircleCLIExecutor) run(parent context.Context, args []string) ([
 
 	output, err := executor.cfg.CommandRunner.Run(ctx, executor.cfg.CLIPath, args)
 	if err != nil {
-		return nil, errors.New("Circle CLI command failed")
+		// Preserve the classified *CircleCLIError when the underlying
+		// runner already produced one; otherwise wrap the generic error
+		// with an unknown error class so callers can errors.As() it for
+		// structured logging without leaking raw CLI output.
+		var cliErr *CircleCLIError
+		if errors.As(err, &cliErr) {
+			return nil, cliErr
+		}
+		return nil, &CircleCLIError{
+			Operation:        "circle_cli_exec",
+			ErrorClass:       CircleErrorClassUnknown,
+			SanitizedSummary: "Circle CLI command failed",
+			Err:              errors.New("Circle CLI command failed"),
+		}
 	}
 	if len(output) == 0 {
-		return nil, errors.New("Circle CLI command returned empty output")
+		return nil, &CircleCLIError{
+			Operation:        "circle_cli_exec",
+			ErrorClass:       CircleErrorClassUnknown,
+			SanitizedSummary: "Circle CLI command returned empty output",
+			Err:              errors.New("Circle CLI command returned empty output"),
+		}
 	}
 	return output, nil
 }

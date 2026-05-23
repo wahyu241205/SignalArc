@@ -17,7 +17,54 @@ var (
 	ErrCircleAgentWalletResolutionAmbiguous = errors.New("Circle Agent Wallet resolution ambiguous")
 	ErrCircleAgentWalletResolutionFailed    = errors.New("Circle Agent Wallet resolution failed")
 	ErrCircleAgentWalletBalanceFailed       = errors.New("Circle Agent Wallet balance lookup failed")
+	// ErrCircleCLIAuthRequired is a classification sentinel returned (joined
+	// alongside the existing public sentinels) when the Circle CLI command
+	// output indicates the local CLI agent session is missing or expired.
+	// Public error codes returned by HTTP handlers are intentionally not
+	// changed; this sentinel is used only by handlers that want to log a
+	// structured error_class or surface a non-misleading liveness status.
+	ErrCircleCLIAuthRequired = errors.New("Circle CLI agent session not available")
 )
+
+const (
+	// CircleErrorClassAuthRequired marks Circle CLI output that contains the
+	// documented AUTH_REQUIRED marker or the equivalent "no agent session is
+	// active" / "circle wallet login" guidance. Detection is text-based
+	// because the Circle CLI does not currently document a stable structured
+	// error code on stderr; matching is intentionally narrow and tolerant of
+	// case so other failures fall back to CircleErrorClassUnknown.
+	CircleErrorClassAuthRequired = "auth_required"
+	// CircleErrorClassUnknown is the default error class for Circle CLI
+	// failures that did not match the AUTH_REQUIRED markers above.
+	CircleErrorClassUnknown = "unknown"
+)
+
+// circleAuthRequiredMarkers lists case-insensitive substrings that indicate
+// the Circle CLI agent session is missing on the host. These match the
+// production AUTH_REQUIRED error message snippet observed in Cloud Run logs.
+// Behavior beyond these markers is unknown / not documented.
+var circleAuthRequiredMarkers = []string{
+	"AUTH_REQUIRED",
+	"no agent session is active",
+	"no local wallet matches",
+	"circle wallet login",
+}
+
+// ClassifyCircleErrorOutput returns CircleErrorClassAuthRequired when any of
+// the supplied texts (typically combined CLI stdout/stderr and the underlying
+// error string) contains one of the documented AUTH_REQUIRED markers, and
+// CircleErrorClassUnknown otherwise.
+func ClassifyCircleErrorOutput(texts ...string) string {
+	for _, text := range texts {
+		lowered := strings.ToLower(text)
+		for _, marker := range circleAuthRequiredMarkers {
+			if strings.Contains(lowered, strings.ToLower(marker)) {
+				return CircleErrorClassAuthRequired
+			}
+		}
+	}
+	return CircleErrorClassUnknown
+}
 
 var evmAddressPattern = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
 
@@ -105,15 +152,115 @@ func (resolver *CircleCLIWalletResolver) GetAgentWalletBalances(parent context.C
 	output, err := resolver.cfg.CommandRunner.RunWithEnv(ctx, resolver.cfg.CLIPath, args, []string{"CIRCLE_ACCEPT_TERMS=1"})
 	if err != nil {
 		resolver.logResolutionFailure("circle_agent_wallet_balance", string(output), err.Error(), "", address)
-		return CircleAgentWalletBalances{}, ErrCircleAgentWalletBalanceFailed
+		return CircleAgentWalletBalances{}, classifyCircleCLIBalanceError(string(output), err.Error())
 	}
 
 	balances, parseErr := parseCircleAgentWalletBalances(output)
 	if parseErr != nil {
 		resolver.logResolutionFailure("circle_agent_wallet_balance", string(output), parseErr.Error(), "", address)
-		return CircleAgentWalletBalances{}, ErrCircleAgentWalletBalanceFailed
+		return CircleAgentWalletBalances{}, classifyCircleCLIBalanceError(string(output), parseErr.Error())
 	}
 	return CircleAgentWalletBalances{Balances: balances}, nil
+}
+
+// CheckAgentSessionLiveness probes the local Circle CLI agent wallet list to
+// determine whether the host filesystem state required to operate the
+// registered agent wallet is reachable from this backend instance.
+//
+// SignalArc never persists Circle CLI session state. This helper exists so
+// the API layer can avoid returning a misleading "active" status when the
+// Cloud Run instance currently handling the request has no Circle CLI
+// session. It is intentionally a read-only command and shares the same path
+// already used by ResolveAgentWallet.
+func (resolver *CircleCLIWalletResolver) CheckAgentSessionLiveness(parent context.Context, agentWalletAddress string) AgentSessionLivenessResult {
+	if resolver == nil {
+		return AgentSessionLivenessResult{
+			State:      AgentSessionLivenessUnknown,
+			ErrorClass: CircleErrorClassUnknown,
+			Reason:     "Circle CLI wallet resolver is not configured on this backend instance",
+		}
+	}
+	if resolver.cfg.Chain != ChainArcTestnet {
+		return AgentSessionLivenessResult{
+			State:      AgentSessionLivenessUnknown,
+			ErrorClass: CircleErrorClassUnknown,
+			Reason:     "Circle CLI chain is not ARC-TESTNET",
+		}
+	}
+	address := strings.TrimSpace(agentWalletAddress)
+	if address == "" {
+		return AgentSessionLivenessResult{
+			State:      AgentSessionLivenessUnknown,
+			ErrorClass: CircleErrorClassUnknown,
+			Reason:     "agent wallet address is required for liveness probe",
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(parent, resolver.cfg.Timeout)
+	defer cancel()
+
+	args := []string{"wallet", "list", "--type", "agent", "--chain", ChainArcTestnet, "--output", "json"}
+	output, err := resolver.cfg.CommandRunner.RunWithEnv(ctx, resolver.cfg.CLIPath, args, []string{"CIRCLE_ACCEPT_TERMS=1"})
+	if err != nil {
+		errorClass := ClassifyCircleErrorOutput(string(output), err.Error())
+		resolver.logResolutionFailure("circle_agent_session_liveness", string(output), err.Error(), "", address)
+		if errorClass == CircleErrorClassAuthRequired {
+			return AgentSessionLivenessResult{
+				State:      AgentSessionLivenessAuthRequired,
+				ErrorClass: CircleErrorClassAuthRequired,
+				Reason:     "Circle CLI agent session is not active on this backend instance; OTP onboarding must be re-run",
+			}
+		}
+		return AgentSessionLivenessResult{
+			State:      AgentSessionLivenessUnknown,
+			ErrorClass: CircleErrorClassUnknown,
+			Reason:     "Circle CLI agent wallet liveness probe failed",
+		}
+	}
+
+	wallets, parseErr := parseCircleAgentWallets(output)
+	if parseErr != nil {
+		errorClass := ClassifyCircleErrorOutput(string(output), parseErr.Error())
+		resolver.logResolutionFailure("circle_agent_session_liveness", string(output), parseErr.Error(), "", address)
+		if errorClass == CircleErrorClassAuthRequired {
+			return AgentSessionLivenessResult{
+				State:      AgentSessionLivenessAuthRequired,
+				ErrorClass: CircleErrorClassAuthRequired,
+				Reason:     "Circle CLI agent session is not active on this backend instance; OTP onboarding must be re-run",
+			}
+		}
+		return AgentSessionLivenessResult{
+			State:      AgentSessionLivenessUnknown,
+			ErrorClass: CircleErrorClassUnknown,
+			Reason:     "Circle CLI agent wallet liveness probe returned unparseable output",
+		}
+	}
+
+	for _, wallet := range wallets {
+		if strings.EqualFold(wallet.Address, address) {
+			return AgentSessionLivenessResult{State: AgentSessionLivenessLive}
+		}
+	}
+
+	resolver.logResolutionFailure("circle_agent_session_liveness", string(output), "registered agent wallet not present in local Circle CLI list", "", address)
+	return AgentSessionLivenessResult{
+		State:      AgentSessionLivenessAuthRequired,
+		ErrorClass: CircleErrorClassAuthRequired,
+		Reason:     "registered agent wallet is not present in the local Circle CLI agent wallet list on this backend instance",
+	}
+}
+
+// classifyCircleCLIBalanceError preserves the existing public sentinel
+// (ErrCircleAgentWalletBalanceFailed) while attaching a sanitized error
+// class for structured logs. Handlers that wish to log more context can
+// extract the class with CircleErrorClassFromError.
+func classifyCircleCLIBalanceError(output string, errText string) error {
+	return &CircleCLIError{
+		Operation:        "circle_agent_wallet_balance",
+		ErrorClass:       ClassifyCircleErrorOutput(output, errText),
+		SanitizedSummary: sanitizeCircleOnboardingText(errText),
+		Err:              ErrCircleAgentWalletBalanceFailed,
+	}
 }
 
 func (resolver *CircleCLIWalletResolver) logResolutionFailure(operation string, output string, errText string, email string, address string) {

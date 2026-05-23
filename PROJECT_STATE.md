@@ -883,3 +883,27 @@ Out of scope for this pass:
 - No Solidity / contract change.
 - No new arbitrary transfer, withdraw, deposit, swap, or mainnet feature.
 - No commit and no push.
+
+## Backend stopgap — Circle CLI session liveness
+
+Problem:
+- Production Cloud Run logs showed Circle CLI `AUTH_REQUIRED`.
+- SignalArc DB could report an agent session as `active`, while Circle CLI runtime session was unavailable on the Cloud Run instance handling balance/execute.
+- This caused misleading session status and opaque `agent_execution_failed` / `circle_agent_wallet_balance_failed` errors.
+
+Completed:
+- Added backend-only Circle CLI session liveness detection for active Circle Agent Wallet sessions.
+- `GET /agent/sessions/{agent_id}` no longer blindly returns `active` when local Circle CLI session is unavailable.
+- Balance and execute public error codes are preserved.
+- Backend logs now include sanitized structured Circle provider failure details.
+
+Important limitation:
+- This does not fix Cloud Run Circle CLI session persistence.
+- It only makes runtime session loss visible and non-misleading.
+- Circle Agent Wallet HTTP API replacement remains unknown / not documented.
+
+Validation:
+- `go build ./...` passed.
+- `go test ./...` passed.
+- `go vet ./...` passed.
+- `gofmt` clean on changed Go files.

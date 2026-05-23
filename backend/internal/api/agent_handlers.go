@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/rs/zerolog/log"
 	"github.com/wahyu241205/SignalArc/backend/internal/agent"
 	"github.com/wahyu241205/SignalArc/backend/internal/httpjson"
 	"github.com/wahyu241205/SignalArc/backend/internal/repository"
@@ -146,6 +147,7 @@ type agentSessionResponse struct {
 	AllowedActions     []string          `json:"allowed_actions"`
 	AllowedChannels    []string          `json:"allowed_channels"`
 	SessionMetadata    map[string]string `json:"session_metadata,omitempty"`
+	LivenessReason     string            `json:"liveness_reason,omitempty"`
 	CreatedAt          string            `json:"created_at"`
 	UpdatedAt          string            `json:"updated_at"`
 }
@@ -525,8 +527,32 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			return
 		}
 
+		response := newAgentSessionResponse(session)
+		// Database "active" reflects SignalArc bookkeeping only. The Circle
+		// CLI agent session lives on the host filesystem of whichever
+		// instance handled OTP verify, which on Cloud Run may not be the
+		// instance handling this request. Probe the local CLI before
+		// returning "active" so we do not mislead callers.
+		if session.Status == repository.AgentSessionStatusActive && session.WalletProvider == agent.WalletProviderCircleAgentWallet {
+			if checker, ok := walletResolver.(agent.CircleAgentSessionLivenessChecker); ok {
+				liveness := checker.CheckAgentSessionLiveness(r.Context(), session.AgentWalletAddress)
+				switch liveness.State {
+				case agent.AgentSessionLivenessLive:
+					// keep DB-backed status as is
+				case agent.AgentSessionLivenessAuthRequired:
+					response.Status = "cli_session_unavailable"
+					response.LivenessReason = liveness.Reason
+					logCircleSessionLivenessGap(r.Context(), session.AgentID, liveness)
+				default:
+					response.Status = "cli_session_unknown"
+					response.LivenessReason = liveness.Reason
+					logCircleSessionLivenessGap(r.Context(), session.AgentID, liveness)
+				}
+			}
+		}
+
 		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
-			"agent_session": newAgentSessionResponse(session),
+			"agent_session": response,
 		})
 	})
 
@@ -592,6 +618,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 		}
 		balances, err := walletResolver.GetAgentWalletBalances(r.Context(), wallet.AgentWalletAddress)
 		if err != nil {
+			logCircleProviderFailure(r.Context(), "circle_agent_wallet_balance", wallet.AgentID, "", err)
 			httpjson.WriteError(w, http.StatusBadGateway, "circle_agent_wallet_balance_failed", "Circle Agent Wallet balance lookup failed")
 			return
 		}
@@ -865,6 +892,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 				return
 			}
 
+			logCircleProviderFailure(r.Context(), "agent_execution", intent.AgentID, intent.ID, err)
 			httpjson.WriteError(w, http.StatusBadGateway, "agent_execution_failed", "agent execution failed")
 			return
 		}
@@ -1225,6 +1253,39 @@ func newAgentSessionResponse(session repository.AgentSession) agentSessionRespon
 		CreatedAt:          session.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 		UpdatedAt:          session.UpdatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
 	}
+}
+
+// logCircleSessionLivenessGap emits a structured warning when SignalArc
+// downgrades the DB-backed agent session status because the local Circle
+// CLI agent session is missing on this backend instance. The reason here
+// is the sanitized message produced by the resolver and is safe to log.
+func logCircleSessionLivenessGap(ctx context.Context, agentID string, liveness agent.AgentSessionLivenessResult) {
+	log.Warn().
+		Str("operation", "agent_session_liveness").
+		Str("agent_id", agentID).
+		Str("request_id", requestIDFromContext(ctx)).
+		Str("liveness_state", string(liveness.State)).
+		Str("error_class", liveness.ErrorClass).
+		Str("reason", liveness.Reason).
+		Msg("agent session liveness downgraded; Circle CLI session not available on this backend instance")
+}
+
+// logCircleProviderFailure emits a structured error log for Circle CLI
+// provider failures returned from balance or execute paths. Public HTTP
+// error codes are not changed; this only adds sanitized structured detail
+// to backend logs to make Cloud Run AUTH_REQUIRED conditions diagnosable.
+func logCircleProviderFailure(ctx context.Context, operation string, agentID string, intentID string, err error) {
+	if err == nil {
+		return
+	}
+	log.Error().
+		Str("operation", operation).
+		Str("agent_id", agentID).
+		Str("intent_id", intentID).
+		Str("request_id", requestIDFromContext(ctx)).
+		Str("error_class", agent.CircleErrorClassFromError(err)).
+		Str("summary", agent.CircleErrorSummaryFromError(err)).
+		Msg("Circle Agent Wallet provider call failed")
 }
 
 func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {
