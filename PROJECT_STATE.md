@@ -735,6 +735,36 @@ Done:
 - Sanitized diagnostics behavior unchanged.
 - Validation: `go test ./...` passed.
 
+## Cloud Run Backend Image Includes Circle CLI
+
+Status: COMPLETE (image-level only; durable Circle CLI session persistence remains a production runtime concern).
+
+Done:
+
+- Cloud Run production reached the live domain `api.signalarc.fun` and the production database was migrated to version `18`.
+- Production agent endpoints then reached the Circle runtime boundary because the Cloud Run runtime image did not include Node.js, npm, or the Circle CLI binary, so commands like `circle wallet login`, `circle wallet list`, and `circle wallet balance` could not be executed inside the deployed container.
+- `backend/Dockerfile` runtime stage was updated to install `nodejs` and `npm` from Alpine packages and then install the Circle CLI globally with `npm install -g @circle-fin/cli`, then clean the npm cache.
+- The runtime stage continues to copy the compiled `signalarc-api` binary from the Go builder stage into `/usr/local/bin/signalarc-api`.
+- The image final layout exposes both `signalarc-api` and `circle` on `PATH` at `/usr/local/bin`.
+- The existing `ENTRYPOINT ["signalarc-api"]` was preserved.
+- No Circle credentials, OTP request IDs, session files, private keys, or API keys are baked into the image.
+- This change does not solve durable Circle CLI session persistence; session strategy remains a production runtime concern outside the image.
+
+Validation:
+
+- `cd backend && go test ./...` passed; no Go test files were modified.
+- `docker build -t signalarc-backend:circle-cli-test backend` succeeded.
+- Inside the built image:
+  - `command -v circle` returned `/usr/local/bin/circle`.
+  - `circle --version` returned `0.0.3`.
+  - `command -v signalarc-api` returned `/usr/local/bin/signalarc-api`.
+  - `node --version` returned `v20.15.1` and `npm --version` returned `10.9.1`.
+
+Not done:
+
+- Production deploy of the updated image to Cloud Run was not performed in this step.
+- Circle CLI session/login persistence inside Cloud Run is still unresolved.
+
 ## Next Recommended Step
 
 - Design and validate the Docker/Cloud Run Circle CLI/session strategy before treating the backend provider as deployable. Do not capture OTP or store Circle session material in SignalArc.
