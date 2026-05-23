@@ -1,0 +1,1077 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SignalArc Custom GPT Action API",
+    "version": "0.1.0",
+    "description": "OpenAPI schema for the SignalArc Custom GPT action surface. Covers Circle Agent Wallet onboarding, sessions, wallet/balance visibility, and market intent lifecycle on Arc Testnet."
+  },
+  "servers": [
+    {
+      "url": "https://undamaged-commerce-juggling.ngrok-free.dev"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Backend health check",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/onboarding/start": {
+      "post": {
+        "operationId": "startAgentOnboarding",
+        "summary": "Start SignalArc Circle Agent Wallet onboarding and dispatch OTP email",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "agent_id",
+                  "user_email"
+                ],
+                "properties": {
+                  "agent_id": {
+                    "type": "string"
+                  },
+                  "user_email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "source_client": {
+                    "type": "string"
+                  },
+                  "channel": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP email dispatched, onboarding pending verification",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "next_step": {
+                      "type": "string"
+                    },
+                    "onboarding": {
+                      "$ref": "#/components/schemas/AgentOnboarding"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid onboarding start request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Onboarding already exists for this agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Circle Agent Wallet OTP start is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Circle Agent Wallet OTP start failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/onboarding/verify": {
+      "post": {
+        "operationId": "verifyAgentOnboarding",
+        "summary": "Verify OTP, register agent wallet, and activate agent session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "onboarding_id",
+                  "otp"
+                ],
+                "properties": {
+                  "onboarding_id": {
+                    "type": "string"
+                  },
+                  "otp": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP verified, agent wallet registered, agent session activated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "next_step": {
+                      "type": "string"
+                    },
+                    "onboarding": {
+                      "$ref": "#/components/schemas/AgentOnboarding"
+                    },
+                    "agent_wallet": {
+                      "$ref": "#/components/schemas/AgentWallet"
+                    },
+                    "agent_session": {
+                      "$ref": "#/components/schemas/AgentSession"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid OTP verify request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired OTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Onboarding not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Circle Agent Wallet resolution or activation is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Circle Agent Wallet OTP verification or wallet resolution failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/onboarding/{onboarding_id}": {
+      "get": {
+        "operationId": "getAgentOnboarding",
+        "summary": "Get SignalArc agent onboarding status",
+        "parameters": [
+          {
+            "name": "onboarding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent onboarding record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "onboarding": {
+                      "$ref": "#/components/schemas/AgentOnboarding"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Onboarding not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/sessions/{agent_id}": {
+      "get": {
+        "operationId": "getAgentSession",
+        "summary": "Get SignalArc active agent session",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent session record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agent_session": {
+                      "$ref": "#/components/schemas/AgentSession"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/wallets/{agent_id}": {
+      "get": {
+        "operationId": "getAgentWallet",
+        "summary": "Get SignalArc registered agent wallet",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Registered agent wallet record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agent_wallet": {
+                      "$ref": "#/components/schemas/AgentWallet"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent wallet not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/wallets/{agent_id}/balance": {
+      "get": {
+        "operationId": "getAgentWalletBalance",
+        "summary": "Get read-only SignalArc Circle Agent Wallet balance",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read-only Circle Agent Wallet balance snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agent_wallet_balance": {
+                      "$ref": "#/components/schemas/AgentWalletBalance"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent wallet not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Circle Agent Wallet balance lookup is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Circle Agent Wallet balance lookup failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/intents": {
+      "post": {
+        "operationId": "createAgentIntent",
+        "summary": "Create a SignalArc agent intent preview",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "agent_id",
+                  "source_client",
+                  "client_request_id",
+                  "action",
+                  "user_wallet"
+                ],
+                "properties": {
+                  "agent_id": {
+                    "type": "string"
+                  },
+                  "source_client": {
+                    "type": "string"
+                  },
+                  "client_request_id": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "create_market",
+                      "buy_yes",
+                      "buy_no",
+                      "close_market",
+                      "resolve_market",
+                      "claim_payout",
+                      "cancel_market",
+                      "claim_refund"
+                    ]
+                  },
+                  "user_wallet": {
+                    "type": "string"
+                  },
+                  "market_id": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "type": "string"
+                  },
+                  "close_timestamp": {
+                    "type": "integer"
+                  },
+                  "resolver": {
+                    "type": "string"
+                  },
+                  "collateral_token": {
+                    "type": "string"
+                  },
+                  "market_contract_address": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Intent created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "intent": {
+                      "$ref": "#/components/schemas/AgentIntent"
+                    },
+                    "next_step": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid intent request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action not allowed for this agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent or session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/intents/{intent_id}/confirm": {
+      "post": {
+        "operationId": "confirmAgentIntent",
+        "summary": "Confirm a SignalArc agent intent",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "agent_id": {
+                    "type": "string"
+                  },
+                  "client_request_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Intent confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "intent": {
+                      "$ref": "#/components/schemas/AgentIntent"
+                    },
+                    "execution_plan": {
+                      "$ref": "#/components/schemas/ExecutionPlan"
+                    },
+                    "next_step": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid confirmation request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Intent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Intent already confirmed or in invalid state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/intents/{intent_id}/execute": {
+      "post": {
+        "operationId": "executeAgentIntent",
+        "summary": "Execute a confirmed SignalArc agent intent",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "agent_id": {
+                    "type": "string"
+                  },
+                  "client_request_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Intent executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "intent": {
+                      "$ref": "#/components/schemas/AgentIntent"
+                    },
+                    "execution": {
+                      "$ref": "#/components/schemas/ExecutionResult"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid execution request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action not allowed for this agent or wallet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Intent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Intent not in confirmed state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Execution provider is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider execution failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Execution provider disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          }
+        }
+      },
+      "AgentOnboarding": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "user_email": {
+            "type": "string"
+          },
+          "wallet_provider": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "source_client": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentWallet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "user_wallet": {
+            "type": "string"
+          },
+          "user_email": {
+            "type": "string"
+          },
+          "agent_wallet_address": {
+            "type": "string"
+          },
+          "wallet_provider": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "policy_metadata": {
+            "type": "object"
+          },
+          "source_client": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentSession": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "user_email": {
+            "type": "string"
+          },
+          "user_wallet": {
+            "type": "string"
+          },
+          "agent_wallet_address": {
+            "type": "string"
+          },
+          "wallet_provider": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "session_metadata": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentWalletBalance": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "agent_wallet_address": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "balances": {
+            "type": "array",
+            "items": {}
+          }
+        }
+      },
+      "AgentIntent": {
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "source_client": {
+            "type": "string"
+          },
+          "client_request_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "user_wallet": {
+            "type": "string"
+          },
+          "agent_wallet_address": {
+            "type": "string"
+          },
+          "wallet_provider": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "market_id": {
+            "type": "string"
+          },
+          "market_contract_address": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "close_timestamp": {
+            "type": "integer"
+          },
+          "resolver": {
+            "type": "string"
+          },
+          "collateral_token": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "ExecutionPlan": {
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "agent_wallet_address": {
+            "type": "string"
+          },
+          "wallet_provider": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "target_contract": {
+            "type": "string"
+          },
+          "function_signature": {
+            "type": "string"
+          },
+          "function_args": {
+            "type": "array",
+            "items": {}
+          },
+          "preconditions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metadata": {
+            "type": "object"
+          }
+        }
+      },
+      "ExecutionResult": {
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string"
+          },
+          "execution_mode": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tx_hash": {
+            "type": "string"
+          },
+          "block_number": {
+            "type": "integer"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "agent_wallet_address": {
+            "type": "string"
+          },
+          "wallet_provider": {
+            "type": "string"
+          },
+          "readback": {
+            "type": "object"
+          },
+          "error": {
+            "type": "string"
+          },
+          "executed_at": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
