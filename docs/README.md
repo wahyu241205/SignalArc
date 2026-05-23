@@ -36,6 +36,7 @@ These domains are purchased or planned deployment targets. They are not live dep
 - [DEPLOYMENT_PLAN.md](./DEPLOYMENT_PLAN.md): planned production deployment path.
 - [SECURITY_AND_SECRETS.md](./SECURITY_AND_SECRETS.md): security and secret handling policy.
 - [GRANT_READINESS.md](./GRANT_READINESS.md): Circle/Arc grant readiness status.
+- [privacy.mdx](./privacy.mdx): privacy policy for the SignalArc Arc Testnet prototype and Custom GPT Action.
 
 ## Implemented Capabilities
 

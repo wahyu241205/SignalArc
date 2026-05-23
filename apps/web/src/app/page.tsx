@@ -4,6 +4,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit"
 import Link from "next/link"
 import { useAccount } from "wagmi"
 
+import { SiteFooter } from "@/components/layout/site-footer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -61,9 +62,9 @@ export default function Home() {
   const { isConnected } = useAccount()
 
   return (
-    <div className="px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-16">
-        {/* Hero */}
+    <>
+      <div className="px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-16">        {/* Hero */}
         <section className="flex flex-col items-center gap-6 pt-12 text-center lg:pt-20">
           <h1 className="max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
             Trade the future with
@@ -140,8 +141,10 @@ export default function Home() {
             </div>
           </details>
         </section>
+        </div>
       </div>
-    </div>
+      <SiteFooter />
+    </>
   )
 }
 

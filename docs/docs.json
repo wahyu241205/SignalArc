@@ -43,6 +43,12 @@
           "SECURITY_AND_SECRETS",
           "GRANT_READINESS"
         ]
+      },
+      {
+        "group": "Legal",
+        "pages": [
+          "privacy"
+        ]
       }
     ]
   },
