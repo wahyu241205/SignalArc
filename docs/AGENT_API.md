@@ -22,6 +22,33 @@ For maintainers who need to re-import the schema:
 https://raw.githubusercontent.com/wahyu241205/SignalArc/main/project-roadmap/signalarc-custom-gpt-openapi.json
 ```
 
+### Custom GPT instruction block
+
+The published SignalArc GPT Agent SHOULD use the following instruction block to keep onboarding and intent flow stable for non-developer users:
+
+- Always call a SignalArc Action when the user asks to onboard, verify, register, check session/wallet/balance, request faucet, list markets, create/confirm/execute an intent, or use words such as cek, call, panggil, test, daftar, onboarding, saldo, wallet, faucet, or market.
+- Never answer those user requests from documentation or memory; always call the matching Action.
+- Generate a unique `agent_id` per user before calling `startAgentOnboarding`. Recommended shape `agent_<slug>_chatgpt_<suffix>`, for example `agent_sanatarau21_chatgpt_001`. Reuse the exact returned `agent_id` for every subsequent operation in the session.
+- Never use generic placeholder `agent_id` values such as `signalarc-gpt-agent`, `agent_desi_001`, `default`, `test`, `demo`, `user`, `agent`, or `chatgpt`. The SignalArc backend rejects these with `agent_onboarding_invalid` or `agent_wallet_invalid`.
+- For `create_market` intents, always send `close_timestamp` as a UTC RFC3339 string such as `2026-05-31T23:59:00Z` or as a unix-seconds integer string such as `1780000000`. Never send natural-language values such as "default", "end of May 2026", or "soon"; convert the user's intent to RFC3339 first.
+- If the user gives an ambiguous date, ask one short clarification question before calling the Action.
+- For market discovery, call `listAgentMarkets` (`GET /agent/markets`) or `listMarkets` (`GET /markets`).
+
+### agent_id naming rules
+
+The backend validates `agent_id` on `POST /agent/onboarding/start` and `POST /agent/wallets`. Validation rules:
+
+- Required.
+- Must start with `agent_`.
+- Must be at least 10 characters long.
+- May only contain ASCII letters, digits, underscore, or hyphen.
+- Must not match any of the documented generic placeholders: `signalarc-gpt-agent`, `signalarc_gpt_agent`, `agent_desi_001`, `default`, `defaultagent`, `default_agent`, `test`, `testagent`, `test_agent`, `demo`, `demoagent`, `demo_agent`, `user`, `useragent`, `user_agent`, `agent`, `chatgpt`, `chatgpt_agent` (case-insensitive).
+
+Recommended live shapes:
+
+- `agent_sanatarau21_chatgpt_001`
+- `agent_adenhusen65_live_002`
+
 ## Live Architecture
 
 | Surface | Target |
@@ -66,6 +93,8 @@ Available now:
 | Market intent preview | `POST /agent/intents` |
 | Confirm intent | `POST /agent/intents/{intent_id}/confirm` |
 | Execute intent | `POST /agent/intents/{intent_id}/execute` |
+| Markets list (read-only) | `GET /markets` |
+| Market detail (read-only) | `GET /markets/{market_id}` |
 | Agent-readable market list | `GET /agent/markets` |
 
 Not available / out of scope:
@@ -87,7 +116,7 @@ Starts SignalArc Circle Agent Wallet onboarding and dispatches the OTP email thr
 curl -X POST https://api.signalarc.fun/agent/onboarding/start \
   -H "Content-Type: application/json" \
   -d '{
-    "agent_id": "agent_demo_001",
+    "agent_id": "agent_sanatarau21_chatgpt_001",
     "user_email": "you@example.com",
     "source_client": "chatgpt_custom_action",
     "channel": "chatgpt"
@@ -95,6 +124,8 @@ curl -X POST https://api.signalarc.fun/agent/onboarding/start \
 ```
 
 Response includes the onboarding record and a `next_step` value such as `circle_otp_required`. Raw Circle request IDs are not exposed.
+
+The backend rejects generic placeholder `agent_id` values such as `signalarc-gpt-agent`, `agent_desi_001`, `default`, `test`, `demo`, `user`, `agent`, or `chatgpt` with HTTP 400 `agent_onboarding_invalid`.
 
 ### POST /agent/onboarding/verify
 
@@ -130,7 +161,7 @@ Returns a read-only Circle Agent Wallet balance snapshot.
 ```json
 {
   "agent_wallet_balance": {
-    "agent_id": "agent_demo_001",
+    "agent_id": "agent_sanatarau21_chatgpt_001",
     "agent_wallet_address": "0x...",
     "chain": "ARC-TESTNET",
     "balances": []
@@ -158,7 +189,7 @@ Endpoint properties:
 Example:
 
 ```bash
-curl -X POST https://api.signalarc.fun/agent/wallets/agent_demo_001/faucet
+curl -X POST https://api.signalarc.fun/agent/wallets/agent_sanatarau21_chatgpt_001/faucet
 ```
 
 Underlying Circle CLI command shape (run inside the Cloud Run container, never exposed to the caller):
@@ -172,7 +203,7 @@ Success response (200):
 ```json
 {
   "agent_wallet_faucet": {
-    "agent_id": "agent_demo_001",
+    "agent_id": "agent_sanatarau21_chatgpt_001",
     "agent_wallet_address": "0x9999999999999999999999999999999999999999",
     "chain": "ARC-TESTNET",
     "token": "usdc",
@@ -220,6 +251,8 @@ Creates a market intent preview. The request must include `agent_id`, `source_cl
 - `cancel_market`
 - `claim_refund`
 
+For `create_market`, `close_timestamp` MUST be either a UTC RFC3339 string such as `2026-05-31T23:59:00Z` or a unix-seconds integer string such as `1780000000`. Natural-language values such as `default` or `end of May 2026` are rejected with `invalid_json` (when the body itself fails to parse) or with a stable `400` validation error such as `close_timestamp must be a unix-seconds integer or an RFC3339 timestamp such as 2026-05-31T23:59:00Z`. The Custom GPT MUST convert natural-language dates to RFC3339 before calling the Action.
+
 ### POST /agent/intents/{intent_id}/confirm
 
 Confirms a previewed intent and produces an execution plan. SignalArc validates allowed actions, market state, and ARC-TESTNET chain.
@@ -256,6 +289,10 @@ Response shape:
   ]
 }
 ```
+
+### GET /markets and GET /markets/{market_id}
+
+`GET /markets` returns up to 50 full market records with creator, contract, and lifecycle metadata. `GET /markets/{market_id}` returns one full record by id. Both are read-only and are exposed in the Custom GPT OpenAPI as `listMarkets` and `getMarket`. Use them when callers ask for open or trending markets, or when the GPT needs to look up a single market by id. Live market discovery through these Actions does not require onboarding, wallet, faucet, or signature steps.
 
 ## Judge / User Testing Guide
 

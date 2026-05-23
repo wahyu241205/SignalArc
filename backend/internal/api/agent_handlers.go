@@ -678,7 +678,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 	router.Post("/agent/intents", func(w http.ResponseWriter, r *http.Request) {
 		var request createAgentIntentRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			httpjson.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON; for create_market send close_timestamp as RFC3339 (for example 2026-05-31T23:59:00Z) or unix-seconds integer string")
 			return
 		}
 
@@ -919,8 +919,8 @@ func newAgentOnboardingSessionInput(request startAgentOnboardingRequest) (reposi
 
 func validateAgentOnboardingSessionInput(input repository.CreateAgentOnboardingSessionInput) []string {
 	errors := []string{}
-	if input.AgentID == "" {
-		errors = append(errors, "agent_id is required")
+	if _, agentIDErrors := validateAgentID(input.AgentID); len(agentIDErrors) > 0 {
+		errors = append(errors, agentIDErrors...)
 	}
 	if input.UserEmail == "" {
 		errors = append(errors, "user_email is required")
@@ -1065,8 +1065,8 @@ func defaultAgentWalletAllowedActions() []string {
 
 func validateAgentWalletRegistrationInput(input repository.UpsertAgentWalletInput) []string {
 	errors := []string{}
-	if input.AgentID == "" {
-		errors = append(errors, "agent_id is required")
+	if _, agentIDErrors := validateAgentID(input.AgentID); len(agentIDErrors) > 0 {
+		errors = append(errors, agentIDErrors...)
 	}
 	if input.UserWallet == "" {
 		errors = append(errors, "user_wallet is required")

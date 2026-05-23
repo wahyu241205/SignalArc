@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"math/big"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -360,9 +361,53 @@ func normalizeInput(input CreateIntentInput) CreateIntentInput {
 		Outcome:               strings.TrimSpace(input.Outcome),
 		Resolver:              strings.TrimSpace(input.Resolver),
 		CollateralToken:       strings.TrimSpace(input.CollateralToken),
-		CloseTimestamp:        strings.TrimSpace(input.CloseTimestamp),
+		CloseTimestamp:        normalizeCloseTimestamp(input.CloseTimestamp),
 		Question:              strings.TrimSpace(input.Question),
 	}
+}
+
+// normalizeCloseTimestamp accepts the raw close_timestamp string from an
+// agent intent request and returns it normalized to a base-10 Unix-seconds
+// string when possible. Inputs that already look like a base-10 integer are
+// returned unchanged so existing Custom GPT and CLI clients continue to work.
+// Inputs in RFC3339 (or RFC3339 with nanoseconds) form are converted to the
+// integer Unix-seconds form expected by the existing on-chain executor and
+// SignalArcAgentMarketFactory.createMarket(uint256) signature. Inputs that
+// cannot be normalized are returned trimmed so downstream validation can
+// produce a stable error.
+//
+// This helper does not alter contract behavior. It only adds a backwards
+// compatible parser for RFC3339 input that can be produced by natural
+// language conversion before the request reaches the API layer.
+func normalizeCloseTimestamp(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	if isAllDigits(trimmed) {
+		return trimmed
+	}
+
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if parsed, err := time.Parse(layout, trimmed); err == nil {
+			return strconv.FormatInt(parsed.UTC().Unix(), 10)
+		}
+	}
+
+	return trimmed
+}
+
+func isAllDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeStringSlice(values []string) []string {
@@ -398,6 +443,8 @@ func validateIntent(input CreateIntentInput) ValidationResult {
 		}
 		if input.CloseTimestamp == "" {
 			result.Errors = append(result.Errors, "close_timestamp is required for create_market")
+		} else if !isAllDigits(input.CloseTimestamp) {
+			result.Errors = append(result.Errors, "close_timestamp must be a unix-seconds integer or an RFC3339 timestamp such as 2026-05-31T23:59:00Z")
 		}
 		if input.Resolver == "" {
 			result.Errors = append(result.Errors, "resolver is required for create_market")

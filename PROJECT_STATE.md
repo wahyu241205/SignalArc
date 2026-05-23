@@ -833,3 +833,53 @@ git status
 8. Do not commit `node_modules`, `.next`, `dist`, `out`, or `.env`.
 9. Keep commits small and reviewable.
 10. Build MVP first, then polish.
+
+
+## SignalArc Custom GPT / Agent Onboarding Stability Pass
+
+Status: COMPLETE.
+
+Done:
+
+- Added backend `agent_id` validation helper in `backend/internal/api/agent_id_validation.go` that rejects empty values, generic placeholder values such as `signalarc-gpt-agent`, `agent_desi_001`, `default`, `defaultagent`, `default_agent`, `test`, `testagent`, `test_agent`, `demo`, `demoagent`, `demo_agent`, `user`, `useragent`, `user_agent`, `agent`, `chatgpt`, `chatgpt_agent`, and any case-insensitive equivalent, requires the `agent_<slug>` SignalArc shape, requires at least 10 characters, and limits the alphabet to ASCII letters, digits, underscore, and hyphen.
+- Wired the helper into `validateAgentOnboardingSessionInput` and `validateAgentWalletRegistrationInput` in `backend/internal/api/agent_handlers.go`. `POST /agent/onboarding/start` now returns HTTP 400 `agent_onboarding_invalid` for generic/short/wrong-shape `agent_id` values and `POST /agent/wallets` returns HTTP 400 `agent_wallet_invalid` for the same.
+- Added `normalizeCloseTimestamp` in `backend/internal/agent/intents.go` that accepts either a base-10 unix-seconds string (preserved unchanged for backward compatibility with the existing executor) or a UTC RFC3339 timestamp such as `2026-05-31T23:59:00Z`, normalizing the latter to unix seconds before the validator runs. The on-chain `SignalArcAgentMarketFactory.createMarket(uint256)` signature is unchanged because the executor still passes a base-10 unix-seconds string to `big.Int.SetString(value, 10)`.
+- Tightened `validateIntent` so a `create_market` intent with a non-numeric `close_timestamp` returns a stable validation error such as `close_timestamp must be a unix-seconds integer or an RFC3339 timestamp such as 2026-05-31T23:59:00Z`, instead of a confusing `invalid_json`.
+- Replaced the generic `invalid_json` message on `POST /agent/intents` with `request body must be valid JSON; for create_market send close_timestamp as RFC3339 (for example 2026-05-31T23:59:00Z) or unix-seconds integer string`, so non-developer Custom GPT users get a clear hint about how to convert natural-language dates.
+- Hardened `project-roadmap/signalarc-custom-gpt-openapi.json` (now `0.2.0`):
+  - Added top-level Custom GPT instruction language about generating a unique `agent_id` per user, never using generic placeholders, and converting natural-language dates to RFC3339 before calling create market intent.
+  - Added explicit `pattern`, `minLength`, `description`, and `examples` for `agent_id` on `startAgentOnboarding` request body and on `agent_id` path parameters in `getAgentSession`, `getAgentWallet`, `getAgentWalletBalance`, and `requestAgentWalletFaucet`.
+  - Added explicit `pattern` and `description` for `agent_id` on `createAgentIntent`, `confirmAgentIntent`, and `executeAgentIntent`.
+  - Changed `createAgentIntent.close_timestamp` to a `string` with description and examples for both RFC3339 and unix-seconds shapes, and added inline `examples` for `create_market` and `buy_yes` payloads.
+  - Documented the read-only market discovery surface as `listMarkets` (`GET /markets`), `getMarket` (`GET /markets/{market_id}`), and `listAgentMarkets` (`GET /agent/markets`) so the Custom GPT can show open/trending markets by calling an Action instead of refusing.
+  - Added 201 Created responses for `startAgentOnboarding` and `createAgentIntent` matching the actual backend status codes.
+  - Added `Market` and `AgentMarket` component schemas.
+- Updated `docs/AGENT_API.md`:
+  - Added a Custom GPT instruction block, an explicit `agent_id` naming rule list with the documented blocklist, and live recommended shapes `agent_sanatarau21_chatgpt_001` / `agent_adenhusen65_live_002`.
+  - Documented the RFC3339 / unix-seconds rule for `create_market.close_timestamp` and the new stable error message.
+  - Documented `GET /markets` and `GET /markets/{market_id}` as exposed read-only Actions, alongside `GET /agent/markets`.
+  - Replaced the demo `agent_demo_001` example with the recommended `agent_sanatarau21_chatgpt_001` shape.
+- Added Go tests in `backend/internal/api/agent_id_validation_test.go`:
+  - `TestStartAgentOnboardingRejectsGenericAgentIDValues` covers each documented placeholder including case variants.
+  - `TestStartAgentOnboardingRejectsShortAgentID` covers the minimum length rule.
+  - `TestStartAgentOnboardingAcceptsRecommendedAgentIDShape` covers the recommended shape.
+  - `TestRegisterAgentWalletRejectsGenericAgentID` covers the explicit `/agent/wallets` registration path.
+  - `TestCreateAgentIntentRejectsInvalidJSON` covers the natural-language date case where the body itself is not valid JSON.
+  - `TestCreateAgentIntentRejectsNonRFC3339CloseTimestamp` covers a body that decodes but contains a natural-language `close_timestamp`.
+  - `TestCreateAgentIntentAcceptsRFC3339CloseTimestamp` covers the recommended RFC3339 input and verifies the response normalizes to unix seconds.
+  - `TestCreateAgentIntentAcceptsUnixSecondsCloseTimestamp` covers the existing unix-seconds clients.
+  - `TestValidateAgentIDDirect` table-tests the helper in isolation.
+
+Validation results:
+
+- `cd backend && go vet ./...` passed.
+- `cd backend && go test ./...` passed (agent + api packages, including the new tests).
+- `python3 -m json.tool project-roadmap/signalarc-custom-gpt-openapi.json > /tmp/signalarc-openapi.validated.json` passed.
+- `grep -R 'ngrok-free\|undamaged-commerce' project-roadmap/signalarc-custom-gpt-openapi.json docs` returned no matches.
+
+Out of scope for this pass:
+
+- No frontend code change.
+- No Solidity / contract change.
+- No new arbitrary transfer, withdraw, deposit, swap, or mainnet feature.
+- No commit and no push.

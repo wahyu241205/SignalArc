@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SignalArc Custom GPT Action API",
-    "version": "0.1.0",
-    "description": "OpenAPI schema for the SignalArc Custom GPT action surface. Covers Circle Agent Wallet onboarding, sessions, wallet/balance visibility, and market intent lifecycle on Arc Testnet."
+    "version": "0.2.0",
+    "description": "OpenAPI schema for the SignalArc Custom GPT action surface. Covers Circle Agent Wallet onboarding, sessions, wallet/balance visibility, market intent lifecycle, and read-only market discovery on Arc Testnet. Custom GPT MUST always call a matching Action when the user asks to onboard, verify, register, check session/wallet/balance, request faucet, list markets, or create/confirm/execute an intent. The GPT MUST generate a unique agent_id for each new user and MUST NOT use generic placeholder agent_id values such as signalarc-gpt-agent, agent_desi_001, default, test, demo, user, or chatgpt. The recommended agent_id shape is agent_<slug>_chatgpt_<suffix>, for example agent_sanatarau21_chatgpt_001. For create_market intents, close_timestamp MUST be sent as a UTC RFC3339 string such as 2026-05-31T23:59:00Z or as a unix-seconds integer string such as 1780000000; natural-language dates such as 'end of May 2026' MUST be converted before the Action is called."
   },
   "servers": [
     {
@@ -32,10 +32,116 @@
         }
       }
     },
+    "/markets": {
+      "get": {
+        "operationId": "listMarkets",
+        "summary": "List up to 50 SignalArc markets for read-only discovery",
+        "description": "Returns up to 50 markets known to SignalArc on Arc Testnet for read-only discovery. Each entry includes status (DRAFT, OPEN, CLOSED, RESOLVED, SETTLED), category, collateral_asset, chain, and closes_at. The endpoint is read-only and does not perform any wallet, faucet, or transaction action. The Custom GPT SHOULD call this Action whenever the user asks for open markets, trending markets, or any general market list.",
+        "responses": {
+          "200": {
+            "description": "Markets list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "markets": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Market" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Markets list failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/markets/{market_id}": {
+      "get": {
+        "operationId": "getMarket",
+        "summary": "Get a SignalArc market by id",
+        "description": "Returns a single SignalArc market record by id. Read-only.",
+        "parameters": [
+          {
+            "name": "market_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Market UUID returned by listMarkets."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Market record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "market": { "$ref": "#/components/schemas/Market" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Market not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/markets": {
+      "get": {
+        "operationId": "listAgentMarkets",
+        "summary": "List agent-readable SignalArc markets",
+        "description": "Compact, agent-friendly market list for SignalArc Arc Testnet markets. Same dataset as listMarkets but with a flat shape suited to natural-language summaries. Read-only. The Custom GPT SHOULD call this Action when the user asks to see open markets, trending markets, or any market list.",
+        "responses": {
+          "200": {
+            "description": "Agent markets list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "markets": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AgentMarket" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Agent markets list failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/agent/onboarding/start": {
       "post": {
         "operationId": "startAgentOnboarding",
         "summary": "Start SignalArc Circle Agent Wallet onboarding and dispatch OTP email",
+        "description": "Starts a new SignalArc Circle Agent Wallet onboarding session for a single user. The Custom GPT MUST generate a unique agent_id per user before calling this operation. The agent_id MUST NOT be a generic placeholder such as signalarc-gpt-agent, agent_desi_001, default, test, demo, user, agent, or chatgpt. The recommended shape is agent_<slug>_chatgpt_<suffix>, where <slug> is derived from the user's email local part or a stable handle and <suffix> is a 3-digit counter, for example agent_sanatarau21_chatgpt_001. After a successful response the Custom GPT MUST reuse the exact returned agent_id for every subsequent operation in this session. Backend validation rejects generic placeholder agent_id values and requires the SignalArc shape.",
         "requestBody": {
           "required": true,
           "content": {
@@ -44,10 +150,45 @@
                 "type": "object",
                 "required": ["agent_id", "user_email"],
                 "properties": {
-                  "agent_id": { "type": "string" },
-                  "user_email": { "type": "string", "format": "email" },
-                  "source_client": { "type": "string" },
-                  "channel": { "type": "string" }
+                  "agent_id": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 80,
+                    "pattern": "^agent_[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$",
+                    "description": "Unique SignalArc agent identifier for this user/session. MUST start with agent_ and use only letters, digits, underscores, or hyphens. MUST NOT be a generic placeholder such as signalarc-gpt-agent, agent_desi_001, default, defaultagent, test, testagent, demo, demoagent, user, useragent, agent, chatgpt, or chatgpt_agent. Recommended shape agent_<slug>_chatgpt_<suffix>.",
+                    "examples": [
+                      "agent_sanatarau21_chatgpt_001",
+                      "agent_adenhusen65_live_002"
+                    ]
+                  },
+                  "user_email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Email address that will receive the Circle OTP."
+                  },
+                  "user_wallet": {
+                    "type": "string",
+                    "description": "Optional EVM address of the user's connected wallet. Optional at onboarding-start; not required for the Circle OTP path."
+                  },
+                  "source_client": {
+                    "type": "string",
+                    "description": "Identifier for the calling client surface, for example chatgpt_custom_action."
+                  },
+                  "channel": {
+                    "type": "string",
+                    "description": "Channel routing label, for example chatgpt."
+                  }
+                }
+              },
+              "examples": {
+                "chatgptOnboardingStart": {
+                  "summary": "Custom GPT onboarding start with a unique agent_id",
+                  "value": {
+                    "agent_id": "agent_sanatarau21_chatgpt_001",
+                    "user_email": "sanatarau21@gmail.com",
+                    "source_client": "chatgpt_custom_action",
+                    "channel": "chatgpt"
+                  }
                 }
               }
             }
@@ -68,8 +209,24 @@
               }
             }
           },
+          "201": {
+            "description": "OTP email dispatched, onboarding pending verification",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "next_step": { "type": "string" },
+                    "onboarding": { "$ref": "#/components/schemas/AgentOnboarding" },
+                    "expires_at": { "type": "string" },
+                    "request_reference": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
           "400": {
-            "description": "Invalid onboarding start request",
+            "description": "Invalid onboarding start request, including generic agent_id rejection",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" }
@@ -107,6 +264,7 @@
       "post": {
         "operationId": "verifyAgentOnboarding",
         "summary": "Verify OTP, register agent wallet, and activate agent session",
+        "description": "Verifies the OTP code emailed to the user during the onboarding/start step. Reuse the onboarding_id returned by startAgentOnboarding exactly. Do not retry verifyAgentOnboarding without first running startAgentOnboarding for a fresh OTP if the OTP request has expired.",
         "requestBody": {
           "required": true,
           "content": {
@@ -115,8 +273,14 @@
                 "type": "object",
                 "required": ["onboarding_id", "otp"],
                 "properties": {
-                  "onboarding_id": { "type": "string" },
-                  "otp": { "type": "string" }
+                  "onboarding_id": {
+                    "type": "string",
+                    "description": "The onboarding_id returned by startAgentOnboarding."
+                  },
+                  "otp": {
+                    "type": "string",
+                    "description": "The OTP code from the email Circle sent to the user."
+                  }
                 }
               }
             }
@@ -223,12 +387,18 @@
       "get": {
         "operationId": "getAgentSession",
         "summary": "Get SignalArc active agent session",
+        "description": "Returns the active agent session for the provided agent_id. Always pass the exact agent_id returned by startAgentOnboarding. Never use a generic placeholder.",
         "parameters": [
           {
             "name": "agent_id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "pattern": "^agent_[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$"
+            },
+            "description": "Reuse the exact agent_id returned by startAgentOnboarding. Example: agent_sanatarau21_chatgpt_001."
           }
         ],
         "responses": {
@@ -260,12 +430,18 @@
       "get": {
         "operationId": "getAgentWallet",
         "summary": "Get SignalArc registered agent wallet",
+        "description": "Returns the registered Circle Agent Wallet record for the provided agent_id. Always pass the exact agent_id returned by startAgentOnboarding.",
         "parameters": [
           {
             "name": "agent_id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "pattern": "^agent_[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$"
+            },
+            "description": "Reuse the exact agent_id returned by startAgentOnboarding."
           }
         ],
         "responses": {
@@ -297,12 +473,18 @@
       "get": {
         "operationId": "getAgentWalletBalance",
         "summary": "Get read-only SignalArc Circle Agent Wallet balance",
+        "description": "Returns a read-only Circle Agent Wallet balance snapshot. Always pass the exact agent_id returned by startAgentOnboarding.",
         "parameters": [
           {
             "name": "agent_id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "pattern": "^agent_[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$"
+            },
+            "description": "Reuse the exact agent_id returned by startAgentOnboarding."
           }
         ],
         "responses": {
@@ -350,12 +532,18 @@
       "post": {
         "operationId": "requestAgentWalletFaucet",
         "summary": "Request ARC-TESTNET faucet funding for an active SignalArc agent wallet",
+        "description": "Requests ARC-TESTNET USDC faucet funding for the registered agent wallet. Always pass the exact agent_id returned by startAgentOnboarding.",
         "parameters": [
           {
             "name": "agent_id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "pattern": "^agent_[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$"
+            },
+            "description": "Reuse the exact agent_id returned by startAgentOnboarding."
           }
         ],
         "responses": {
@@ -411,6 +599,7 @@
       "post": {
         "operationId": "createAgentIntent",
         "summary": "Create a SignalArc agent intent preview",
+        "description": "Creates an agent intent preview. Always reuse the exact agent_id returned by startAgentOnboarding. For action=create_market, close_timestamp MUST be a UTC RFC3339 string such as 2026-05-31T23:59:00Z or a unix-seconds integer string such as 1780000000. Natural-language dates such as 'end of May 2026' or 'default' are NOT accepted; the Custom GPT MUST convert the user's intent into RFC3339 before calling this operation. If the user gives an ambiguous date, the Custom GPT SHOULD ask one short clarification question before calling.",
         "requestBody": {
           "required": true,
           "content": {
@@ -419,9 +608,24 @@
                 "type": "object",
                 "required": ["agent_id", "source_client", "client_request_id", "action", "user_wallet"],
                 "properties": {
-                  "agent_id": { "type": "string" },
-                  "source_client": { "type": "string" },
-                  "client_request_id": { "type": "string" },
+                  "agent_id": {
+                    "type": "string",
+                    "minLength": 10,
+                    "pattern": "^agent_[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$",
+                    "description": "Reuse the exact agent_id returned by startAgentOnboarding. Never use generic placeholders such as signalarc-gpt-agent or agent_desi_001.",
+                    "examples": [
+                      "agent_sanatarau21_chatgpt_001",
+                      "agent_adenhusen65_live_002"
+                    ]
+                  },
+                  "source_client": {
+                    "type": "string",
+                    "description": "Calling client identifier, for example chatgpt_custom_action."
+                  },
+                  "client_request_id": {
+                    "type": "string",
+                    "description": "Caller-generated idempotency token for this intent."
+                  },
                   "action": {
                     "type": "string",
                     "enum": [
@@ -435,15 +639,74 @@
                       "claim_refund"
                     ]
                   },
-                  "user_wallet": { "type": "string" },
+                  "user_wallet": {
+                    "type": "string",
+                    "description": "EVM address that owns the user-side context for this intent."
+                  },
                   "market_id": { "type": "string" },
-                  "question": { "type": "string" },
-                  "close_timestamp": { "type": "integer" },
-                  "resolver": { "type": "string" },
-                  "collateral_token": { "type": "string" },
-                  "market_contract_address": { "type": "string" },
-                  "amount": { "type": "string" },
-                  "outcome": { "type": "string" }
+                  "question": {
+                    "type": "string",
+                    "description": "Required for create_market. Plain natural-language question for the new market.",
+                    "examples": ["Will BTC be above 50k in May 2026?"]
+                  },
+                  "close_timestamp": {
+                    "type": "string",
+                    "description": "Required for create_market. UTC RFC3339 string such as 2026-05-31T23:59:00Z or a unix-seconds integer string such as 1780000000. Natural-language dates are not accepted; convert before calling. Sending an integer is also accepted but the string form is preferred.",
+                    "examples": [
+                      "2026-05-31T23:59:00Z",
+                      "1780000000"
+                    ]
+                  },
+                  "resolver": {
+                    "type": "string",
+                    "description": "Required for create_market. EVM address of the resolver."
+                  },
+                  "collateral_token": {
+                    "type": "string",
+                    "description": "Required for create_market. EVM address of the collateral token (USDC on ARC-TESTNET)."
+                  },
+                  "market_contract_address": {
+                    "type": "string",
+                    "description": "Required for buy_yes, buy_no, close_market, resolve_market, cancel_market, claim_refund, and claim_payout."
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "Required for buy_yes and buy_no. Decimal string such as 1000000."
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "description": "Required for resolve_market."
+                  }
+                }
+              },
+              "examples": {
+                "createMarketRFC3339": {
+                  "summary": "create_market with RFC3339 close_timestamp",
+                  "value": {
+                    "agent_id": "agent_sanatarau21_chatgpt_001",
+                    "source_client": "chatgpt_custom_action",
+                    "client_request_id": "client_req_001",
+                    "action": "create_market",
+                    "user_wallet": "0x1111111111111111111111111111111111111111",
+                    "market_id": "agent-market-1",
+                    "question": "Will BTC be above 50k in May 2026?",
+                    "close_timestamp": "2026-05-31T23:59:00Z",
+                    "resolver": "0x2222222222222222222222222222222222222222",
+                    "collateral_token": "0x3333333333333333333333333333333333333333"
+                  }
+                },
+                "buyYes": {
+                  "summary": "buy_yes intent",
+                  "value": {
+                    "agent_id": "agent_sanatarau21_chatgpt_001",
+                    "source_client": "chatgpt_custom_action",
+                    "client_request_id": "client_req_002",
+                    "action": "buy_yes",
+                    "user_wallet": "0x1111111111111111111111111111111111111111",
+                    "market_id": "market-1",
+                    "market_contract_address": "0x4444444444444444444444444444444444444444",
+                    "amount": "1000000"
+                  }
                 }
               }
             }
@@ -464,8 +727,21 @@
               }
             }
           },
+          "201": {
+            "description": "Intent created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "intent": { "$ref": "#/components/schemas/AgentIntent" }
+                  }
+                }
+              }
+            }
+          },
           "400": {
-            "description": "Invalid intent request",
+            "description": "Invalid intent request. Common codes: invalid_json (request body must be valid JSON; for create_market send close_timestamp as RFC3339 such as 2026-05-31T23:59:00Z or as a unix-seconds integer string).",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" }
@@ -495,6 +771,7 @@
       "post": {
         "operationId": "confirmAgentIntent",
         "summary": "Confirm a SignalArc agent intent",
+        "description": "Confirms a previewed intent. Always reuse the exact intent_id returned by createAgentIntent.",
         "parameters": [
           {
             "name": "intent_id",
@@ -510,7 +787,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "agent_id": { "type": "string" },
+                  "agent_id": {
+                    "type": "string",
+                    "minLength": 10,
+                    "pattern": "^agent_[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$",
+                    "description": "Reuse the exact agent_id returned by startAgentOnboarding."
+                  },
                   "client_request_id": { "type": "string" }
                 }
               }
@@ -564,6 +846,7 @@
       "post": {
         "operationId": "executeAgentIntent",
         "summary": "Execute a confirmed SignalArc agent intent",
+        "description": "Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. Always reuse the exact intent_id returned by createAgentIntent and the exact agent_id returned by startAgentOnboarding.",
         "parameters": [
           {
             "name": "intent_id",
@@ -579,7 +862,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "agent_id": { "type": "string" },
+                  "agent_id": {
+                    "type": "string",
+                    "minLength": 10,
+                    "pattern": "^agent_[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$",
+                    "description": "Reuse the exact agent_id returned by startAgentOnboarding."
+                  },
                   "client_request_id": { "type": "string" }
                 }
               }
@@ -675,6 +963,7 @@
         "type": "object",
         "properties": {
           "id": { "type": "string" },
+          "onboarding_id": { "type": "string" },
           "agent_id": { "type": "string" },
           "user_email": { "type": "string" },
           "wallet_provider": { "type": "string" },
@@ -770,12 +1059,20 @@
           "market_id": { "type": "string" },
           "market_contract_address": { "type": "string" },
           "question": { "type": "string" },
-          "close_timestamp": { "type": "integer" },
+          "close_timestamp": {
+            "type": "string",
+            "description": "Normalized close timestamp. Backend stores the unix-seconds string for create_market. Example: 1780000000."
+          },
           "resolver": { "type": "string" },
           "collateral_token": { "type": "string" },
           "amount": { "type": "string" },
           "outcome": { "type": "string" },
           "params": { "type": "object" },
+          "validation_result": { "type": "object" },
+          "warnings": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
           "created_at": { "type": "string" },
           "updated_at": { "type": "string" }
         }
@@ -785,20 +1082,18 @@
         "properties": {
           "intent_id": { "type": "string" },
           "action": { "type": "string" },
-          "agent_wallet_address": { "type": "string" },
-          "wallet_provider": { "type": "string" },
-          "chain": { "type": "string" },
-          "target_contract": { "type": "string" },
-          "function_signature": { "type": "string" },
-          "function_args": {
-            "type": "array",
-            "items": {}
-          },
-          "preconditions": {
+          "status": { "type": "string" },
+          "execution_mode": { "type": "string" },
+          "network": { "type": "string" },
+          "agent_factory_address": { "type": "string" },
+          "requires_signature": { "type": "boolean" },
+          "broadcast_performed": { "type": "boolean" },
+          "transaction_hash": { "type": ["string", "null"] },
+          "transaction_request": { "type": "object" },
+          "warnings": {
             "type": "array",
             "items": { "type": "string" }
-          },
-          "metadata": { "type": "object" }
+          }
         }
       },
       "ExecutionResult": {
@@ -808,6 +1103,7 @@
           "execution_mode": { "type": "string" },
           "status": { "type": "string" },
           "tx_hash": { "type": "string" },
+          "transaction_hash": { "type": "string" },
           "block_number": { "type": "integer" },
           "chain": { "type": "string" },
           "agent_wallet_address": { "type": "string" },
@@ -815,6 +1111,47 @@
           "readback": { "type": "object" },
           "error": { "type": "string" },
           "executed_at": { "type": "string" }
+        }
+      },
+      "Market": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "creator_user_id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "category": { "type": ["string", "null"] },
+          "status": { "type": "string" },
+          "outcome_yes_label": { "type": "string" },
+          "outcome_no_label": { "type": "string" },
+          "collateral_asset": { "type": "string" },
+          "chain": { "type": "string" },
+          "resolution_source": { "type": ["string", "null"] },
+          "opens_at": { "type": ["string", "null"] },
+          "closes_at": { "type": "string" },
+          "resolved_at": { "type": ["string", "null"] },
+          "settled_at": { "type": ["string", "null"] },
+          "winning_outcome": { "type": ["string", "null"] },
+          "market_contract_address": { "type": ["string", "null"] },
+          "market_deployment_tx_hash": { "type": ["string", "null"] },
+          "market_factory_address": { "type": ["string", "null"] },
+          "resolver_address": { "type": ["string", "null"] },
+          "onchain_deployment_status": { "type": "string" },
+          "created_at": { "type": "string" },
+          "updated_at": { "type": "string" }
+        }
+      },
+      "AgentMarket": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "string" },
+          "category": { "type": ["string", "null"] },
+          "collateral_asset": { "type": "string" },
+          "chain": { "type": "string" },
+          "closes_at": { "type": "string" },
+          "resolution_source": { "type": ["string", "null"] }
         }
       }
     }
