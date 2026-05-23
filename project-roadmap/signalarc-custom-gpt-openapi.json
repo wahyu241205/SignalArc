@@ -36,7 +36,7 @@
       "get": {
         "operationId": "listMarkets",
         "summary": "List up to 50 SignalArc markets for read-only discovery",
-        "description": "Returns up to 50 markets known to SignalArc on Arc Testnet for read-only discovery. Each entry includes status (DRAFT, OPEN, CLOSED, RESOLVED, SETTLED), category, collateral_asset, chain, and closes_at. The endpoint is read-only and does not perform any wallet, faucet, or transaction action. The Custom GPT SHOULD call this Action whenever the user asks for open markets, trending markets, or any general market list.",
+        "description": "Read-only market discovery. Returns up to 50 SignalArc markets on Arc Testnet with status (DRAFT, OPEN, CLOSED, RESOLVED, SETTLED), category, collateral_asset, chain, and closes_at. Call this Action when the user asks for open markets, trending markets, or any market list.",
         "responses": {
           "200": {
             "description": "Markets list",
@@ -141,7 +141,7 @@
       "post": {
         "operationId": "startAgentOnboarding",
         "summary": "Start SignalArc Circle Agent Wallet onboarding and dispatch OTP email",
-        "description": "Starts a new SignalArc Circle Agent Wallet onboarding session for a single user. The Custom GPT MUST generate a unique agent_id per user before calling this operation. The agent_id MUST NOT be a generic placeholder such as signalarc-gpt-agent, agent_desi_001, default, test, demo, user, agent, or chatgpt. The recommended shape is agent_<slug>_chatgpt_<suffix>, where <slug> is derived from the user's email local part or a stable handle and <suffix> is a 3-digit counter, for example agent_sanatarau21_chatgpt_001. After a successful response the Custom GPT MUST reuse the exact returned agent_id for every subsequent operation in this session. Backend validation rejects generic placeholder agent_id values and requires the SignalArc shape.",
+        "description": "Starts a SignalArc Circle Agent Wallet onboarding session. The Custom GPT MUST generate a unique agent_id per user (recommended agent_<slug>_chatgpt_<suffix>, e.g. agent_sanatarau21_chatgpt_001) and MUST NOT use generic placeholders such as signalarc-gpt-agent, agent_desi_001, default, or test.",
         "requestBody": {
           "required": true,
           "content": {
@@ -599,7 +599,7 @@
       "post": {
         "operationId": "createAgentIntent",
         "summary": "Create a SignalArc agent intent preview",
-        "description": "Creates an agent intent preview. Always reuse the exact agent_id returned by startAgentOnboarding. For action=create_market, close_timestamp MUST be a UTC RFC3339 string such as 2026-05-31T23:59:00Z or a unix-seconds integer string such as 1780000000. Natural-language dates such as 'end of May 2026' or 'default' are NOT accepted; the Custom GPT MUST convert the user's intent into RFC3339 before calling this operation. If the user gives an ambiguous date, the Custom GPT SHOULD ask one short clarification question before calling.",
+        "description": "Creates an agent intent preview. Reuse the exact agent_id from startAgentOnboarding and send valid JSON. For action=create_market, close_timestamp MUST be a UTC RFC3339 string such as 2026-05-31T23:59:00Z or a unix-seconds integer string such as 1780000000. Convert natural-language dates first.",
         "requestBody": {
           "required": true,
           "content": {
