@@ -2554,6 +2554,51 @@ func TestExecuteMapsUnexpectedExecutorError(t *testing.T) {
 	}
 }
 
+func TestExecuteStaleCloseTimestampReturnsBadRequest(t *testing.T) {
+	store := agent.NewStore()
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionCreateMarket)
+	executor := &stubAgentExecutor{err: agent.ErrCreateMarketCloseTimestampStale}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, walletRegistry, executor)
+
+	intentID := createAgentIntent(t, router, `{
+		"action": "create_market",
+		"agent_id": "agent_test_1",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "agent-market-stale-ts",
+		"question": "Will this market have a stale timestamp?",
+		"close_timestamp": "1767225600",
+		"resolver": "0x2222222222222222222222222222222222222222",
+		"collateral_token": "0x3333333333333333333333333333333333333333"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d for stale timestamp, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+	if !executor.called {
+		t.Fatal("expected executor to be called")
+	}
+
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.Error.Code != "create_market_close_timestamp_stale" {
+		t.Fatalf("expected error code create_market_close_timestamp_stale, got %q", body.Error.Code)
+	}
+}
+
 func TestConfirmBuyYesReturnsMarketTransactionRequest(t *testing.T) {
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil)

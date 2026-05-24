@@ -94,6 +94,10 @@ func (executor *CircleCLIExecutor) ExecuteCreateMarket(ctx context.Context, inte
 		return ExecutionResult{}, err
 	}
 
+	if err := validateCloseTimestampFresh(intent.CloseTimestamp); err != nil {
+		return ExecutionResult{}, err
+	}
+
 	resolver := intent.AgentWalletAddress
 	collateralToken := strings.TrimSpace(intent.CollateralToken)
 	if collateralToken == "" {
@@ -703,6 +707,31 @@ func decodeBoolScalar(value string) (bool, error) {
 func looksLikeHash(value string) bool {
 	value = strings.TrimSpace(value)
 	return strings.HasPrefix(value, "0x") && len(value) >= 10
+}
+
+// closeTimestampSafetyMarginSeconds is the minimum number of seconds that
+// closeTimestamp must be ahead of the current time at execution. This
+// prevents submitting transactions that will certainly revert because the
+// contract constructor enforces closeTimestamp > block.timestamp.
+const closeTimestampSafetyMarginSeconds = 60
+
+// validateCloseTimestampFresh checks that the close_timestamp value on a
+// create_market intent is still sufficiently in the future at execution time.
+// Returns ErrCreateMarketCloseTimestampStale if the timestamp is stale.
+func validateCloseTimestampFresh(closeTimestamp string) error {
+	closeTimestamp = strings.TrimSpace(closeTimestamp)
+	if closeTimestamp == "" {
+		return ErrIntentInvalid
+	}
+	ts, ok := new(big.Int).SetString(closeTimestamp, 10)
+	if !ok || ts.Sign() <= 0 {
+		return ErrIntentInvalid
+	}
+	nowPlusMargin := big.NewInt(time.Now().Unix() + closeTimestampSafetyMarginSeconds)
+	if ts.Cmp(nowPlusMargin) <= 0 {
+		return ErrCreateMarketCloseTimestampStale
+	}
+	return nil
 }
 
 // extractChainFromArgs extracts the --chain value from CLI args, if present.

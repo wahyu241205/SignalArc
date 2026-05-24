@@ -992,3 +992,31 @@ Important limitation:
 - This does not fix execute failure.
 - It only makes the next execute failure diagnosable from production logs.
 - Exact Circle CLI stderr format for execute failure modes remains unknown / not documented.
+
+## Backend guard — create market stale close timestamp
+
+Problem:
+- After execute diagnostics were deployed, `create_market` execution failed inside Circle CLI with `Transaction failed: ESTIMATION_ERROR`.
+- Diagnostics showed the call reached `wallet_execute` for `createMarket(string,string,uint256,address,address)`.
+- ABI/signature and argument order matched the deployed factory.
+- Most likely revert cause was stale `close_timestamp`, because the contract requires close timestamp to be greater than block timestamp.
+
+Completed:
+- Added backend-only pre-execution guard for `create_market`.
+- `ExecuteCreateMarket` now validates `close_timestamp` is still sufficiently in the future before calling Circle CLI.
+- Uses a 60-second safety margin.
+- If stale, backend does not call Circle CLI.
+- Public response is now HTTP 400 with error code `create_market_close_timestamp_stale`.
+- Existing provider/Circle CLI failures still use HTTP 502 with `agent_execution_failed`.
+- Non-`create_market` actions are not affected.
+- Tests use dynamic future/past timestamps to avoid time-bomb failures.
+- Timestamp comparison uses `big.Int.Cmp` instead of `Int64()` to avoid overflow behavior for very large timestamp inputs.
+
+Validation:
+- `go test ./...` passed.
+- `go vet ./...` passed.
+- `gofmt` clean on changed Go files.
+
+Important limitation:
+- This does not fix every possible `ESTIMATION_ERROR`.
+- Duplicate `marketId`, unsupported collateral, authorization, or other contract reverts remain possible and should be handled separately if observed.

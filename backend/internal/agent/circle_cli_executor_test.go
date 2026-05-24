@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -51,16 +52,35 @@ func TestCircleCLIExecutorCreateMarketBuildsCommandsAndReadback(t *testing.T) {
 		t.Fatalf("execute create market: %v", err)
 	}
 
-	expectedFirstArgs := []string{
+	// Verify the CLI args structure. The close_timestamp is dynamic so we
+	// check the surrounding args and verify the timestamp position separately.
+	firstCall := runner.calls[0].args
+	expectedPrefix := []string{
 		"wallet", "execute", "createMarket(string,string,uint256,address,address)",
-		"market-1", "Will SignalArc execute through Circle?", "1770000000",
+		"market-1", "Will SignalArc execute through Circle?",
+	}
+	for i, expected := range expectedPrefix {
+		if firstCall[i] != expected {
+			t.Fatalf("arg[%d] expected %q, got %q", i, expected, firstCall[i])
+		}
+	}
+	// Position 5 is the dynamic close_timestamp; verify it parses as a positive integer.
+	if _, ok := new(big.Int).SetString(firstCall[5], 10); !ok {
+		t.Fatalf("expected close_timestamp arg to be a decimal integer, got %q", firstCall[5])
+	}
+	expectedSuffix := []string{
 		"0x9999999999999999999999999999999999999999", ArcTestnetUSDCAddress,
 		"--address", "0x9999999999999999999999999999999999999999",
 		"--contract", AgentFactoryAddress,
 		"--chain", ChainArcTestnet,
 		"--output", "json",
 	}
-	assertArgs(t, runner.calls[0].args, expectedFirstArgs)
+	suffixStart := 6
+	for i, expected := range expectedSuffix {
+		if firstCall[suffixStart+i] != expected {
+			t.Fatalf("arg[%d] expected %q, got %q", suffixStart+i, expected, firstCall[suffixStart+i])
+		}
+	}
 	assertArgs(t, runner.calls[2].args, []string{
 		"contract", "query", "allMarkets(uint256)", "8",
 		"--contract", AgentFactoryAddress,
@@ -420,6 +440,68 @@ func TestCircleCLIExecutorDecodesABIHexScalars(t *testing.T) {
 	}
 }
 
+func TestCircleCLIExecutorCreateMarketStaleCloseTimestampReturnsError(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: [][]byte{
+		[]byte(`{"transactionHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`),
+	}}
+	executor := newTestCircleCLIExecutor(runner, true)
+	intent := confirmedIntent(ActionCreateMarket)
+	// Set close_timestamp to a value in the past
+	intent.CloseTimestamp = pastTimestamp()
+
+	_, err := executor.ExecuteCreateMarket(context.Background(), intent)
+	if !errors.Is(err, ErrCreateMarketCloseTimestampStale) {
+		t.Fatalf("expected ErrCreateMarketCloseTimestampStale, got %v", err)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("expected no CLI calls for stale timestamp, got %d", len(runner.calls))
+	}
+}
+
+func TestCircleCLIExecutorCreateMarketFutureCloseTimestampProceeds(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: [][]byte{
+		[]byte(`{"transactionHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`),
+		jsonResult(abiUint256("9")),
+		jsonResult(abiAddress("0xabcf081e456c1a11106def590666a07b76d456f8")),
+		jsonResult(abiUint256("1")),
+	}}
+	executor := newTestCircleCLIExecutor(runner, true)
+	intent := confirmedIntent(ActionCreateMarket)
+	// Set close_timestamp 2 hours in the future (well beyond the 60s margin)
+	intent.CloseTimestamp = strconv.FormatInt(time.Now().Add(2*time.Hour).Unix(), 10)
+
+	result, err := executor.ExecuteCreateMarket(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("expected success for future timestamp, got %v", err)
+	}
+	if len(runner.calls) == 0 {
+		t.Fatal("expected CLI calls for future timestamp")
+	}
+	if result.Status != StatusExecuted {
+		t.Fatalf("expected executed status, got %q", result.Status)
+	}
+}
+
+func TestCircleCLIExecutorBuyYesNotAffectedByCloseTimestampGuard(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: buyOutputs(
+		"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"1000000", "1000000", "1000000", "1000000",
+	)}
+	executor := newTestCircleCLIExecutor(runner, true)
+	intent := confirmedIntent(ActionBuyYes)
+	// Even with a stale close_timestamp, buy_yes should not be affected
+	intent.CloseTimestamp = pastTimestamp()
+
+	result, err := executor.ExecuteBuyYes(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("expected buy_yes to succeed regardless of close_timestamp, got %v", err)
+	}
+	if result.Status != StatusExecuted {
+		t.Fatalf("expected executed status, got %q", result.Status)
+	}
+}
+
 func newTestCircleCLIExecutor(runner *fakeCommandRunner, enabled bool) *CircleCLIExecutor {
 	return NewCircleCLIExecutor(CircleCLIExecutorConfig{
 		Enabled:       enabled,
@@ -446,10 +528,20 @@ func confirmedIntent(action string) Intent {
 		Amount:                "1000000",
 		Resolver:              "",
 		CollateralToken:       ArcTestnetUSDCAddress,
-		CloseTimestamp:        "1770000000",
+		CloseTimestamp:        futureTimestamp(),
 		Question:              "Will SignalArc execute through Circle?",
 		ValidationResult:      ValidationResult{Valid: true, Errors: []string{}},
 	}
+}
+
+// futureTimestamp returns a Unix-seconds string 1 hour in the future.
+func futureTimestamp() string {
+	return strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
+}
+
+// pastTimestamp returns a Unix-seconds string 1 hour in the past.
+func pastTimestamp() string {
+	return strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10)
 }
 
 func lifecyclePayoutOutputs(txHash string, status string, winningOutcome string, claimablePayout string, hasClaimed bool, balance string) [][]byte {

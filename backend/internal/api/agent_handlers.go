@@ -879,6 +879,10 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "agent execution action is not implemented")
 				return
 			}
+			if errors.Is(err, agent.ErrCreateMarketCloseTimestampStale) {
+				httpjson.WriteError(w, http.StatusBadRequest, "create_market_close_timestamp_stale", "close_timestamp must be in the future before execution")
+				return
+			}
 			if errors.Is(err, agent.ErrIntentInvalid) {
 				httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
 				return
