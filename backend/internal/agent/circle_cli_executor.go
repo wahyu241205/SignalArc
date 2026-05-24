@@ -27,11 +27,31 @@ func (runner ExecCommandRunner) Run(ctx context.Context, name string, args []str
 	// a sanitized error class on the wrapped CircleCLIError.
 	output, err := command.CombinedOutput()
 	if err != nil {
+		rawOutput := string(output)
+		errorClass := ClassifyCircleErrorOutput(rawOutput, err.Error())
+		sanitizedSummary := BuildExecuteSummary(rawOutput, err)
+		exitStatus := ExtractExitStatus(err.Error())
+		commandCategory := ClassifyExecuteCommandCategory(args)
+
+		// Capture the sanitized process error when CLI output is empty,
+		// so operators can distinguish process-level failures.
+		processError := ""
+		if strings.TrimSpace(rawOutput) == "" {
+			processError = SanitizeExecuteOutput(err.Error())
+		}
+
 		return output, &CircleCLIError{
 			Operation:        "circle_cli_exec",
-			ErrorClass:       ClassifyCircleErrorOutput(string(output), err.Error()),
-			SanitizedSummary: "Circle CLI command failed",
+			ErrorClass:       errorClass,
+			SanitizedSummary: sanitizedSummary,
 			Err:              errors.New("Circle CLI command failed"),
+			ExecCtx: &ExecuteContext{
+				CommandCategory: commandCategory,
+				ExitStatus:      exitStatus,
+				Chain:           extractChainFromArgs(args),
+				RawOutputLen:    len(output),
+				ProcessError:    processError,
+			},
 		}
 	}
 	return output, nil
@@ -429,6 +449,18 @@ func (executor *CircleCLIExecutor) walletExecute(ctx context.Context, signature 
 
 	output, err := executor.run(ctx, args)
 	if err != nil {
+		// Enrich the CircleCLIError with execution context for diagnostics.
+		var cliErr *CircleCLIError
+		if errors.As(err, &cliErr) {
+			if cliErr.ExecCtx == nil {
+				cliErr.ExecCtx = &ExecuteContext{}
+			}
+			cliErr.ExecCtx.FunctionSignature = signature
+			cliErr.ExecCtx.ContractAddress = RedactAddress(contractAddress)
+			cliErr.ExecCtx.WalletAddress = RedactAddress(walletAddress)
+			cliErr.ExecCtx.Chain = executor.cfg.Chain
+			cliErr.ExecCtx.CommandCategory = "wallet_execute"
+		}
 		return "", err
 	}
 	hash, ok := findJSONValue(output, "transactionHash", "transaction_hash", "txHash", "tx_hash", "hash")
@@ -449,6 +481,17 @@ func (executor *CircleCLIExecutor) contractQuery(ctx context.Context, signature 
 
 	output, err := executor.run(ctx, args)
 	if err != nil {
+		// Enrich the CircleCLIError with query context for diagnostics.
+		var cliErr *CircleCLIError
+		if errors.As(err, &cliErr) {
+			if cliErr.ExecCtx == nil {
+				cliErr.ExecCtx = &ExecuteContext{}
+			}
+			cliErr.ExecCtx.FunctionSignature = signature
+			cliErr.ExecCtx.ContractAddress = RedactAddress(contractAddress)
+			cliErr.ExecCtx.Chain = executor.cfg.Chain
+			cliErr.ExecCtx.CommandCategory = "contract_query"
+		}
 		return "", err
 	}
 	value, ok := findJSONValue(output, "result", "value", "output", "data", "returnValue")
@@ -499,8 +542,15 @@ func (executor *CircleCLIExecutor) run(parent context.Context, args []string) ([
 		return nil, &CircleCLIError{
 			Operation:        "circle_cli_exec",
 			ErrorClass:       CircleErrorClassUnknown,
-			SanitizedSummary: "Circle CLI command failed",
+			SanitizedSummary: BuildExecuteSummary("", err),
 			Err:              errors.New("Circle CLI command failed"),
+			ExecCtx: &ExecuteContext{
+				CommandCategory: ClassifyExecuteCommandCategory(args),
+				ExitStatus:      ExtractExitStatus(err.Error()),
+				Chain:           extractChainFromArgs(args),
+				RawOutputLen:    0,
+				ProcessError:    SanitizeExecuteOutput(err.Error()),
+			},
 		}
 	}
 	if len(output) == 0 {
@@ -509,6 +559,11 @@ func (executor *CircleCLIExecutor) run(parent context.Context, args []string) ([
 			ErrorClass:       CircleErrorClassUnknown,
 			SanitizedSummary: "Circle CLI command returned empty output",
 			Err:              errors.New("Circle CLI command returned empty output"),
+			ExecCtx: &ExecuteContext{
+				CommandCategory: ClassifyExecuteCommandCategory(args),
+				Chain:           extractChainFromArgs(args),
+				RawOutputLen:    0,
+			},
 		}
 	}
 	return output, nil
@@ -648,4 +703,14 @@ func decodeBoolScalar(value string) (bool, error) {
 func looksLikeHash(value string) bool {
 	value = strings.TrimSpace(value)
 	return strings.HasPrefix(value, "0x") && len(value) >= 10
+}
+
+// extractChainFromArgs extracts the --chain value from CLI args, if present.
+func extractChainFromArgs(args []string) string {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "--chain" {
+			return args[i+1]
+		}
+	}
+	return ""
 }

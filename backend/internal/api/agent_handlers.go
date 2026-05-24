@@ -892,7 +892,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 				return
 			}
 
-			logCircleProviderFailure(r.Context(), "agent_execution", intent.AgentID, intent.ID, err)
+			logCircleProviderFailure(r.Context(), "agent_execution", intent.AgentID, intent.ID, enrichExecuteErrorAction(err, intent.Action))
 			httpjson.WriteError(w, http.StatusBadGateway, "agent_execution_failed", "agent execution failed")
 			return
 		}
@@ -1270,6 +1270,24 @@ func logCircleSessionLivenessGap(ctx context.Context, agentID string, liveness a
 		Msg("agent session liveness downgraded; Circle CLI session not available on this backend instance")
 }
 
+// enrichExecuteErrorAction sets the Action field on a CircleCLIError's
+// ExecCtx if one exists. This allows the handler to attach intent-level
+// context that the executor layer does not have. The error is returned
+// as-is (same pointer) for chaining convenience.
+func enrichExecuteErrorAction(err error, action string) error {
+	if err == nil || action == "" {
+		return err
+	}
+	var cliErr *agent.CircleCLIError
+	if errors.As(err, &cliErr) && cliErr != nil {
+		if cliErr.ExecCtx == nil {
+			cliErr.ExecCtx = &agent.ExecuteContext{}
+		}
+		cliErr.ExecCtx.Action = action
+	}
+	return err
+}
+
 // logCircleProviderFailure emits a structured error log for Circle CLI
 // provider failures returned from balance or execute paths. Public HTTP
 // error codes are not changed; this only adds sanitized structured detail
@@ -1278,14 +1296,45 @@ func logCircleProviderFailure(ctx context.Context, operation string, agentID str
 	if err == nil {
 		return
 	}
-	log.Error().
+
+	event := log.Error().
 		Str("operation", operation).
 		Str("agent_id", agentID).
 		Str("intent_id", intentID).
 		Str("request_id", requestIDFromContext(ctx)).
 		Str("error_class", agent.CircleErrorClassFromError(err)).
-		Str("summary", agent.CircleErrorSummaryFromError(err)).
-		Msg("Circle Agent Wallet provider call failed")
+		Str("summary", agent.CircleErrorSummaryFromError(err))
+
+	// Attach execution context fields when available (execute failures).
+	if execCtx := agent.CircleExecuteContextFromError(err); execCtx != nil {
+		if execCtx.Action != "" {
+			event = event.Str("action", execCtx.Action)
+		}
+		if execCtx.FunctionSignature != "" {
+			event = event.Str("function_signature", execCtx.FunctionSignature)
+		}
+		if execCtx.ContractAddress != "" {
+			event = event.Str("contract_address", execCtx.ContractAddress)
+		}
+		if execCtx.WalletAddress != "" {
+			event = event.Str("wallet_address", execCtx.WalletAddress)
+		}
+		if execCtx.Chain != "" {
+			event = event.Str("chain", execCtx.Chain)
+		}
+		if execCtx.CommandCategory != "" {
+			event = event.Str("command_category", execCtx.CommandCategory)
+		}
+		if execCtx.ExitStatus != "" {
+			event = event.Str("exit_status", execCtx.ExitStatus)
+		}
+		event = event.Int("raw_output_len", execCtx.RawOutputLen)
+		if execCtx.ProcessError != "" {
+			event = event.Str("process_error", execCtx.ProcessError)
+		}
+	}
+
+	event.Msg("Circle Agent Wallet provider call failed")
 }
 
 func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {

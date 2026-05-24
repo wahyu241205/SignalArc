@@ -956,3 +956,39 @@ Validation:
 Important limitation:
 - Exact GPT Actions parser feature support is unknown / not documented.
 - This fix intentionally uses conservative OpenAPI 3.0.3-compatible schema constructs.
+
+## Backend diagnostics — Circle CLI execute failures
+
+Problem:
+- Agent onboarding, OTP verification, session, wallet, balance, market listing, intent preview, and intent confirm work.
+- `executeAgentIntent` still fails with `agent_execution_failed`.
+- Production logs showed `operation=agent_execution`, `error_class=unknown`, and generic summary `Circle CLI command failed`.
+- Existing logs were not enough to distinguish contract revert, ABI/function mismatch, gas/funds issue, Circle CLI syntax, process crash, or unsupported Circle CLI execute behavior.
+
+Completed:
+- Added diagnostics-only context for Circle CLI execute failures.
+- Public API behavior is unchanged: execute failures still return HTTP 502 with public error code `agent_execution_failed`.
+- Raw Circle CLI stdout/stderr is not returned to API callers.
+- Structured logs now include sanitized execute context where available:
+  - action
+  - function signature
+  - redacted contract address
+  - redacted wallet address
+  - chain
+  - command category
+  - exit status
+  - raw output length
+  - sanitized process error
+  - sanitized stdout/stderr summary
+- Added sanitizer behavior to preserve `0x`-prefixed 64-hex transaction hashes while still redacting bare long hex secrets.
+
+Validation:
+- `go build ./...` passed.
+- `go test ./...` passed.
+- `go vet ./...` passed.
+- `gofmt` clean on changed Go files.
+
+Important limitation:
+- This does not fix execute failure.
+- It only makes the next execute failure diagnosable from production logs.
+- Exact Circle CLI stderr format for execute failure modes remains unknown / not documented.

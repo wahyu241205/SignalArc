@@ -12,6 +12,7 @@ import (
 //     ClassifyCircleErrorOutput against documented AUTH_REQUIRED markers
 //   - a sanitized one-line summary safe to log (PII-redacted)
 //   - the underlying public sentinel (e.g. ErrCircleAgentWalletBalanceFailed)
+//   - optional ExecuteContext with non-sensitive metadata about the invocation
 //
 // Public HTTP error codes returned by handlers must remain unchanged. This
 // type exists so handlers can errors.As() it and emit structured log details
@@ -22,6 +23,9 @@ type CircleCLIError struct {
 	ErrorClass       string
 	SanitizedSummary string
 	Err              error
+	// ExecCtx carries non-sensitive execution metadata for structured logging.
+	// It is nil for non-execute operations (balance, list, etc.).
+	ExecCtx *ExecuteContext
 }
 
 func (err *CircleCLIError) Error() string {
@@ -67,6 +71,19 @@ func CircleErrorSummaryFromError(err error) string {
 		return cliErr.SanitizedSummary
 	}
 	return ""
+}
+
+// CircleExecuteContextFromError extracts the ExecuteContext from any error
+// that wraps a *CircleCLIError. Returns nil when no context is available.
+func CircleExecuteContextFromError(err error) *ExecuteContext {
+	if err == nil {
+		return nil
+	}
+	var cliErr *CircleCLIError
+	if errors.As(err, &cliErr) && cliErr != nil {
+		return cliErr.ExecCtx
+	}
+	return nil
 }
 
 // AgentSessionLivenessState marks whether the Circle CLI agent session is
