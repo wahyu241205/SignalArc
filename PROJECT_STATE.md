@@ -520,6 +520,29 @@ Done:
 - Temporary demo domain purchased: `signalarc.fun`.
 - DNS/live deployment remains pending and not approved.
 
+## CI / Quality Gate
+
+Status: COMPLETE.
+
+Done:
+
+- Added first CI-only GitHub Actions workflow at `.github/workflows/ci.yml`.
+- Workflow runs on `pull_request` and push to `main`.
+- Added least-privilege workflow permission: `contents: read`.
+- Frontend CI validates pnpm frozen install, lint, TypeScript check, and production build.
+- Backend CI runs `go test ./...` from `backend`.
+- Contracts CI installs Foundry and runs `forge test` from `contracts`.
+- No deployment, production secrets, Docker publish, Vercel, or GCP automation added in this step.
+
+Validation:
+
+- `pnpm install --frozen-lockfile` passed.
+- `pnpm --dir apps/web lint` passed.
+- `pnpm --dir apps/web exec tsc --noEmit` passed.
+- `pnpm --dir apps/web build` passed under Node 22.
+- `cd backend && go test ./...` passed.
+- `cd contracts && forge test` passed.
+
 ## Current Last Completed Step
 
 - Multi-tenant agent onboarding session foundation added for isolated pending onboarding sessions and durable per-agent session boundaries. Circle OTP/provisioning remains not implemented.
