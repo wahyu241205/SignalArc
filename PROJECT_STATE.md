@@ -543,6 +543,11 @@ Validation:
 - `cd backend && go test ./...` passed.
 - `cd contracts && forge test` passed.
 
+- GitHub branch ruleset `Protect main with CI` created and set to Active.
+- Ruleset targets default branch `main`.
+- Required status checks configured: `Frontend`, `Backend`, `Contracts`.
+- Force pushes and branch deletions are blocked for `main`.
+
 ## Current Last Completed Step
 
 - Multi-tenant agent onboarding session foundation added for isolated pending onboarding sessions and durable per-agent session boundaries. Circle OTP/provisioning remains not implemented.
