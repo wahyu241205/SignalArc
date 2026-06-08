@@ -18,10 +18,18 @@ import { OnchainMarketLifecyclePanel } from "@/features/markets/onchain-market-l
 import { TradeIntentPanel } from "@/features/markets/trade-intent-panel"
 import { ApiError, getMarket, type Market } from "@/lib/api"
 
+/* ---------------------------------------------------------------------------
+ * State
+ * --------------------------------------------------------------------------- */
+
 type MarketDetailState =
   | { status: "loading" }
   | { status: "error"; message: string; requestId: string | null }
   | { status: "ready"; market: Market }
+
+/* ---------------------------------------------------------------------------
+ * Helpers
+ * --------------------------------------------------------------------------- */
 
 function formatDate(value: string) {
   const date = new Date(value)
@@ -68,10 +76,37 @@ function statusColor(status: string) {
       return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
     case "resolved":
       return "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
+    case "cancelled":
+      return "border-red-500/30 bg-red-500/10 text-red-300"
     default:
       return ""
   }
 }
+
+function statusContext(status: string, winningOutcome: string | null) {
+  switch (status.toLowerCase()) {
+    case "open":
+      return "This market is currently accepting positions."
+    case "closed":
+      return "This market has closed and is pending resolution."
+    case "resolved":
+      return winningOutcome
+        ? `This market has been resolved. Winning outcome: ${winningOutcome}.`
+        : "This market has been resolved."
+    case "cancelled":
+      return "This market has been cancelled. Participants may be eligible for refunds."
+    default:
+      return null
+  }
+}
+
+function arcscanContractUrl(address: string) {
+  return `https://testnet.arcscan.app/address/${address}`
+}
+
+/* ---------------------------------------------------------------------------
+ * Detail Item
+ * --------------------------------------------------------------------------- */
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
@@ -82,7 +117,25 @@ function DetailItem({ label, value }: { label: string; value: string }) {
   )
 }
 
-function MarketDetailCard({ market }: { market: Market }) {
+/* ---------------------------------------------------------------------------
+ * Section Header
+ * --------------------------------------------------------------------------- */
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      {children}
+    </h3>
+  )
+}
+
+/* ---------------------------------------------------------------------------
+ * Market Summary Card (main column)
+ * --------------------------------------------------------------------------- */
+
+function MarketSummaryCard({ market }: { market: Market }) {
+  const context = statusContext(market.status, market.winning_outcome)
+
   return (
     <Card>
       <CardHeader className="space-y-4">
@@ -90,20 +143,41 @@ function MarketDetailCard({ market }: { market: Market }) {
           <Badge variant="outline" className={statusColor(market.status)}>
             {market.status}
           </Badge>
-          {market.category ? (
-            <Badge variant="secondary">{market.category}</Badge>
-          ) : null}
-          <span className="text-xs text-muted-foreground">{market.collateral_asset} · {market.chain}</span>
+          <Badge variant="secondary">
+            {market.category || "Uncategorized"}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            {market.collateral_asset} · {market.chain}
+          </span>
         </div>
+
         <CardTitle className="text-xl leading-snug sm:text-2xl">{market.title}</CardTitle>
+
         {market.description ? (
           <CardDescription className="max-w-3xl text-sm leading-6">
             {market.description}
           </CardDescription>
         ) : null}
+
+        {context ? (
+          <p className="text-sm text-muted-foreground">{context}</p>
+        ) : null}
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Outcomes */}
+    </Card>
+  )
+}
+
+/* ---------------------------------------------------------------------------
+ * Outcomes Section (main column)
+ * --------------------------------------------------------------------------- */
+
+function OutcomesSection({ market }: { market: Market }) {
+  return (
+    <Card>
+      <CardHeader>
+        <SectionHeader>Outcomes &amp; Probability</SectionHeader>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-center">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">YES</p>
@@ -114,14 +188,26 @@ function MarketDetailCard({ market }: { market: Market }) {
             <p className="mt-1 text-lg font-bold text-red-400">{market.outcome_no_label}</p>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Probability signal will be derived from market position data when available.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
 
-        <Separator />
+/* ---------------------------------------------------------------------------
+ * Market Parameters Section (main column)
+ * --------------------------------------------------------------------------- */
 
-        {/* Market details */}
+function MarketParametersSection({ market }: { market: Market }) {
+  return (
+    <Card>
+      <CardHeader>
+        <SectionHeader>Market Parameters</SectionHeader>
+      </CardHeader>
+      <CardContent>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {market.resolution_source ? (
-            <DetailItem label="Resolution Source" value={market.resolution_source} />
-          ) : null}
           <DetailItem label="Closes" value={formatDate(market.closes_at)} />
           {market.opens_at ? <DetailItem label="Opens" value={formatDate(market.opens_at)} /> : null}
           {market.resolved_at ? (
@@ -133,7 +219,19 @@ function MarketDetailCard({ market }: { market: Market }) {
           <DetailItem label="Created" value={formatDate(market.created_at)} />
           <DetailItem label="Onchain Status" value={market.onchain_deployment_status} />
           {market.market_contract_address ? (
-            <DetailItem label="Market Contract" value={market.market_contract_address} />
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Market Contract</dt>
+              <dd className="mt-1 text-sm font-medium">
+                <a
+                  href={arcscanContractUrl(market.market_contract_address)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="break-all font-mono text-indigo-400 transition-colors hover:text-indigo-300"
+                >
+                  {market.market_contract_address}
+                </a>
+              </dd>
+            </div>
           ) : null}
         </div>
       </CardContent>
@@ -141,23 +239,154 @@ function MarketDetailCard({ market }: { market: Market }) {
   )
 }
 
-function LoadingSkeleton() {
+/* ---------------------------------------------------------------------------
+ * Resolution Section (main column)
+ * --------------------------------------------------------------------------- */
+
+function ResolutionSection({ market }: { market: Market }) {
+  if (!market.resolution_source) {
+    return null
+  }
+
   return (
-    <Card className="animate-pulse">
+    <Card>
       <CardHeader>
-        <div className="h-6 w-1/4 rounded bg-muted" />
-        <div className="mt-2 h-8 w-3/4 rounded bg-muted" />
+        <SectionHeader>Resolution</SectionHeader>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-10 rounded bg-muted" />
-          ))}
-        </div>
+        <DetailItem label="Resolution Source" value={market.resolution_source} />
       </CardContent>
     </Card>
   )
 }
+
+/* ---------------------------------------------------------------------------
+ * Loading Skeleton
+ * --------------------------------------------------------------------------- */
+
+function SkeletonBlock({ className }: { className?: string }) {
+  return <div className={`rounded bg-muted ${className ?? ""}`} />
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      {/* Main column skeleton */}
+      <div className="space-y-6 lg:col-span-2">
+        {/* Summary card skeleton */}
+        <Card className="animate-pulse">
+          <CardHeader className="space-y-4">
+            <div className="flex items-center gap-2">
+              <SkeletonBlock className="h-5 w-16" />
+              <SkeletonBlock className="h-5 w-24" />
+            </div>
+            <SkeletonBlock className="h-8 w-3/4" />
+            <SkeletonBlock className="h-4 w-full max-w-md" />
+          </CardHeader>
+        </Card>
+
+        {/* Outcomes skeleton */}
+        <Card className="animate-pulse">
+          <CardHeader>
+            <SkeletonBlock className="h-4 w-40" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3">
+              <SkeletonBlock className="h-20" />
+              <SkeletonBlock className="h-20" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Parameters skeleton */}
+        <Card className="animate-pulse">
+          <CardHeader>
+            <SkeletonBlock className="h-4 w-36" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonBlock key={i} className="h-10" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Side column skeleton */}
+      <div className="space-y-6 lg:col-span-1">
+        <Card className="animate-pulse">
+          <CardHeader>
+            <SkeletonBlock className="h-5 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <SkeletonBlock className="h-10" />
+            <SkeletonBlock className="h-10" />
+            <SkeletonBlock className="h-10" />
+          </CardContent>
+        </Card>
+
+        <Card className="animate-pulse">
+          <CardHeader>
+            <SkeletonBlock className="h-5 w-44" />
+          </CardHeader>
+          <CardContent>
+            <SkeletonBlock className="h-24" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------------------
+ * Error State
+ * --------------------------------------------------------------------------- */
+
+function ErrorState({
+  message,
+  requestId,
+}: {
+  message: string
+  requestId: string | null
+}) {
+  return (
+    <div className="mx-auto max-w-lg py-12">
+      <Card className="border-destructive/30 bg-destructive/5">
+        <CardHeader className="space-y-2 text-center">
+          <CardTitle className="text-lg text-destructive">Unable to load market</CardTitle>
+          <CardDescription className="text-sm text-muted-foreground">
+            {message}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 text-center">
+          {requestId ? (
+            <p className="font-mono text-xs text-muted-foreground">
+              Request ID: {requestId}
+            </p>
+          ) : null}
+          <Separator />
+          <div className="flex items-center justify-center gap-3">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/markets">Back to markets</Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------------------
+ * Main Component
+ * --------------------------------------------------------------------------- */
 
 export function MarketDetail({ marketId }: { marketId: string }) {
   const [state, setState] = useState<MarketDetailState>({ status: "loading" })
@@ -193,34 +422,31 @@ export function MarketDetail({ marketId }: { marketId: string }) {
   }
 
   if (state.status === "error") {
-    return (
-      <Card className="border-destructive/30 bg-destructive/5">
-        <CardContent className="pt-6">
-          <h2 className="text-base font-medium text-destructive">Unable to load market</h2>
-          <p className="mt-2 text-sm text-muted-foreground">{state.message}</p>
-          {state.requestId ? (
-            <p className="mt-3 font-mono text-xs text-muted-foreground">
-              Request ID: {state.requestId}
-            </p>
-          ) : null}
-          <Button asChild className="mt-4" size="sm" variant="outline">
-            <Link href="/markets">Back to markets</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    )
+    return <ErrorState message={state.message} requestId={state.requestId} />
   }
 
+  const { market } = state
+
   return (
-    <div className="grid gap-6">
-      <MarketDetailCard market={state.market} />
-      <TradeIntentPanel
-        marketId={state.market.id}
-        marketStatus={state.market.status}
-        marketContractAddress={state.market.market_contract_address}
-      />
-      <OnchainMarketLifecyclePanel marketContractAddress={state.market.market_contract_address} />
-      <MarketResolutionPanel marketId={state.market.id} />
+    <div className="grid gap-6 lg:grid-cols-3">
+      {/* ---- Main Column ---- */}
+      <div className="space-y-6 lg:col-span-2">
+        <MarketSummaryCard market={market} />
+        <OutcomesSection market={market} />
+        <MarketParametersSection market={market} />
+        <ResolutionSection market={market} />
+      </div>
+
+      {/* ---- Side Column ---- */}
+      <div className="space-y-6 lg:col-span-1">
+        <TradeIntentPanel
+          marketId={market.id}
+          marketStatus={market.status}
+          marketContractAddress={market.market_contract_address}
+        />
+        <OnchainMarketLifecyclePanel marketContractAddress={market.market_contract_address} />
+        <MarketResolutionPanel marketId={market.id} />
+      </div>
     </div>
   )
 }

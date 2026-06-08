@@ -19,9 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SignalArc",
+  title: "SignalArc — Prediction Market Infrastructure on Arc",
   description:
-    "Prediction market infrastructure on Arc.",
+    "Arc-native infrastructure for USDC-settled prediction markets, market intelligence, and resolver workflows.",
 };
 
 export default function RootLayout({
