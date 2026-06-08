@@ -1048,3 +1048,30 @@ Validation:
 Important limitation:
 - This does not fix every possible `ESTIMATION_ERROR`.
 - Duplicate `marketId`, unsupported collateral, authorization, or other contract reverts remain possible and should be handled separately if observed.
+
+## Backend CD — Cloud Build to Cloud Run
+
+Status:
+- ACTIVE.
+
+Completed:
+- Added `cloudbuild.backend.yaml` to `main`.
+- Created Cloud Build 2nd gen GitHub connection `signalarc-github` in `asia-southeast1`.
+- Linked repository `wahyu241205/SignalArc` as Cloud Build repository `SignalArc`.
+- Created trigger `signalarc-backend-cloud-run-main`.
+- Trigger event is push to `main`.
+- Trigger build config is `cloudbuild.backend.yaml`.
+- Trigger service account is `973633221696-compute@developer.gserviceaccount.com`.
+- Manual trigger test succeeded for commit `3ed8112`.
+- Cloud Run deployed revision `signalarc-backend-api-00015-7h9`.
+- Active image is `asia-southeast1-docker.pkg.dev/signalarc-prod-241205/cloud-run-source-deploy/signalarc-backend-api:3ed8112`.
+
+Validation:
+- Cloud Build status: SUCCESS.
+- Cloud Run `/health`: HTTP 200 with `{"status":"ok"}`.
+- Cloud Run `/readyz`: HTTP 200 with `{"status":"ok"}`.
+
+Important notes:
+- The old Cloud Run / Cloud Build 1st gen integration is not used for the new backend CD path.
+- The active backend CD path is GitHub main push → Cloud Build 2nd gen trigger → `cloudbuild.backend.yaml` → Artifact Registry → Cloud Run.
+- `/status` is not a backend route; the valid health endpoints are `/health` and `/readyz`.
