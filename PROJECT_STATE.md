@@ -42,7 +42,7 @@ Scope:
 
 Blockers:
 
-- Resolve `/schema/validate` returning 503 while migration version is 18, `dirty=false`, and no missing tables or columns are reported.
+- `/schema/validate` 503 root cause identified as stale backend expected migration version. Code-level fix updated schema validation from migration version 15 to 18; deployment validation is still pending.
 
 Exit criteria:
 

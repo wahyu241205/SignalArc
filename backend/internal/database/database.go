@@ -176,7 +176,7 @@ func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {
 		}
 	}
 
-	if result.MigrationVersion == 15 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
+	if result.MigrationVersion == 18 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
 		result.Status = "ok"
 	}
 
