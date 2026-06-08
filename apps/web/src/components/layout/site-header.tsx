@@ -21,12 +21,12 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500/20 to-purple-500/20 ring-1 ring-indigo-500/20">
               <svg
-                className="h-4 w-4 text-indigo-400"
+                className="h-3.5 w-3.5 text-indigo-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -39,16 +39,21 @@ export function SiteHeader() {
                 />
               </svg>
             </div>
-            <span className="text-lg font-semibold text-foreground">SignalArc</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-bold tracking-tight text-foreground">SignalArc</span>
+              <span className="hidden text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60 sm:inline">
+                Infrastructure
+              </span>
+            </div>
           </Link>
 
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden items-center gap-0.5 md:flex">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
                   pathname === link.href || pathname.startsWith(link.href + "/")
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -63,7 +68,7 @@ export function SiteHeader() {
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
               >
                 {link.label}
               </a>
@@ -84,13 +89,13 @@ export function SiteHeader() {
       </div>
 
       {/* Mobile nav */}
-      <nav className="flex items-center gap-1 overflow-x-auto border-t border-border/40 px-4 py-2 md:hidden">
+      <nav className="flex items-center gap-0.5 overflow-x-auto border-t border-border/40 px-4 py-1.5 md:hidden">
         {navLinks.map((link) => (
           <Link
             key={link.href}
             href={link.href}
             className={cn(
-              "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
               pathname === link.href || pathname.startsWith(link.href + "/")
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -105,7 +110,7 @@ export function SiteHeader() {
             href={link.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+            className="whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
           >
             {link.label}
           </a>
