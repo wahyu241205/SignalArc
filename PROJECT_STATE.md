@@ -23,416 +23,170 @@ This file is the handoff source of truth for continuing SignalArc work in a new 
 
 ## Current Overall Status
 
-Foundation complete. Backend and frontend local MVP integration verified. Product MVP is not live yet.
-
-Estimated progress toward live grant submission: 30-35%.
-
-## Phase 1 — Foundation Repo and Local Infra
-
-Status: Mostly done, about 80%.
-
-Done:
-
-- Created SignalArc GitHub repository.
-- Set correct Git remote: https://github.com/wahyu241205/SignalArc
-- Configured Git identity locally for this repo.
-- Converted project into modular monorepo.
-- Added pnpm workspace.
-- Moved Next.js frontend into `apps/web`.
-- Removed npm `package-lock.json`.
-- Added `pnpm-lock.yaml`.
-- Added monorepo `.gitignore` rules.
-- Added `AGENTS.md` project instructions.
-- Set `CLAUDE.md` to reference `AGENTS.md`.
-- Verified frontend runs with `pnpm dev:web`.
-- Cleaned old WizPay Docker containers, images, and volumes.
-- Added Docker Compose for SignalArc PostgreSQL.
-- PostgreSQL runs locally on `127.0.0.1:15433`.
-- Added `backend/.env.example`.
-- Created local `backend/.env`, ignored by Git.
-- Installed Go `1.26.3` in WSL.
-- Installed `golang-migrate` CLI.
-- Repo pushed and clean.
-
-Not done:
-
-- Add README architecture section.
-- Add docs folder.
-- Add contracts folder.
-- Add CI workflow.
-- Add Makefile or task runner commands.
-- Add project roadmap file.
-
-## Phase 2 — Core Database Schema
-
-Status: COMPLETE.
-
-Done:
-
-- Created users table migration.
-- Applied users migration locally.
-- Committed users migration.
-- Created wallets table migration.
-- Applied wallets migration locally.
-- Committed wallets migration.
-- Created markets table migration.
-- Applied markets migration locally.
-- Committed markets migration.
-- Created positions table migration.
-- Applied positions migration locally.
-- Committed positions migration.
-- Created trades table migration.
-- Applied trades migration locally.
-- Created liquidity table migration.
-- Applied liquidity migration locally.
-- Created resolutions table migration.
-- Applied resolutions migration locally.
-- Created settlements table migration.
-- Applied settlements migration locally.
-- Created oracle_events table migration.
-- Applied oracle_events migration locally.
-- Created audit_logs table migration.
-- Applied audit_logs migration locally.
-- Created api_keys table migration.
-- Applied api_keys migration locally.
-- Created webhooks table migration.
-- Applied webhooks migration locally.
-- Created agent_access table migration.
-- Applied agent_access migration locally.
-
-Completed migrations:
-
-- `000001_create_users_table`
-- `000002_create_wallets_table`
-- `000003_create_markets_table`
-- `000004_create_positions_table`
-- `000005_create_trades_table`
-- `000006_create_liquidity_table`
-- `000007_create_resolutions_table`
-- `000008_create_settlements_table`
-- `000009_create_oracle_events_table`
-- `000010_create_audit_logs_table`
-- `000011_create_api_keys_table`
-- `000012_create_webhooks_table`
-- `000013_create_agent_access_table`
-
-Current local database tables:
-
-- `users`
-- `wallets`
-- `markets`
-- `positions`
-- `trades`
-- `liquidity`
-- `resolutions`
-- `settlements`
-- `oracle_events`
-- `audit_logs`
-- `api_keys`
-- `webhooks`
-- `agent_access`
-- `schema_migrations`
-
-Current local database migration status:
-
-- version: `13`
-- dirty: `false`
-
-Validation results:
-
-- final schema review: `PASS`
-- rollback/down migration test: `PASS`
-- local demo seed validation: `PASS`
-- migration status: `version=13`, `dirty=false`
-
-Not done:
-
-- None for Phase 2 core schema.
-
-Next step:
-
-Start Phase 5 Arc / Circle Integration planning by verifying current official Arc and Circle documentation before implementing any integration.
-
-## Phase 3 — Backend API MVP
-
-Status: Complete.
-
-Done:
-
-- Added Go backend module.
-- Added backend dependencies:
-  - `chi`
-  - `pgx`
-  - `zerolog`
-  - `validator`
-  - `godotenv`
-- Added backend API entrypoint.
-- Added health endpoint.
-- Added backend config package.
-- Added PostgreSQL database connection package using pgxpool.
-- Added startup database ping.
-- Added readiness endpoint.
-- Added schema validation endpoint for Phase 2 tables and migration version.
-- Verified `/health`, `/readyz`, and `/schema/validate` locally.
-- Refactored backend API route registration into `internal/api`.
-- Added consistent JSON response/error helper package in `internal/httpjson`.
-- Added read-only repository layer for users, wallets, and markets.
-- Added read-only market listing endpoint.
-- Added read-only market detail endpoint.
-- Added read-only repository layer for positions, trades, resolutions, and settlements.
-- Added read-only position endpoints.
-- Added read-only resolution status endpoint.
-- Added read-only settlement status endpoints.
-- Added market creation endpoint.
-- Added market creation request validation.
-- Added trade intent endpoint baseline.
-- Added agent-readable market API baseline.
-- Added request ID middleware.
-- Added structured request logging middleware.
-- Added panic recoverer middleware.
-- Split oversized backend API router into focused handler, response, middleware, and validation files.
-- Completed final backend smoke validation for Phase 3 MVP.
-- Verified:
-
-```bash
-curl http://127.0.0.1:4000/health
-```
-
-Expected result:
-
-```json
-{"status":"ok"}
-```
-
-Current endpoints:
-
-- `GET /health`
-- `GET /readyz`
-- `GET /schema/validate`
-- `GET /markets`
-- `GET /markets/{id}`
-- `POST /markets`
-- `POST /trade-intents`
-- `GET /agent/markets`
-- `GET /users/{user_id}/positions`
-- `GET /markets/{market_id}/positions`
-- `GET /markets/{market_id}/resolution`
-- `GET /users/{user_id}/settlements`
-- `GET /markets/{market_id}/settlements`
-
-Not done:
-
-- Resolver endpoint.
-- Request validation.
-- CORS middleware.
-- Auth middleware.
-- API key middleware.
-- Unit tests.
-- Integration tests.
-
-## Phase 4 — Frontend MVP
-
-Status: COMPLETE.
-
-Done:
-
-- Next.js app exists.
-- Frontend moved to `apps/web`.
-- shadcn/ui base components exist.
-- Frontend runs locally.
-- Added frontend API environment example at `apps/web/.env.example`.
-- Added typed frontend API client at `apps/web/src/lib/api.ts`.
-- Added frontend API helpers for Phase 3 backend endpoints:
-  - `GET /health`
-  - `GET /readyz`
-  - `GET /schema/validate`
-  - `GET /markets`
-  - `GET /markets/{id}`
-  - `GET /agent/markets`
-- Added market list page at `apps/web/src/app/markets/page.tsx`.
-- Added market list component at `apps/web/src/features/markets/market-list.tsx`.
-- Wired market list UI to `GET /markets` through the frontend API client.
-- Added market list loading, empty, and error states.
-- Added market detail page at `apps/web/src/app/markets/[id]/page.tsx`.
-- Added market detail component at `apps/web/src/features/markets/market-detail.tsx`.
-- Wired market detail UI to `GET /markets/{id}` through the frontend API client.
-- Added market detail loading and error states.
-- Added frontend `createMarket()` API helper for `POST /markets`.
-- Added create market page at `apps/web/src/app/markets/new/page.tsx`.
-- Added create market form at `apps/web/src/features/markets/create-market-form.tsx`.
-- Added create market idle, submitting, success, and error states.
-- Added frontend `createTradeIntent()` API helper for `POST /trade-intents`.
-- Added trade intent panel at `apps/web/src/features/markets/trade-intent-panel.tsx`.
-- Wired trade intent panel into the market detail UI.
-- Added trade intent idle, submitting, success, and error states.
-- Kept trade intent UI explicitly intent-only: no wallet execution, no onchain settlement, no position update.
-- Added frontend portfolio API helpers for `GET /users/{user_id}/positions` and `GET /users/{user_id}/settlements`.
-- Added portfolio page at `apps/web/src/app/portfolio/page.tsx`.
-- Added portfolio view at `apps/web/src/features/portfolio/portfolio-view.tsx`.
-- Added read-only portfolio idle, loading, empty, error, and loaded states.
-- Kept portfolio UI explicitly read-only: no wallet balance, no claim flow, no settlement mutation.
-- Added frontend market resolution API helpers for `GET /markets/{market_id}/resolution` and `GET /markets/{market_id}/settlements`.
-- Added market resolution panel at `apps/web/src/features/markets/market-resolution-panel.tsx`.
-- Wired market resolution panel into the market detail UI.
-- Added read-only resolution loading, empty/not-found, error, and loaded states.
-- Kept resolution UI explicitly read-only: no resolver submission, no claim flow, no settlement execution, no eligibility inference.
-- Added intelligence page at `apps/web/src/app/intelligence/page.tsx`.
-- Added intelligence dashboard at `apps/web/src/features/intelligence/intelligence-dashboard.tsx`.
-- Wired intelligence dashboard to `GET /agent/markets` through the frontend API client.
-- Added intelligence loading, empty, error, and loaded states.
-- Kept intelligence UI explicitly read-only: no agent execution, no paid access, no API key enforcement, no trading automation.
-- Completed local Phase 4 smoke validation:
-  - backend `/health` returned 200
-  - backend `/readyz` returned 200
-  - backend `/schema/validate` returned 200 with `migration_version=13`, `dirty=false`, and no missing tables
-  - frontend `/markets` returned 200
-  - frontend `/markets/new` returned 200
-  - frontend `/markets/{id}` returned 200
-  - frontend `/portfolio` returned 200
-  - frontend `/intelligence` returned 200
-  - `GET /agent/markets` returned 200
-  - `POST /markets` returned 201
-  - `POST /trade-intents` returned expected backend validation error `market_not_open` for a DRAFT market
-  - `pnpm lint` passed
-  - `pnpm exec tsc --noEmit` passed
-  - `pnpm build` passed
-
-Not done:
-
-- SignalArc landing page.
-- Wallet connect UI integration.
-- Responsive layout polish.
-- Demo-ready UI.
-
-## Phase 5 — Arc / Circle Integration
-
-Status: COMPLETE.
-
-Done:
-
-- Official documentation sources identified:
-  - Arc docs: https://docs.arc.network/
-  - Arc prediction market blueprint: https://www.arc.network/blog/build-institutional-grade-prediction-markets-on-arc-arc-blueprints
-  - Circle developer docs: https://developers.circle.com/
-  - Circle Agents docs: https://agents.circle.com/
-  - Circle grants page: https://www.circle.com/grant
-- Project rule added: Arc/Circle behavior must use official docs only.
-- Reviewed Arc official documentation snapshots for:
-  - Connect to Arc
-  - Deploy on Arc
-  - EVM compatibility
-- Confirmed documented Arc Testnet network details:
-  - Network: Arc Testnet
-  - Chain ID: `5042002`
-  - Primary RPC: `https://rpc.testnet.arc.network`
-  - Explorer: `https://testnet.arcscan.app`
-  - Faucet: `https://faucet.circle.com`
-  - Currency / native gas token: USDC
-- Confirmed Arc is currently documented as testnet phase; Arc mainnet remains unknown / not documented from reviewed Arc pages.
-- Confirmed Arc EVM compatibility is documented.
-- Confirmed Solidity smart contract deployment to Arc Testnet with Foundry is documented.
-- Confirmed Arc docs mention standard Ethereum tooling including Solidity, Foundry, Hardhat, and Viem.
-- Confirmed Arc uses USDC as native gas.
-- Confirmed Arc deterministic finality is documented.
-- Confirmed Arc USDC has dual interface behavior:
-  - native balance uses 18 decimals
-  - ERC-20 interface uses 6 decimals
-  - both interfaces share one underlying USDC balance
-- Collected preliminary Circle Docs AI response for Circle Wallets, CCTP, Gateway, Paymaster, Circle Agent Stack, and Arc Testnet support; this still needs exact official page snapshots before implementation decisions.
-- Completed Phase 5.1 Arc / Circle research as an internal/local-only planning note under ignored `docs/internal/`.
-- Completed Phase 5.2 wallet strategy as an internal/local-only planning note under ignored `docs/internal/`.
-- Completed Phase 5.3 USDC integration planning as an internal/local-only note under ignored `docs/internal/`.
-- Completed Phase 5.4 agent wallet boundary planning as an internal/local-only note under ignored `docs/internal/`.
-- Completed Phase 5.5 contract requirements handoff as an internal/local-only note under ignored `docs/internal/`.
-
-Not done:
-
-- Do not implement contracts until Phase 6.
-
-## Phase 6 — Contracts / Settlement Prototype
-
-Status: COMPLETE.
-
-Done:
-
-- Stack decision: Solidity + Foundry + OpenZeppelin.
-- Created `contracts` folder with `src`, `test`, and `script` placeholders.
-- Added minimal Foundry workspace config at `contracts/foundry.toml`.
-- Added `contracts/README.md` with prototype boundaries.
-- Added minimal `SignalArcMarket` contract scope for binary market lifecycle without collateral, settlement, or claim logic.
-- Added test-only `MockUSDC` collateral model and Foundry tests for market lifecycle and collateral assumptions.
-- Added local binary position and trade prototype logic with test-only MockUSDC collateral accounting.
-- Added manual resolution and local claim/refund prototype logic with Foundry coverage.
-- Completed contract test coverage hardening and added `contracts/SECURITY_BOUNDARIES.md`.
-- Completed final Phase 6 review and added `contracts/PHASE_6_REVIEW.md`.
-- Completed manual Arc Testnet deployment, source verification, and onchain smoke tests; recorded results in `contracts/ARC_TESTNET_DEPLOYMENT.md`.
-
-Not done:
-
-- Backend/frontend contract integration is deferred to a later integration phase.
-- Production deployment remains not approved.
-
-## Phase 7 — Live Deployment
-
-Status: Not started, 0%.
-
-Target deployment:
-
-- Frontend: Vercel.
-- Backend: GCP Cloud Run.
-- Database: hosted PostgreSQL.
-- Domains:
-  - `signalarc.xyz`
-  - `app.signalarc.xyz`
-  - `api.signalarc.xyz`
-  - `docs.signalarc.xyz`
-
-Not done:
-
-- Buy/configure domain DNS.
-- Deploy frontend.
-- Deploy backend.
-- Configure production database.
-- Configure backend env vars.
-- Configure CORS.
-- Configure HTTPS.
-- Add API health URL.
-- Add frontend/backend integration.
-- Add deployment README.
-- Add monitoring/logging baseline.
-- Verify live demo flow.
-
-## Phase 8 — Grant Submission Package
-
-Status: Not started, 0%.
-
-Required before submission:
-
-- Live app URL.
-- GitHub repo public or shareable.
-- Demo video.
-- Pitch deck.
-- Architecture diagram.
-- Technical README.
-- Product README.
-- Roadmap.
-- Clear Arc usage explanation.
-- Clear Circle/USDC usage explanation.
-- MVP screenshots.
-- Demo user flow.
-- Risk/compliance disclaimer.
-- Grant form answers.
-
-Do not submit yet until:
-
-- Live MVP can be clicked.
-- Market creation flow works.
-- Market detail flow works.
-- User/wallet flow is visible.
-- Trade or simulated trade flow works.
-- Resolution/settlement flow is visible.
-- Arc + Circle relevance is clear.
-- README explains why SignalArc exists.
+Core MVP, CI, backend CD, Cloud Run deployment, and runtime health/readiness are operational.
+
+Current production schema validation is not clean yet: `/schema/validate` currently returns 503 with migration version 18, `dirty=false`, no missing tables, and no missing columns.
+
+Next work should focus on institutional product polish, backend hardening, contract mechanism maturity, and production-grade operational readiness.
+
+## Phase 0 — Baseline Stabilization
+
+Goal: make the current production baseline clean before new feature expansion.
+
+Scope:
+
+- Frontend: verify all obvious user-facing routes load, render usable states, and avoid broken navigation.
+- Backend: verify health, readiness, schema validation, structured errors, and diagnosable runtime logs.
+- Contracts: verify current compiled/tested contract state and document any prototype-only assumptions.
+- Infra: verify deployed service configuration, Cloud Run health/readiness, environment variables, CI/CD state, and rollback path.
+
+Blockers:
+
+- Resolve `/schema/validate` returning 503 while migration version is 18, `dirty=false`, and no missing tables or columns are reported.
+
+Exit criteria:
+
+- `/health`, `/readyz`, and `/schema/validate` all return 200.
+- No obvious broken frontend route in the primary product flow.
+- Logs are sufficient to diagnose backend, deployment, and schema failures without guessing.
+
+## Phase 1 — Professional Frontend Shell
+
+Goal: make SignalArc feel like an institutional product-grade prediction market infrastructure interface.
+
+Scope:
+
+- Homepage with clear Arc-native infrastructure positioning.
+- Market list UI with credible scanning, filtering hooks, and useful loading states.
+- Market detail shell with probability, rules, liquidity, trading, resolution, and activity areas.
+- Account state for disconnected, connected, wrong-network, and unavailable-backend cases.
+- Loading states, empty states, error states, and disabled states across primary surfaces.
+- Responsive layout for desktop and mobile without visual clutter.
+- Restrained visual hierarchy suitable for reviewers, partners, institutions, and operators.
+
+Exclusions:
+
+- No backend business logic changes unless a UI route cannot consume an existing or clearly needed read endpoint.
+- No frontend settlement, resolution, private key, Circle secret, or database logic.
+
+## Phase 2 — Market Data and Trading UX
+
+Goal: make market browsing and trading intent flows clear and trustworthy.
+
+Scope:
+
+- Probability display that distinguishes current probability, volume/liquidity context, and market status.
+- YES/NO trading panel with clear intent entry, disabled states, and validation feedback.
+- Trade preview with side, amount, expected outcome exposure, fees or unknown fee status, and risk language.
+- Confirmation state that separates intent submission from settlement or execution finality.
+- Transaction status timeline for pending, accepted, submitted, confirmed, failed, cancelled, and claimable states where supported.
+- Positions panel showing user exposure, market status, and settlement or claim availability.
+- Settlement and claim status UI for resolved, cancelled, claimable, claimed, and unavailable states.
+
+Backend allowance:
+
+- Add richer read endpoints if needed to support trustworthy market, position, transaction, or settlement display.
+
+Contract allowance:
+
+- Change contracts only if an existing frontend/backend/contract mismatch requires it and the mismatch is confirmed from repo evidence.
+
+## Phase 3 — Institutional Backend Hardening
+
+Goal: improve backend reliability, auditability, and consistency before expanding the product surface.
+
+Scope:
+
+- Standardize API error envelopes across backend routes.
+- Add or verify request IDs and correlation IDs in logs and responses.
+- Expand audit logs for critical writes and lifecycle actions.
+- Add idempotency for critical writes such as market creation, trading intent submission, settlement actions, and claim paths.
+- Strengthen request validation and domain-level validation boundaries.
+- Align OpenAPI documentation with implemented backend behavior.
+- Harden migration validation, including dirty migration handling and schema drift diagnostics.
+- Review database indexes for market browsing, positions, audit logs, lifecycle status, and operational queries.
+- Add monitoring and alerting for health, readiness, schema validation, critical route failures, and external execution failures.
+
+Exit criteria:
+
+- Critical API routes return consistent errors, are traceable by request ID, and have auditable state transitions.
+- Migration validation distinguishes unhealthy runtime state from missing schema objects and dirty migrations.
+
+## Phase 4 — Contract and Market Mechanism Upgrade
+
+Goal: move from prototype mechanics toward a production-grade market lifecycle.
+
+Scope:
+
+- Review payout model, accounting model, liquidity assumptions, fee handling, and claim mechanics.
+- Define market lifecycle states and allowed transitions clearly.
+- Emit and document events for market creation, trading, close, resolve, cancel, refund, payout, and claim actions.
+- Review access control for creators, resolvers, admins, agents, and emergency paths.
+- Define cancel/refund behavior and ensure it is consistent across contracts, backend, and UI.
+- Document settlement invariants and failure modes.
+- Add focused unit tests for lifecycle transitions and payout/claim behavior.
+- Add invariant tests for accounting, settlement, refund, and double-claim prevention.
+- Add edge-case tests for zero liquidity, late trades, cancelled markets, invalid outcomes, repeated actions, and unauthorized callers.
+
+Production-readiness note:
+
+- The current production-grade economic model must be validated before mainnet or institutional launch.
+
+## Phase 5 — Agent, Circle, and Arc Production Path
+
+Goal: make the agent wallet and Arc execution path reliable enough for controlled production workflows.
+
+Scope:
+
+- Agent wallet onboarding flow and operator runbook.
+- OTP, session, liveness, and recovery model for agent execution.
+- Execution status lifecycle from requested to accepted, submitted, confirmed, failed, cancelled, or unknown.
+- Circle CLI/API error mapping into stable backend error categories.
+- Arc transaction coordination and confirmation tracking based only on official Arc documentation.
+- Circle behavior documented only from official Circle developer documentation.
+- Wallet dashboard for agent wallet identity, chain, balance, status, recent actions, and failure history.
+- Execution history with request IDs, action IDs, transaction hashes where available, readbacks, and sanitized errors.
+
+Documentation rule:
+
+- Undocumented Arc or Circle behavior must be marked unknown / not documented.
+
+## Phase 6 — Trust, Compliance, and Institutional Presentation
+
+Goal: make the platform understandable and credible to reviewers, partners, and institutions.
+
+Scope:
+
+- Public documentation explaining SignalArc as Arc-native prediction market infrastructure.
+- Risk disclosure for markets, trading, resolution, settlement, smart contracts, and external execution providers.
+- Market rules and resolution criteria templates.
+- Architecture overview covering frontend, backend, database, contracts, Arc, Circle, agents, and operational boundaries.
+- Threat model for custody, execution, settlement, admin actions, webhooks, API keys, and abuse cases.
+- Contract lifecycle documentation from market creation through resolution, cancel, refund, payout, and claim.
+- API reference aligned with implemented backend behavior.
+- Deployment runbook for CI, backend CD, Cloud Run, environment variables, migrations, and rollback.
+- Incident runbook for degraded backend, schema validation failure, external execution failure, stuck transaction, and contract pause/cancel scenarios.
+- Status page or status endpoint plan for public and internal operational visibility.
+
+## Phase 7 — Scale and Controlled Beta Readiness
+
+Goal: prepare SignalArc for a controlled beta with bounded operational and product risk.
+
+Scope:
+
+- Beta user flow from onboarding to market discovery, trading intent, position tracking, resolution, and claim.
+- Market creation governance, including who can create markets, who approves them, and how market rules are reviewed.
+- Admin review workflow for market approval, resolution, cancellation, and incident response.
+- Featured markets and curated market surfaces for early beta quality control.
+- Search, filter, and sort for market discovery.
+- Monitoring for backend health, schema health, route failures, latency, external execution failures, and contract lifecycle anomalies.
+- Backup and restore plan for PostgreSQL and operational data.
+- Rollback plan for backend deployments, frontend deployments, migrations, and configuration changes.
+- Staging environment aligned with production configuration and test data practices.
+- Dependency audit for frontend, backend, contracts, infrastructure, and CI/CD.
+- Secrets audit for environment variables, API keys, service accounts, deploy credentials, and local developer machines.
+- Contract audit preparation, including threat model, tests, invariants, known limitations, and deployment notes.
+- Abuse and rate-limit strategy for public APIs, trading intents, market creation, agent execution, and admin routes.
 
 ## Frontend Wallet and Production-Facing UI Polish
 
