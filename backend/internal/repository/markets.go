@@ -14,6 +14,7 @@ type Market struct {
 	Title                   string         `json:"title"`
 	Description             sql.NullString `json:"description"`
 	Category                sql.NullString `json:"category"`
+	CoverImageURL           sql.NullString `json:"cover_image_url"`
 	Status                  string         `json:"status"`
 	OutcomeYesLabel         string         `json:"outcome_yes_label"`
 	OutcomeNoLabel          string         `json:"outcome_no_label"`
@@ -43,6 +44,7 @@ type CreateMarketInput struct {
 	Title            string
 	Description      sql.NullString
 	Category         sql.NullString
+	CoverImageURL    sql.NullString
 	Status           string
 	OutcomeYesLabel  string
 	OutcomeNoLabel   string
@@ -83,6 +85,7 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 			title,
 			description,
 			category,
+			cover_image_url,
 			status,
 			outcome_yes_label,
 			outcome_no_label,
@@ -92,13 +95,14 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 			opens_at,
 			closes_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING
 			id::text,
 			creator_user_id::text,
 			title,
 			description,
 			category,
+			cover_image_url,
 			status,
 			outcome_yes_label,
 			outcome_no_label,
@@ -122,6 +126,7 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 		input.Title,
 		input.Description,
 		input.Category,
+		input.CoverImageURL,
 		input.Status,
 		input.OutcomeYesLabel,
 		input.OutcomeNoLabel,
@@ -155,6 +160,7 @@ func (r *MarketsRepository) AttachMarketContract(ctx context.Context, id string,
 			title,
 			description,
 			category,
+			cover_image_url,
 			status,
 			outcome_yes_label,
 			outcome_no_label,
@@ -221,6 +227,7 @@ const marketSelectSQL = `
 		title,
 		description,
 		category,
+		cover_image_url,
 		status,
 		outcome_yes_label,
 		outcome_no_label,
@@ -249,6 +256,7 @@ func marketScanDestinations(market *Market) []any {
 		&market.Title,
 		&market.Description,
 		&market.Category,
+		&market.CoverImageURL,
 		&market.Status,
 		&market.OutcomeYesLabel,
 		&market.OutcomeNoLabel,

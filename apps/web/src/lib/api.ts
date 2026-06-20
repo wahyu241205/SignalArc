@@ -60,6 +60,7 @@ export type Market = {
   title: string
   description: string | null
   category: string | null
+  cover_image_url: string | null
   status: string
   outcome_yes_label: string
   outcome_no_label: string
@@ -139,6 +140,7 @@ export type AgentMarket = {
   title: string
   status: string
   category: string | null
+  cover_image_url: string | null
   collateral_asset: string
   chain: string
   closes_at: string
@@ -170,6 +172,7 @@ export type CreateMarketRequest = {
   title: string
   description?: string
   category?: string
+  cover_image_url?: string
   outcome_yes_label?: string
   outcome_no_label?: string
   collateral_asset?: string

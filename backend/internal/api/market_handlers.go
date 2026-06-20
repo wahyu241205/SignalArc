@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type createMarketRequest struct {
 	Title            string  `json:"title"`
 	Description      *string `json:"description"`
 	Category         *string `json:"category"`
+	CoverImageURL    *string `json:"cover_image_url"`
 	OutcomeYesLabel  *string `json:"outcome_yes_label"`
 	OutcomeNoLabel   *string `json:"outcome_no_label"`
 	CollateralAsset  *string `json:"collateral_asset"`
@@ -114,11 +116,17 @@ func (request createMarketRequest) toRepositoryInput(now time.Time) (repository.
 		opensAt = sql.NullTime{Time: parsedOpensAt, Valid: true}
 	}
 
+	coverImageURL, err := optionalHTTPSURL(request.CoverImageURL)
+	if err != nil {
+		return repository.CreateMarketInput{}, err
+	}
+
 	return repository.CreateMarketInput{
 		CreatorUserID:    creatorUserID,
 		Title:            title,
 		Description:      optionalString(request.Description),
 		Category:         optionalString(request.Category),
+		CoverImageURL:    coverImageURL,
 		Status:           newMarketStatus(now, opensAt),
 		OutcomeYesLabel:  defaultString(request.OutcomeYesLabel, "YES"),
 		OutcomeNoLabel:   defaultString(request.OutcomeNoLabel, "NO"),
@@ -128,6 +136,27 @@ func (request createMarketRequest) toRepositoryInput(now time.Time) (repository.
 		OpensAt:          opensAt,
 		ClosesAt:         closesAt,
 	}, nil
+}
+
+func optionalHTTPSURL(value *string) (sql.NullString, error) {
+	if value == nil {
+		return sql.NullString{}, nil
+	}
+
+	trimmedValue := strings.TrimSpace(*value)
+	if trimmedValue == "" {
+		return sql.NullString{}, nil
+	}
+	if len(trimmedValue) > 2048 {
+		return sql.NullString{}, errors.New("cover_image_url must be at most 2048 characters")
+	}
+
+	parsedURL, err := url.ParseRequestURI(trimmedValue)
+	if err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" {
+		return sql.NullString{}, errors.New("cover_image_url must be a valid HTTPS URL")
+	}
+
+	return sql.NullString{String: trimmedValue, Valid: true}, nil
 }
 
 func newMarketStatus(now time.Time, opensAt sql.NullTime) string {

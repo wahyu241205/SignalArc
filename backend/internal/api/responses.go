@@ -67,6 +67,7 @@ type marketResponse struct {
 	Title                   string     `json:"title"`
 	Description             *string    `json:"description"`
 	Category                *string    `json:"category"`
+	CoverImageURL           *string    `json:"cover_image_url"`
 	Status                  string     `json:"status"`
 	OutcomeYesLabel         string     `json:"outcome_yes_label"`
 	OutcomeNoLabel          string     `json:"outcome_no_label"`
@@ -92,6 +93,7 @@ type agentMarketResponse struct {
 	Title            string    `json:"title"`
 	Status           string    `json:"status"`
 	Category         *string   `json:"category"`
+	CoverImageURL    *string   `json:"cover_image_url"`
 	CollateralAsset  string    `json:"collateral_asset"`
 	Chain            string    `json:"chain"`
 	ClosesAt         time.Time `json:"closes_at"`
@@ -178,6 +180,7 @@ func newAgentMarketResponses(markets []repository.Market) []agentMarketResponse 
 			Title:            market.Title,
 			Status:           market.Status,
 			Category:         nullStringPtr(market.Category),
+			CoverImageURL:    nullStringPtr(market.CoverImageURL),
 			CollateralAsset:  market.CollateralAsset,
 			Chain:            market.Chain,
 			ClosesAt:         market.ClosesAt,
@@ -204,6 +207,7 @@ func newMarketResponse(market repository.Market) marketResponse {
 		Title:                   market.Title,
 		Description:             nullStringPtr(market.Description),
 		Category:                nullStringPtr(market.Category),
+		CoverImageURL:           nullStringPtr(market.CoverImageURL),
 		Status:                  market.Status,
 		OutcomeYesLabel:         market.OutcomeYesLabel,
 		OutcomeNoLabel:          market.OutcomeNoLabel,

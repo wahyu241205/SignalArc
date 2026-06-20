@@ -82,6 +82,7 @@ Agent endpoints (live, see [Agent API](./AGENT_API.md) for the full reference):
   "title": "Market title",
   "description": null,
   "category": null,
+  "cover_image_url": "https://example.com/market-cover.png",
   "status": "OPEN",
   "outcome_yes_label": "YES",
   "outcome_no_label": "NO",
@@ -175,7 +176,7 @@ Response:
 ```json
 {
   "status": "ok",
-  "migration_version": 18,
+  "migration_version": 19,
   "dirty": false,
   "missing_tables": []
 }
@@ -232,6 +233,7 @@ Response:
     "title": "Example market",
     "description": null,
     "category": null,
+    "cover_image_url": null,
     "status": "OPEN",
     "outcome_yes_label": "YES",
     "outcome_no_label": "NO",
@@ -268,6 +270,7 @@ curl -X POST https://api.signalarc.fun/markets \
     "title": "Will SignalArc complete its public docs?",
     "description": "Public documentation readiness market.",
     "category": "product",
+    "cover_image_url": "https://example.com/market-cover.png",
     "outcome_yes_label": "YES",
     "outcome_no_label": "NO",
     "collateral_asset": "USDC",
@@ -285,6 +288,7 @@ Request fields:
 | `title` | Yes | Non-empty string. |
 | `description` | No | Optional string. Empty string becomes null. |
 | `category` | No | Optional string. Empty string becomes null. |
+| `cover_image_url` | No | Public HTTPS URL, maximum 2048 characters. Empty string becomes null. |
 | `outcome_yes_label` | No | Defaults to `YES`. |
 | `outcome_no_label` | No | Defaults to `NO`. |
 | `collateral_asset` | No | Defaults to `USDC`. |
@@ -294,6 +298,8 @@ Request fields:
 | `closes_at` | Yes | RFC3339 timestamp in the future. |
 
 Rejected fields: `status`, `winning_outcome`, `resolved_at`, `settled_at`.
+
+Market images are URL metadata only in v1. SignalArc does not accept base64 image data or store uploaded images on the Cloud Run filesystem. A later upload flow can use signed upload URLs backed by GCS or Cloudinary.
 
 Success status: `201 Created`
 
