@@ -40,7 +40,8 @@ var expectedPhase2Tables = []string{
 	"agent_wallets",
 }
 
-var expectedMarketOnchainColumns = []string{
+var expectedMarketColumns = []string{
+	"cover_image_url",
 	"market_contract_address",
 	"market_deployment_tx_hash",
 	"market_factory_address",
@@ -152,31 +153,31 @@ func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {
 		WHERE table_schema = 'public'
 			AND table_name = 'markets'
 			AND column_name = ANY($1)
-	`, expectedMarketOnchainColumns)
+	`, expectedMarketColumns)
 	if err != nil {
-		return result, fmt.Errorf("read market onchain columns: %w", err)
+		return result, fmt.Errorf("read market columns: %w", err)
 	}
 	defer columnRows.Close()
 
-	existingColumns := make(map[string]bool, len(expectedMarketOnchainColumns))
+	existingColumns := make(map[string]bool, len(expectedMarketColumns))
 	for columnRows.Next() {
 		var columnName string
 		if err := columnRows.Scan(&columnName); err != nil {
-			return result, fmt.Errorf("scan market onchain column: %w", err)
+			return result, fmt.Errorf("scan market column: %w", err)
 		}
 		existingColumns[columnName] = true
 	}
 	if err := columnRows.Err(); err != nil {
-		return result, fmt.Errorf("iterate market onchain columns: %w", err)
+		return result, fmt.Errorf("iterate market columns: %w", err)
 	}
 
-	for _, columnName := range expectedMarketOnchainColumns {
+	for _, columnName := range expectedMarketColumns {
 		if !existingColumns[columnName] {
 			result.MissingColumns = append(result.MissingColumns, "markets."+columnName)
 		}
 	}
 
-	if result.MigrationVersion == 18 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
+	if result.MigrationVersion == 19 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
 		result.Status = "ok"
 	}
 

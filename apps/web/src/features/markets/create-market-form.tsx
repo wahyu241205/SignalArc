@@ -187,6 +187,7 @@ export function CreateMarketForm() {
         title: requiredText(formData, "title"),
         description: optionalText(formData, "description"),
         category: optionalText(formData, "category"),
+        cover_image_url: optionalText(formData, "cover_image_url"),
         outcome_yes_label: optionalText(formData, "outcome_yes_label"),
         outcome_no_label: optionalText(formData, "outcome_no_label"),
         collateral_asset: optionalText(formData, "collateral_asset"),
@@ -376,6 +377,22 @@ export function CreateMarketForm() {
               rows={3}
               placeholder="Additional context, resolution criteria, or relevant links..."
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="cover_image_url">Market Image URL</Label>
+            <Input
+              id="cover_image_url"
+              name="cover_image_url"
+              type="url"
+              inputMode="url"
+              maxLength={2048}
+              pattern="https://.*"
+              placeholder="https://example.com/market-cover.png"
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional. Use a public HTTPS image URL; file uploads are not supported yet.
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

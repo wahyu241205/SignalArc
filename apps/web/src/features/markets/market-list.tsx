@@ -182,6 +182,20 @@ function FilterIcon({ className }: { className?: string }) {
 function MarketCard({ market }: { market: Market }) {
   return (
     <Card className="group transition-colors hover:border-indigo-500/30">
+      <div className="px-6 pt-6">
+        {market.cover_image_url ? (
+          // Plain img is intentional for v1 user-provided remote URLs.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={market.cover_image_url}
+            alt={market.title}
+            className="h-48 w-full rounded-xl object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="h-48 w-full rounded-xl bg-muted" aria-hidden="true" />
+        )}
+      </div>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 space-y-2.5">
@@ -284,6 +298,9 @@ function LoadingSkeleton() {
       <div className="grid gap-4">
         {[1, 2, 3, 4].map((i) => (
           <Card key={i} className="animate-pulse">
+            <div className="px-6 pt-6">
+              <div className="h-48 w-full rounded-xl bg-muted" />
+            </div>
             <CardHeader className="pb-3">
               <div className="space-y-2.5">
                 <div className="h-5 w-3/4 rounded bg-muted" />

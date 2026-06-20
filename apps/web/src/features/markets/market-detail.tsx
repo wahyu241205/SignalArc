@@ -139,6 +139,18 @@ function MarketSummaryCard({ market }: { market: Market }) {
   return (
     <Card>
       <CardHeader className="space-y-4">
+        {market.cover_image_url ? (
+          // Plain img is intentional for v1 user-provided remote URLs.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={market.cover_image_url}
+            alt={market.title}
+            className="h-48 w-full rounded-xl object-cover sm:h-64"
+          />
+        ) : (
+          <div className="h-48 w-full rounded-xl bg-muted sm:h-64" aria-hidden="true" />
+        )}
+
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className={statusColor(market.status)}>
             {market.status}
@@ -276,6 +288,7 @@ function LoadingSkeleton() {
         {/* Summary card skeleton */}
         <Card className="animate-pulse">
           <CardHeader className="space-y-4">
+            <SkeletonBlock className="h-48 w-full rounded-xl sm:h-64" />
             <div className="flex items-center gap-2">
               <SkeletonBlock className="h-5 w-16" />
               <SkeletonBlock className="h-5 w-24" />
