@@ -51,22 +51,22 @@ const factory = {
   deployer: "0x153D2Fc8334a84a37B7A7cF9deFA5Cb401a36FdC",
   deploymentBlock: "43,221,323",
   deploymentTimestamp: "2026-05-20T18:49:53Z",
-  totalTransactions: 48,
-  latestMarket: "0x09B4097ea6ABB856829AE8fDD482Aee4215f5913",
+  totalTransactions: 128,
+  latestMarket: "0x6127d26e322b50e0e1ced9e22EAA55EC8AE087ea",
 } as const
 
 const latestActivity = {
-  timestamp: "2026-06-13T07:54:31Z",
-  tx: "0xa4cef8df58887f7b1641f0bd87ea593270433f5754e38661b319899a0cf17f6b",
+  timestamp: "2026-06-21T07:51:30Z",
+  tx: "0xd8e9f40d6b95d1ed3eee69e65b41af877361b614c6e96bf4b2ff4bf0e3fb248f",
   txUrl:
-    "https://testnet.arcscan.app/tx/0xa4cef8df58887f7b1641f0bd87ea593270433f5754e38661b319899a0cf17f6b",
-  market: "0x09B4097ea6ABB856829AE8fDD482Aee4215f5913",
+    "https://testnet.arcscan.app/tx/0xd8e9f40d6b95d1ed3eee69e65b41af877361b614c6e96bf4b2ff4bf0e3fb248f",
+  market: "0x6127d26e322b50e0e1ced9e22EAA55EC8AE087ea",
 } as const
 
 const statusBadges = [
   "Arc Testnet",
   "Verified Factory",
-  "47 Markets Created",
+  "126 Markets Created",
   "Testnet USDC",
   "Public Proof-of-Activity",
   "Dune Pending Reliable Indexing",
@@ -75,71 +75,92 @@ const statusBadges = [
 const metrics = [
   {
     label: "Markets Created",
-    value: "47",
+    value: "126",
     description: "YES/NO market contracts created from the SignalArc factory",
     unit: "testnet markets",
     featured: false,
   },
   {
     label: "Market Contracts Found",
-    value: "47",
+    value: "126",
     description: "Created market contracts detected from factory deployment events",
     unit: "verified records",
     featured: false,
   },
   {
+    label: "Total Trades",
+    value: "806",
+    description: "Aggregate YES/NO position events across created markets",
+    unit: "onchain events",
+    featured: true,
+  },
+  {
     label: "Position Events",
-    value: "30",
+    value: "806",
     description: "YES/NO position events across created markets",
     unit: "onchain events",
     featured: false,
   },
   {
     label: "Unique Participating Wallets",
-    value: "15",
+    value: "218",
     description: "Wallet addresses participating in market activity",
     unit: "wallets",
     featured: false,
   },
   {
     label: "Testnet USDC Collateral Volume",
-    value: "34.33",
+    value: "149.77",
     description: "Aggregate Arc Testnet USDC collateral movement",
     unit: "testnet USDC",
     featured: true,
   },
   {
     label: "YES Position Events",
-    value: "13",
+    value: "374",
     description: "YES-side position events",
     unit: "events",
     featured: false,
   },
   {
     label: "NO Position Events",
-    value: "17",
+    value: "432",
     description: "NO-side position events",
     unit: "events",
     featured: false,
   },
   {
     label: "Resolved Markets",
-    value: "32",
+    value: "105",
     description: "Markets that completed resolution lifecycle",
     unit: "testnet markets",
     featured: false,
   },
   {
     label: "Cancelled Markets",
-    value: "10",
+    value: "12",
     description: "Markets cancelled during testnet lifecycle",
     unit: "testnet markets",
     featured: false,
   },
   {
     label: "Claim Events",
-    value: "23",
+    value: "393",
     description: "Payout/refund claim events detected",
+    unit: "onchain events",
+    featured: false,
+  },
+  {
+    label: "Payouts Claimed",
+    value: "382",
+    description: "Payout claim events from resolved markets",
+    unit: "onchain events",
+    featured: false,
+  },
+  {
+    label: "Refunds Claimed",
+    value: "11",
+    description: "Refund claim events from cancelled markets",
     unit: "onchain events",
     featured: false,
   },
@@ -374,7 +395,7 @@ export default function AnalyticsPage() {
                   <div className="grid grid-cols-2 gap-3 border-t border-border/50 pt-4">
                     <div>
                       <p className="text-2xl font-semibold text-foreground">
-                        47
+                        126
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Created markets
@@ -382,7 +403,7 @@ export default function AnalyticsPage() {
                     </div>
                     <div>
                       <p className="text-2xl font-semibold text-foreground">
-                        34.33
+                        149.77
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Testnet USDC
@@ -527,7 +548,7 @@ export default function AnalyticsPage() {
                         {
                           icon: Factory,
                           label: "Created contracts",
-                          value: "47 YES/NO markets",
+                          value: "126 YES/NO markets",
                         },
                       ].map((item) => (
                         <div
@@ -575,7 +596,7 @@ export default function AnalyticsPage() {
                     <div>
                       <CardTitle>Top markets by collateral</CardTitle>
                       <CardDescription>
-                        Five leading contracts from the 47-market Arc Testnet
+                        Five leading contracts from the 126-market Arc Testnet
                         deployment
                       </CardDescription>
                     </div>
@@ -652,9 +673,9 @@ export default function AnalyticsPage() {
               <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
                 <div className="grid grid-cols-3 gap-3 self-start">
                   {[
-                    { label: "Resolved markets", value: "32" },
-                    { label: "Cancelled markets", value: "10" },
-                    { label: "Claim events", value: "23" },
+                    { label: "Resolved markets", value: "105" },
+                    { label: "Cancelled markets", value: "12" },
+                    { label: "Claim events", value: "393" },
                   ].map((item) => (
                     <Card
                       key={item.label}
@@ -856,9 +877,9 @@ export default function AnalyticsPage() {
                 <CardContent>
                   <p className="text-sm leading-relaxed text-muted-foreground">
                     The strongest signals in this snapshot are a verified
-                    factory, 47 created markets, 30 position events, 15 unique
-                    participating wallets, 34.33 testnet USDC in aggregate
-                    collateral movement, 32 resolved markets, and 23 claim
+                    factory, 126 created markets, 806 total trades, 218 unique
+                    participating wallets, 149.77 testnet USDC in aggregate
+                    collateral movement, 105 resolved markets, and 393 claim
                     events.
                   </p>
                 </CardContent>
