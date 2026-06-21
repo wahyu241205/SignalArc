@@ -8,6 +8,7 @@ import { decodeEventLog, type Address, type Hash, type TransactionReceipt } from
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions"
 import { useAccount, useChainId, useConfig, useSwitchChain } from "wagmi"
 
+import { MarketImageUpload } from "@/components/markets/market-image-upload"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -169,11 +170,18 @@ export function CreateMarketForm() {
   const [state, setState] = useState<SubmitState>({ status: "idle" })
   const [deployState, setDeployState] = useState<DeployState>({ status: "idle" })
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [coverImageUrl, setCoverImageUrl] = useState("")
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
   const isArcTestnet = chainId === ARC_TESTNET_CHAIN_ID
   const isDeploying = deployState.status === "deploying"
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    // Never submit while an image upload is mid-flight; the cover URL would
+    // be stale or empty. The submit button is disabled in this state too.
+    if (isUploadingImage) return
+
     setState({ status: "submitting" })
     setDeployState({ status: "idle" })
 
@@ -187,7 +195,7 @@ export function CreateMarketForm() {
         title: requiredText(formData, "title"),
         description: optionalText(formData, "description"),
         category: optionalText(formData, "category"),
-        cover_image_url: optionalText(formData, "cover_image_url"),
+        cover_image_url: coverImageUrl.trim() || undefined,
         outcome_yes_label: optionalText(formData, "outcome_yes_label"),
         outcome_no_label: optionalText(formData, "outcome_no_label"),
         collateral_asset: optionalText(formData, "collateral_asset"),
@@ -380,7 +388,20 @@ export function CreateMarketForm() {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="cover_image_url">Market Image URL</Label>
+            <Label>Market Image</Label>
+            <MarketImageUpload
+              coverImageUrl={coverImageUrl}
+              onChangeUrl={(url) => setCoverImageUrl(url ?? "")}
+              onUploadingChange={setIsUploadingImage}
+              disabled={state.status === "submitting"}
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional. Upload an image directly, or paste an HTTPS image URL below.
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="cover_image_url">Market Image URL (advanced)</Label>
             <Input
               id="cover_image_url"
               name="cover_image_url"
@@ -389,9 +410,12 @@ export function CreateMarketForm() {
               maxLength={2048}
               pattern="https://.*"
               placeholder="https://example.com/market-cover.png"
+              value={coverImageUrl}
+              onChange={(event) => setCoverImageUrl(event.target.value)}
+              disabled={isUploadingImage || state.status === "submitting"}
             />
             <p className="text-xs text-muted-foreground">
-              Optional. Use a public HTTPS image URL; file uploads are not supported yet.
+              Paste a public HTTPS image URL as an alternative to uploading.
             </p>
           </div>
 
@@ -479,8 +503,15 @@ export function CreateMarketForm() {
           ) : null}
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button disabled={state.status === "submitting"} type="submit">
-              {state.status === "submitting" ? "Creating..." : "Create Market"}
+            <Button
+              disabled={state.status === "submitting" || isUploadingImage}
+              type="submit"
+            >
+              {state.status === "submitting"
+                ? "Creating..."
+                : isUploadingImage
+                  ? "Uploading image..."
+                  : "Create Market"}
             </Button>
             <Button asChild variant="outline">
               <Link href="/markets">Cancel</Link>
