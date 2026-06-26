@@ -27,6 +27,7 @@ import {
   localDemoUserId,
   type Market,
 } from "@/lib/api"
+import { CREATE_MARKET_CATEGORIES, DEFAULT_CATEGORY_ID } from "@/modules/categories"
 import {
   ARC_TESTNET_CHAIN_ID,
   ARC_TESTNET_USDC_ADDRESS,
@@ -419,19 +420,41 @@ export function CreateMarketForm() {
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
-              <Input id="category" name="category" placeholder="Crypto, Politics, Sports..." />
+          <fieldset className="grid gap-2" disabled={state.status === "submitting" || isUploadingImage}>
+            <legend className="text-sm font-medium leading-none">Category</legend>
+            <div
+              role="radiogroup"
+              aria-label="Category"
+              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+            >
+              {CREATE_MARKET_CATEGORIES.map((cat) => (
+                <label
+                  key={cat.id}
+                  className="relative flex cursor-pointer items-center justify-center has-[:disabled]:cursor-not-allowed"
+                >
+                  <input
+                    type="radio"
+                    name="category"
+                    value={cat.id}
+                    defaultChecked={cat.id === DEFAULT_CATEGORY_ID}
+                    disabled={state.status === "submitting" || isUploadingImage}
+                    className="peer sr-only"
+                  />
+                  <span className="flex h-9 w-full items-center justify-center rounded-md border border-input bg-transparent px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/40 peer-checked:border-indigo-500 peer-checked:bg-indigo-500/10 peer-checked:text-indigo-300 peer-focus-visible:outline-none peer-focus-visible:ring-1 peer-focus-visible:ring-ring peer-disabled:opacity-50">
+                    {cat.label}
+                  </span>
+                </label>
+              ))}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="resolution_source">Resolution Source</Label>
-              <Input
-                id="resolution_source"
-                name="resolution_source"
-                placeholder="CoinGecko, AP News, Official announcement..."
-              />
-            </div>
+          </fieldset>
+
+          <div className="grid gap-2">
+            <Label htmlFor="resolution_source">Resolution Source</Label>
+            <Input
+              id="resolution_source"
+              name="resolution_source"
+              placeholder="CoinGecko, AP News, Official announcement..."
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

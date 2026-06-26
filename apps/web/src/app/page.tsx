@@ -20,7 +20,7 @@ import { Separator } from "@/components/ui/separator"
 const signalRows = [
   { label: "ETH > $5k by Dec 2025", status: "Open", probability: "—", category: "Crypto" },
   { label: "Fed cuts rate Q3 2025", status: "Open", probability: "—", category: "Macro" },
-  { label: "Arc mainnet launch H2", status: "Closed", probability: "—", category: "Protocol" },
+  { label: "Arc mainnet launch H2", status: "Closed", probability: "—", category: "Arc" },
 ]
 
 const infrastructureSurfaces = [
