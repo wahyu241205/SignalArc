@@ -1,18 +1,3 @@
-import { isAddress, type Address } from "viem"
-
-export const ARC_TESTNET_CHAIN_ID = 5042002
-export const ARC_TESTNET_EXPLORER_URL = "https://testnet.arcscan.app"
-export const ARC_TESTNET_USDC_ADDRESS =
-  "0x3600000000000000000000000000000000000000" as Address
-export const USDC_ERC20_DECIMALS = 6
-
-const configuredFactoryAddress = process.env.NEXT_PUBLIC_SIGNAL_ARC_MARKET_FACTORY_ADDRESS?.trim()
-
-export const SIGNAL_ARC_MARKET_FACTORY_ADDRESS =
-  configuredFactoryAddress && isAddress(configuredFactoryAddress)
-    ? (configuredFactoryAddress as Address)
-    : null
-
 export const SIGNAL_ARC_MARKET_ABI = [
   {
     type: "function",
@@ -194,7 +179,3 @@ export const ERC20_APPROVE_ABI = [
     outputs: [{ name: "", type: "bool" }],
   },
 ] as const
-
-export function getArcscanTxUrl(hash: string) {
-  return `${ARC_TESTNET_EXPLORER_URL}/tx/${hash}`
-}

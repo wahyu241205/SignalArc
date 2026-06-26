@@ -1,4 +1,4 @@
-package api
+package validation
 
 import (
 	"database/sql"
@@ -15,7 +15,7 @@ var decimalPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]{1,18})?$`)
 var evmAddressPattern = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
 var evmTxHashPattern = regexp.MustCompile(`^0x[0-9a-fA-F]{64}$`)
 
-func parseDecimal(value string) (*big.Rat, bool) {
+func ParseDecimal(value string) (*big.Rat, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || !decimalPattern.MatchString(trimmed) {
 		return nil, false
@@ -30,7 +30,7 @@ func parseDecimal(value string) (*big.Rat, bool) {
 	return rat, ok
 }
 
-func decimalString(decimal *big.Rat) (string, bool) {
+func DecimalString(decimal *big.Rat) (string, bool) {
 	numerator := new(big.Int).Set(decimal.Num())
 	denominator := new(big.Int).Set(decimal.Denom())
 	integer := new(big.Int)
@@ -78,19 +78,19 @@ func significantIntegerDigits(value string) int {
 	return len(trimmed)
 }
 
-func isUUIDShape(value string) bool {
+func IsUUIDShape(value string) bool {
 	return uuidPattern.MatchString(value)
 }
 
-func isEVMAddressShape(value string) bool {
+func IsEVMAddressShape(value string) bool {
 	return evmAddressPattern.MatchString(value)
 }
 
-func isEVMTxHashShape(value string) bool {
+func IsEVMTxHashShape(value string) bool {
 	return evmTxHashPattern.MatchString(value)
 }
 
-func optionalString(value *string) sql.NullString {
+func OptionalString(value *string) sql.NullString {
 	if value == nil {
 		return sql.NullString{}
 	}
@@ -103,7 +103,7 @@ func optionalString(value *string) sql.NullString {
 	return sql.NullString{String: trimmedValue, Valid: true}
 }
 
-func defaultString(value *string, fallback string) string {
+func DefaultString(value *string, fallback string) string {
 	if value == nil {
 		return fallback
 	}
@@ -116,12 +116,12 @@ func defaultString(value *string, fallback string) string {
 	return trimmedValue
 }
 
-func isForeignKeyViolation(err error) bool {
+func IsForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
 
-func isUniqueViolation(err error) bool {
+func IsUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

@@ -3,9 +3,17 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit"
 import { defineChain } from "viem"
 
+import {
+  ARC_TESTNET_CHAIN_ID,
+  ARC_TESTNET_EXPLORER_NAME,
+  ARC_TESTNET_EXPLORER_URL,
+  ARC_TESTNET_NAME,
+  ARC_TESTNET_RPC_URL,
+} from "@/lib/contracts"
+
 export const arcTestnet = defineChain({
-  id: 5042002,
-  name: "Arc Testnet",
+  id: ARC_TESTNET_CHAIN_ID,
+  name: ARC_TESTNET_NAME,
   nativeCurrency: {
     name: "USDC",
     symbol: "USDC",
@@ -13,13 +21,13 @@ export const arcTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ["https://rpc.testnet.arc.network"],
+      http: [ARC_TESTNET_RPC_URL],
     },
   },
   blockExplorers: {
     default: {
-      name: "Arcscan",
-      url: "https://testnet.arcscan.app",
+      name: ARC_TESTNET_EXPLORER_NAME,
+      url: ARC_TESTNET_EXPLORER_URL,
     },
   },
   testnet: true,

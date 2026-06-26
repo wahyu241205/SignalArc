@@ -1,4 +1,4 @@
-package api
+package market
 
 import (
 	"strings"
@@ -11,7 +11,7 @@ func TestCreateMarketRequestAcceptsOptionalHTTPSCoverImageURL(t *testing.T) {
 	request := validCreateMarketRequest()
 	request.CoverImageURL = &coverImageURL
 
-	input, err := request.toRepositoryInput(time.Now())
+	input, err := request.ToRepositoryInput(time.Now())
 	if err != nil {
 		t.Fatalf("expected valid cover image URL, got %v", err)
 	}
@@ -26,7 +26,7 @@ func TestCreateMarketRequestAcceptsOptionalHTTPSCoverImageURL(t *testing.T) {
 func TestCreateMarketRequestAllowsMissingCoverImageURL(t *testing.T) {
 	request := validCreateMarketRequest()
 
-	input, err := request.toRepositoryInput(time.Now())
+	input, err := request.ToRepositoryInput(time.Now())
 	if err != nil {
 		t.Fatalf("expected missing cover image URL to be valid, got %v", err)
 	}
@@ -50,15 +50,15 @@ func TestCreateMarketRequestRejectsInvalidCoverImageURL(t *testing.T) {
 			request := validCreateMarketRequest()
 			request.CoverImageURL = &coverImageURL
 
-			if _, err := request.toRepositoryInput(time.Now()); err == nil {
+			if _, err := request.ToRepositoryInput(time.Now()); err == nil {
 				t.Fatalf("expected cover image URL %q to be rejected", coverImageURL)
 			}
 		})
 	}
 }
 
-func validCreateMarketRequest() createMarketRequest {
-	return createMarketRequest{
+func validCreateMarketRequest() CreateMarketRequest {
+	return CreateMarketRequest{
 		CreatorUserID: "10000000-0000-4000-8000-000000000001",
 		Title:         "Will SignalArc support market images?",
 		Chain:         "Arc Testnet",
