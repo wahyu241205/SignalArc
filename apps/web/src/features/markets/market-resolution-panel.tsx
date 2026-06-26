@@ -3,153 +3,28 @@
 import { useEffect, useState } from "react"
 
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  ApiError,
   getMarketResolution,
   getMarketSettlements,
   type Resolution,
-  type Settlement,
 } from "@/lib/api"
+import {
+  getResolutionErrorState,
+  isResolutionNotFoundError,
+  ResolutionPanel,
+  type ResolutionState,
+} from "@/modules/markets/resolution"
 
-type ResolutionState =
-  | { status: "loading" }
-  | { status: "empty"; settlements: Settlement[] }
-  | { status: "loaded"; resolution: Resolution; settlements: Settlement[] }
-  | { status: "error"; message: string; requestId: string | null }
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "-"
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date)
-}
-
-function truncateId(id: string) {
-  if (id.length <= 12) return id
-  return `${id.slice(0, 6)}…${id.slice(-4)}`
-}
-
-async function loadResolution(marketId: string) {
+async function loadResolution(marketId: string): Promise<Resolution | null> {
   try {
     const response = await getMarketResolution(marketId)
     return response.data.resolution
   } catch (error) {
-    if (error instanceof ApiError && (error.code === "resolution_not_found" || error.status === 404)) {
+    if (isResolutionNotFoundError(error)) {
       return null
     }
 
     throw error
   }
-}
-
-function getErrorState(error: unknown): Extract<ResolutionState, { status: "error" }> {
-  if (error instanceof ApiError) {
-    return {
-      status: "error",
-      message: error.message,
-      requestId: error.requestId,
-    }
-  }
-
-  if (error instanceof Error) {
-    return {
-      status: "error",
-      message: error.message,
-      requestId: null,
-    }
-  }
-
-  return {
-    status: "error",
-    message: "Unable to load resolution state.",
-    requestId: null,
-  }
-}
-
-function ResolutionDetails({ resolution }: { resolution: Resolution }) {
-  return (
-    <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <div>
-        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Status</dt>
-        <dd className="mt-1 text-sm font-medium text-foreground">{resolution.status}</dd>
-      </div>
-      <div>
-        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Winning Outcome</dt>
-        <dd className="mt-1 text-sm font-medium text-foreground">{resolution.winning_outcome ?? "-"}</dd>
-      </div>
-      <div>
-        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Resolver Type</dt>
-        <dd className="mt-1 text-sm font-medium text-foreground">{resolution.resolver_type ?? "-"}</dd>
-      </div>
-      <div>
-        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Evidence</dt>
-        <dd className="mt-1 text-sm font-medium text-foreground">{resolution.evidence_reference ?? "-"}</dd>
-      </div>
-      <div>
-        <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Resolved</dt>
-        <dd className="mt-1 text-sm font-medium text-foreground">{formatDate(resolution.resolved_at)}</dd>
-      </div>
-    </dl>
-  )
-}
-
-function SettlementsTable({ settlements }: { settlements: Settlement[] }) {
-  if (settlements.length === 0) {
-    return <p className="text-sm text-muted-foreground">No settlements yet.</p>
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>User</TableHead>
-            <TableHead>Outcome</TableHead>
-            <TableHead>Amount</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Settled</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {settlements.map((settlement) => (
-            <TableRow key={settlement.id}>
-              <TableCell className="font-mono text-xs" title={settlement.user_id ?? undefined}>
-                {settlement.user_id ? truncateId(settlement.user_id) : "-"}
-              </TableCell>
-              <TableCell>{settlement.outcome ?? "-"}</TableCell>
-              <TableCell>{settlement.amount}</TableCell>
-              <TableCell>{settlement.status}</TableCell>
-              <TableCell className="text-muted-foreground">{formatDate(settlement.settled_at)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  )
 }
 
 export function MarketResolutionPanel({ marketId }: { marketId: string }) {
@@ -180,7 +55,7 @@ export function MarketResolutionPanel({ marketId }: { marketId: string }) {
         setState({ status: "loaded", resolution, settlements })
       } catch (error) {
         if (isActive) {
-          setState(getErrorState(error))
+          setState(getResolutionErrorState(error))
         }
       }
     }
@@ -192,52 +67,5 @@ export function MarketResolutionPanel({ marketId }: { marketId: string }) {
     }
   }, [marketId])
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Resolution & Settlements</CardTitle>
-        <CardDescription>
-          Resolution outcome and settlement records for this market.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-6">
-        {state.status === "loading" ? (
-          <div className="animate-pulse space-y-3">
-            <div className="h-4 w-1/3 rounded bg-muted" />
-            <div className="h-4 w-1/2 rounded bg-muted" />
-          </div>
-        ) : null}
-
-        {state.status === "error" ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-            <p className="text-sm font-medium text-destructive">
-              Unable to load resolution data
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">{state.message}</p>
-            {state.requestId ? (
-              <p className="mt-2 font-mono text-xs text-muted-foreground">
-                Request ID: {state.requestId}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {state.status === "empty" ? (
-          <div className="grid gap-6">
-            <p className="text-sm text-muted-foreground">
-              This market has not been resolved yet.
-            </p>
-            <SettlementsTable settlements={state.settlements} />
-          </div>
-        ) : null}
-
-        {state.status === "loaded" ? (
-          <div className="grid gap-6">
-            <ResolutionDetails resolution={state.resolution} />
-            <SettlementsTable settlements={state.settlements} />
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
-  )
+  return <ResolutionPanel state={state} />
 }
