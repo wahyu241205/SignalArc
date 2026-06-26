@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -63,68 +64,80 @@ function deploymentLabel(status: string) {
 }
 
 export function MarketCard({ market }: { market: Market }) {
+  const marketHref = `/markets/${market.id}`
+
   return (
-    <Card className="group transition-colors hover:border-indigo-500/30">
-      <div className="px-6 pt-6">
+    <Card className="group gap-3 transition-colors hover:ring-indigo-500/30">
+      <div className="px-4 pt-4">
         {market.cover_image_url ? (
           // Plain img is intentional for v1 user-provided remote URLs.
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={market.cover_image_url}
-            alt={market.title}
-            className="h-48 w-full rounded-xl object-cover"
+            alt={`Cover image for ${market.title}`}
+            className="h-32 w-full rounded-lg object-cover sm:h-36"
             loading="lazy"
           />
         ) : (
-          <div className="h-48 w-full rounded-xl bg-muted" aria-hidden="true" />
+          <div className="flex h-32 w-full flex-col justify-between rounded-lg border border-dashed border-border bg-muted/40 p-4 sm:h-36">
+            <div className="flex items-center justify-between gap-3">
+              <span className="rounded-full border bg-background/80 px-2.5 py-1 text-[0.68rem] font-medium uppercase tracking-wider text-muted-foreground">
+                SignalArc
+              </span>
+              <span className="text-xs font-medium text-muted-foreground">
+                {market.collateral_asset}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                YES / NO prediction market
+              </p>
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                {market.title}
+              </p>
+            </div>
+          </div>
         )}
       </div>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 space-y-2.5">
-            <CardTitle className="text-base font-semibold leading-snug">
-              <Link
-                className="transition-colors hover:text-indigo-300"
-                href={`/markets/${market.id}`}
-              >
-                {market.title}
-              </Link>
-            </CardTitle>
 
-            <CardDescription className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className={statusColor(market.status)}>
-                {market.status}
-              </Badge>
+      <CardHeader className="space-y-3 pb-0">
+        <CardDescription className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline" className={statusColor(market.status)}>
+            {market.status}
+          </Badge>
 
-              <Badge
-                variant="outline"
-                className="border-muted-foreground/20 bg-muted/40 text-muted-foreground"
-              >
-                {getMarketCategoryLabel(market.category)}
-              </Badge>
-
-              <Badge
-                variant="outline"
-                className={`text-xs ${deploymentColor(market.onchain_deployment_status)}`}
-              >
-                {deploymentLabel(market.onchain_deployment_status)}
-              </Badge>
-            </CardDescription>
-          </div>
-
-          <Button
-            asChild
-            size="sm"
+          <Badge
             variant="outline"
-            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+            className="border-muted-foreground/20 bg-muted/40 text-muted-foreground"
           >
-            <Link href={`/markets/${market.id}`}>View</Link>
-          </Button>
+            {getMarketCategoryLabel(market.category)}
+          </Badge>
+
+          <Badge
+            variant="outline"
+            className={`text-xs ${deploymentColor(market.onchain_deployment_status)}`}
+          >
+            {deploymentLabel(market.onchain_deployment_status)}
+          </Badge>
+        </CardDescription>
+
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            YES / NO prediction market
+          </p>
+          <CardTitle className="line-clamp-2 text-base font-semibold leading-snug">
+            <Link
+              className="transition-colors hover:text-indigo-300"
+              href={marketHref}
+            >
+              {market.title}
+            </Link>
+          </CardTitle>
         </div>
       </CardHeader>
 
-      <CardContent>
-        <dl className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-3">
+      <CardContent className="pt-1">
+        <dl className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
           <div className="space-y-0.5">
             <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
               Collateral
@@ -149,6 +162,14 @@ export function MarketCard({ market }: { market: Market }) {
           </div>
         </dl>
       </CardContent>
+
+      <CardFooter className="mt-auto bg-muted/30">
+        <Button asChild size="sm" variant="outline" className="w-full">
+          <Link href={marketHref} aria-label={`View market: ${market.title}`}>
+            View market
+          </Link>
+        </Button>
+      </CardFooter>
     </Card>
   )
 }
