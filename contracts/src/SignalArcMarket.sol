@@ -57,6 +57,7 @@ contract SignalArcMarket {
     error NothingToClaim();
     error AlreadyClaimed();
     error PayoutTransferFailed();
+    error NoWinningStake();
 
     constructor(string memory question_, uint256 closeTimestamp_, address resolver_, address collateralToken_) {
         if (bytes(question_).length == 0) {
@@ -123,11 +124,19 @@ contract SignalArcMarket {
     function claimableAmount(address user) public view returns (uint256) {
         if (status == MarketStatus.Resolved) {
             if (winningOutcome == Outcome.Yes) {
-                return yesPositions[user];
+                if (totalYes == 0) {
+                    return 0;
+                }
+
+                return yesPositions[user] * totalCollateral / totalYes;
             }
 
             if (winningOutcome == Outcome.No) {
-                return noPositions[user];
+                if (totalNo == 0) {
+                    return 0;
+                }
+
+                return noPositions[user] * totalCollateral / totalNo;
             }
 
             return 0;
@@ -203,6 +212,14 @@ contract SignalArcMarket {
 
         if (winningOutcome_ != Outcome.Yes && winningOutcome_ != Outcome.No) {
             revert InvalidOutcome();
+        }
+
+        if (winningOutcome_ == Outcome.Yes && totalYes == 0) {
+            revert NoWinningStake();
+        }
+
+        if (winningOutcome_ == Outcome.No && totalNo == 0) {
+            revert NoWinningStake();
         }
 
         status = MarketStatus.Resolved;
