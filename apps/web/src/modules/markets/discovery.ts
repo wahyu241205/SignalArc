@@ -11,6 +11,7 @@ export const DEFAULT_DISCOVERY_TAB: DiscoveryTabId = "live"
 
 export const MARKET_DISCOVERY_TABS: MarketDiscoveryTab[] = [
   { id: "live", label: "Live" },
+  { id: "trending", label: "Trending" },
   { id: "new", label: "New" },
   { id: "ending-soon", label: "Ending Soon" },
   { id: "resolved", label: "Resolved" },
@@ -81,6 +82,16 @@ export function discoverMarkets<TMarket extends DiscoverableMarket>(
   if (filters.tab === "live") {
     entries = entries.filter(
       ({ market }) => market.status.toLowerCase() === "open",
+    )
+  }
+
+  if (filters.tab === "trending") {
+    entries = entries.filter(
+      ({ market }) => market.status.toLowerCase() === "open",
+    )
+    entries = byDateDesc(
+      entries,
+      (market) => market.updated_at ?? market.created_at,
     )
   }
 
