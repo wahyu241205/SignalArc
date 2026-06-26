@@ -13,7 +13,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { getMarketCategoryLabel } from "@/modules/categories"
 import { ApiError, getMarkets, type Market } from "@/lib/api"
 
 type MarketListState =
@@ -221,7 +220,7 @@ function MarketCard({ market }: { market: Market }) {
                 variant="outline"
                 className="border-muted-foreground/20 bg-muted/40 text-muted-foreground"
               >
-                {getMarketCategoryLabel(market.category)}
+                {market.category || "Uncategorized"}
               </Badge>
 
               <Badge

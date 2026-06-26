@@ -10,7 +10,6 @@ import {
   CardContent,
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { getMarketCategoryLabel } from "@/modules/categories"
 import { ApiError, getAgentMarkets, type AgentMarket } from "@/lib/api"
 
 type IntelligenceState =
@@ -115,7 +114,7 @@ function SignalCard({ market }: { market: AgentMarket }) {
               {market.status}
             </Badge>
             <Badge variant="outline" className="text-[10px] border-border bg-muted/30 text-muted-foreground">
-              {getMarketCategoryLabel(market.category)}
+              {market.category || "Uncategorized"}
             </Badge>
           </div>
         </div>

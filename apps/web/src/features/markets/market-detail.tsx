@@ -16,7 +16,6 @@ import { Separator } from "@/components/ui/separator"
 import { MarketResolutionPanel } from "@/features/markets/market-resolution-panel"
 import { OnchainMarketLifecyclePanel } from "@/features/markets/onchain-market-lifecycle-panel"
 import { TradeIntentPanel } from "@/features/markets/trade-intent-panel"
-import { getMarketCategoryLabel } from "@/modules/categories"
 import { ApiError, getMarket, type Market } from "@/lib/api"
 
 /* ---------------------------------------------------------------------------
@@ -211,7 +210,7 @@ function MarketSummaryCard({ market }: { market: Market }) {
               {market.status}
             </Badge>
             <Badge variant="secondary">
-              {getMarketCategoryLabel(market.category)}
+              {market.category || "Uncategorized"}
             </Badge>
             <span className="text-xs text-muted-foreground">
               {market.collateral_asset} · {market.chain}
