@@ -21,7 +21,7 @@ export function getDeployErrorMessage(error: unknown) {
       message.includes("rejected the request") ||
       message.includes("request rejected")
     ) {
-      return "Wallet transaction was rejected. The backend market remains NOT_DEPLOYED."
+      return "Wallet transaction was rejected. No backend market was created."
     }
 
     return error.message
