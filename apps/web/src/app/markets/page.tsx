@@ -46,7 +46,7 @@ export default function MarketsPage() {
                 <Link href="/markets/new">Create Market</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link href="/docs">Read Docs</Link>
+                <Link href="https://docs.signalarc.fun" target="_blank" rel="noreferrer">Read Docs</Link>
               </Button>
             </div>
           </div>

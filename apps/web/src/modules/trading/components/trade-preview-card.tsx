@@ -10,24 +10,26 @@ export function TradePreviewCard({
   walletAddress: Address | undefined
 }) {
   return (
-    <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-      <p>
-        Contract:{" "}
-        <span className="font-mono text-xs text-foreground">
+    <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-4 text-sm">
+      <div className="grid gap-1">
+        <p className="text-xs font-medium uppercase text-muted-foreground">Contract</p>
+        <p className="break-all font-mono text-xs text-foreground">
           {contractAddress ?? "Not deployed"}
-        </span>
-      </p>
-      <p className="mt-2">
-        Market ID:{" "}
-        <span className="font-mono text-xs text-foreground">{marketId}</span>
-      </p>
-      {walletAddress ? (
-        <p className="mt-2">
-          Connected wallet:{" "}
-          <span className="font-mono text-xs text-foreground">
-            {walletAddress}
-          </span>
         </p>
+      </div>
+      <div className="grid gap-1">
+        <p className="text-xs font-medium uppercase text-muted-foreground">Market ID</p>
+        <p className="break-all font-mono text-xs text-foreground">{marketId}</p>
+      </div>
+      {walletAddress ? (
+        <div className="grid gap-1">
+          <p className="text-xs font-medium uppercase text-muted-foreground">
+            Connected wallet
+          </p>
+          <p className="break-all font-mono text-xs text-foreground">
+            {walletAddress}
+          </p>
+        </div>
       ) : null}
     </div>
   )
