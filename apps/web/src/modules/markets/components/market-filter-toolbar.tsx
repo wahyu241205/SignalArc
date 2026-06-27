@@ -51,14 +51,11 @@ export function MarketFilterToolbar({
     const open = markets.filter(
       (market) => market.status.toLowerCase() === "open",
     ).length
-    const closed = markets.filter(
-      (market) => market.status.toLowerCase() === "closed",
-    ).length
     const resolved = markets.filter(
       (market) => market.status.toLowerCase() === "resolved",
     ).length
 
-    return { total: markets.length, open, closed, resolved }
+    return { total: markets.length, open, resolved }
   }, [markets])
 
   return (
@@ -85,9 +82,8 @@ export function MarketFilterToolbar({
         {filteredCount === counts.total ? (
           <>
             {counts.total} {counts.total === 1 ? "market" : "markets"}
-            {" - "}
-            {counts.open} open - {counts.closed} closed - {counts.resolved}{" "}
-            resolved
+            {" · "}
+            {counts.open} live · {counts.resolved} resolved
           </>
         ) : (
           <>

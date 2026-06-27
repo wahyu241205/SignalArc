@@ -1,6 +1,6 @@
 import type { MarketCategoryId } from "@/modules/categories"
 
-export type DiscoveryTabId = "live" | "new" | "ending-soon" | "resolved"
+export type DiscoveryTabId = "live" | "trending" | "new" | "ending-soon" | "resolved"
 
 export type MarketDiscoveryTab = {
   id: DiscoveryTabId
@@ -19,4 +19,5 @@ export type DiscoverableMarket = {
   status: string
   closes_at: string
   created_at?: string | null
+  updated_at?: string | null
 }
