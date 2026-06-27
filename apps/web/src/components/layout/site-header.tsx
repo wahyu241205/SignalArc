@@ -87,35 +87,6 @@ export function SiteHeader() {
           />
         </div>
       </div>
-
-      {/* Mobile nav */}
-      <nav className="flex items-center gap-0.5 overflow-x-auto border-t border-border/40 px-4 py-1.5 md:hidden">
-        {navLinks.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={cn(
-              "whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-              pathname === link.href || pathname.startsWith(link.href + "/")
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-            )}
-          >
-            {link.label}
-          </Link>
-        ))}
-        {externalNavLinks.map((link) => (
-          <a
-            key={link.href}
-            href={link.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-          >
-            {link.label}
-          </a>
-        ))}
-      </nav>
     </header>
   )
 }
