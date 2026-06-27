@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { NetworkWarning } from "@/components/layout/network-warning";
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { SiteHeader } from "@/components/layout/site-header";
 import { TestnetBanner } from "@/components/layout/testnet-banner";
 
@@ -39,7 +40,8 @@ export default function RootLayout({
           <TestnetBanner />
           <SiteHeader />
           <NetworkWarning />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1 pb-20 md:pb-0">{children}</main>
+          <MobileBottomNav />
         </Providers>
       </body>
     </html>
