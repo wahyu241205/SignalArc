@@ -16,6 +16,11 @@ func (request CreateMarketRequest) ToRepositoryInput(now time.Time) (repository.
 		return repository.CreateMarketInput{}, errors.New("market lifecycle fields are server-owned")
 	}
 
+	id := strings.TrimSpace(request.ID)
+	if id == "" || !validation.IsUUIDShape(id) {
+		return repository.CreateMarketInput{}, errors.New("id is required")
+	}
+
 	creatorUserID := strings.TrimSpace(request.CreatorUserID)
 	if creatorUserID == "" || !validation.IsUUIDShape(creatorUserID) {
 		return repository.CreateMarketInput{}, errors.New("creator_user_id is required")
@@ -59,20 +64,30 @@ func (request CreateMarketRequest) ToRepositoryInput(now time.Time) (repository.
 		return repository.CreateMarketInput{}, err
 	}
 
+	deploymentInput, err := request.deploymentInput()
+	if err != nil {
+		return repository.CreateMarketInput{}, err
+	}
+
 	return repository.CreateMarketInput{
-		CreatorUserID:    creatorUserID,
-		Title:            title,
-		Description:      validation.OptionalString(request.Description),
-		Category:         validation.OptionalString(request.Category),
-		CoverImageURL:    coverImageURL,
-		Status:           newMarketStatus(now, opensAt),
-		OutcomeYesLabel:  validation.DefaultString(request.OutcomeYesLabel, "YES"),
-		OutcomeNoLabel:   validation.DefaultString(request.OutcomeNoLabel, "NO"),
-		CollateralAsset:  validation.DefaultString(request.CollateralAsset, "USDC"),
-		Chain:            chain,
-		ResolutionSource: validation.OptionalString(request.ResolutionSource),
-		OpensAt:          opensAt,
-		ClosesAt:         closesAt,
+		ID:                     strings.ToLower(id),
+		CreatorUserID:          creatorUserID,
+		Title:                  title,
+		Description:            validation.OptionalString(request.Description),
+		Category:               validation.OptionalString(request.Category),
+		CoverImageURL:          coverImageURL,
+		Status:                 newMarketStatus(now, opensAt),
+		OutcomeYesLabel:        validation.DefaultString(request.OutcomeYesLabel, "YES"),
+		OutcomeNoLabel:         validation.DefaultString(request.OutcomeNoLabel, "NO"),
+		CollateralAsset:        validation.DefaultString(request.CollateralAsset, "USDC"),
+		Chain:                  chain,
+		ResolutionSource:       validation.OptionalString(request.ResolutionSource),
+		OpensAt:                opensAt,
+		ClosesAt:               closesAt,
+		MarketContractAddress:  deploymentInput.MarketContractAddress,
+		MarketDeploymentTxHash: deploymentInput.MarketDeploymentTxHash,
+		MarketFactoryAddress:   deploymentInput.MarketFactoryAddress,
+		ResolverAddress:        deploymentInput.ResolverAddress,
 	}, nil
 }
 
@@ -106,10 +121,33 @@ func newMarketStatus(now time.Time, opensAt sql.NullTime) string {
 }
 
 func (request AttachMarketContractRequest) ToRepositoryInput() (repository.AttachMarketContractInput, error) {
-	marketContractAddress := strings.TrimSpace(request.MarketContractAddress)
-	marketDeploymentTxHash := strings.TrimSpace(request.MarketDeploymentTxHash)
-	marketFactoryAddress := strings.TrimSpace(request.MarketFactoryAddress)
-	resolverAddress := strings.TrimSpace(request.ResolverAddress)
+	return deploymentFieldsToRepositoryInput(
+		request.MarketContractAddress,
+		request.MarketDeploymentTxHash,
+		request.MarketFactoryAddress,
+		request.ResolverAddress,
+	)
+}
+
+func (request CreateMarketRequest) deploymentInput() (repository.AttachMarketContractInput, error) {
+	return deploymentFieldsToRepositoryInput(
+		request.MarketContractAddress,
+		request.MarketDeploymentTxHash,
+		request.MarketFactoryAddress,
+		request.ResolverAddress,
+	)
+}
+
+func deploymentFieldsToRepositoryInput(
+	contractAddress string,
+	deploymentTxHash string,
+	factoryAddress string,
+	resolverAddressValue string,
+) (repository.AttachMarketContractInput, error) {
+	marketContractAddress := strings.TrimSpace(contractAddress)
+	marketDeploymentTxHash := strings.TrimSpace(deploymentTxHash)
+	marketFactoryAddress := strings.TrimSpace(factoryAddress)
+	resolverAddress := strings.TrimSpace(resolverAddressValue)
 
 	if !validation.IsEVMAddressShape(marketContractAddress) {
 		return repository.AttachMarketContractInput{}, errors.New("market_contract_address must be an EVM address")

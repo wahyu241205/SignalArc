@@ -40,19 +40,24 @@ type MarketsRepository struct {
 }
 
 type CreateMarketInput struct {
-	CreatorUserID    string
-	Title            string
-	Description      sql.NullString
-	Category         sql.NullString
-	CoverImageURL    sql.NullString
-	Status           string
-	OutcomeYesLabel  string
-	OutcomeNoLabel   string
-	CollateralAsset  string
-	Chain            string
-	ResolutionSource sql.NullString
-	OpensAt          sql.NullTime
-	ClosesAt         time.Time
+	ID                     string
+	CreatorUserID          string
+	Title                  string
+	Description            sql.NullString
+	Category               sql.NullString
+	CoverImageURL          sql.NullString
+	Status                 string
+	OutcomeYesLabel        string
+	OutcomeNoLabel         string
+	CollateralAsset        string
+	Chain                  string
+	ResolutionSource       sql.NullString
+	OpensAt                sql.NullTime
+	ClosesAt               time.Time
+	MarketContractAddress  string
+	MarketDeploymentTxHash string
+	MarketFactoryAddress   string
+	ResolverAddress        string
 }
 
 type AttachMarketContractInput struct {
@@ -70,6 +75,8 @@ func (r *MarketsRepository) GetMarketByID(ctx context.Context, id string) (Marke
 	var market Market
 	err := r.db.QueryRow(ctx, marketSelectSQL+`
 		WHERE id = $1
+			AND onchain_deployment_status = 'DEPLOYED'
+			AND market_contract_address IS NOT NULL
 	`, id).Scan(
 		marketScanDestinations(&market)...,
 	)
@@ -81,6 +88,7 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 	var market Market
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO markets (
+			id,
 			creator_user_id,
 			title,
 			description,
@@ -93,9 +101,14 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 			chain,
 			resolution_source,
 			opens_at,
-			closes_at
+			closes_at,
+			market_contract_address,
+			market_deployment_tx_hash,
+			market_factory_address,
+			resolver_address,
+			onchain_deployment_status
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'DEPLOYED')
 		RETURNING
 			id::text,
 			creator_user_id::text,
@@ -122,6 +135,7 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 			created_at,
 			updated_at
 	`,
+		input.ID,
 		input.CreatorUserID,
 		input.Title,
 		input.Description,
@@ -135,6 +149,10 @@ func (r *MarketsRepository) CreateMarket(ctx context.Context, input CreateMarket
 		input.ResolutionSource,
 		input.OpensAt,
 		input.ClosesAt,
+		input.MarketContractAddress,
+		input.MarketDeploymentTxHash,
+		input.MarketFactoryAddress,
+		input.ResolverAddress,
 	).Scan(
 		marketScanDestinations(&market)...,
 	)
@@ -194,6 +212,8 @@ func (r *MarketsRepository) AttachMarketContract(ctx context.Context, id string,
 
 func (r *MarketsRepository) ListMarkets(ctx context.Context, limit int) ([]Market, error) {
 	rows, err := r.db.Query(ctx, marketSelectSQL+`
+		WHERE onchain_deployment_status = 'DEPLOYED'
+			AND market_contract_address IS NOT NULL
 		ORDER BY created_at DESC
 		LIMIT $1
 	`, limit)

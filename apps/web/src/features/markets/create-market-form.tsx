@@ -15,10 +15,8 @@ import {
 } from "@/components/ui/card"
 import {
   ApiError,
-  attachMarketContract,
   createMarket,
   localDemoUserId,
-  type Market,
 } from "@/lib/api"
 import {
   ARC_TESTNET_CHAIN_ID,
@@ -33,7 +31,6 @@ import {
   CreateMarketAdvancedFields,
   CreateMarketCategoryField,
   CreateMarketCoverUploadField,
-  CreateMarketDeployPanel,
   CreateMarketFields,
   CreateMarketOutcomeFields,
   CreateMarketScheduleFields,
@@ -88,6 +85,13 @@ export function CreateMarketForm() {
   const [isUploadingImage, setIsUploadingImage] = useState(false)
   const isArcTestnet = isArcTestnetChain(chainId)
   const isDeploying = deployState.status === "deploying"
+  const canSubmit = Boolean(
+    isConnected &&
+      isArcTestnet &&
+      SIGNAL_ARC_MARKET_FACTORY_ADDRESS &&
+      !isDeploying &&
+      !isSwitchingChain,
+  )
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -96,37 +100,42 @@ export function CreateMarketForm() {
     // be stale or empty. The submit button is disabled in this state too.
     if (isUploadingImage) return
 
+    if (!isConnected || !address) {
+      setState({
+        status: "error",
+        message: "Connect a wallet before deploying and creating a market.",
+        requestId: null,
+      })
+      return
+    }
+
+    if (!isArcTestnet) {
+      setState({
+        status: "error",
+        message: "Switch to Arc Testnet before deploying and creating a market.",
+        requestId: null,
+      })
+      return
+    }
+
+    if (!SIGNAL_ARC_MARKET_FACTORY_ADDRESS) {
+      setState({
+        status: "error",
+        message: "Market factory address is not configured.",
+        requestId: null,
+      })
+      return
+    }
+
     setState({ status: "submitting" })
     setDeployState({ status: "idle" })
 
     const formData = new FormData(event.currentTarget)
     const opensAt = optionalText(formData, "opens_at")
     const closesAt = requiredText(formData, "closes_at")
-
-    try {
-      const response = await createMarket({
-        creator_user_id: requiredText(formData, "creator_user_id"),
-        title: requiredText(formData, "title"),
-        description: optionalText(formData, "description"),
-        category: optionalText(formData, "category"),
-        cover_image_url: coverImageUrl.trim() || undefined,
-        outcome_yes_label: optionalText(formData, "outcome_yes_label"),
-        outcome_no_label: optionalText(formData, "outcome_no_label"),
-        collateral_asset: optionalText(formData, "collateral_asset"),
-        chain: requiredText(formData, "chain"),
-        resolution_source: optionalText(formData, "resolution_source"),
-        opens_at: opensAt ? toRfc3339(opensAt) : undefined,
-        closes_at: toRfc3339(closesAt),
-      })
-
-      setState({ status: "success", market: response.data.market })
-    } catch (error) {
-      setState(getErrorState(error))
-    }
-  }
-
-  async function handleDeploy(market: Market) {
-    if (!address || !SIGNAL_ARC_MARKET_FACTORY_ADDRESS) return
+    const marketId = crypto.randomUUID()
+    const title = requiredText(formData, "title")
+    const closesAtRfc3339 = toRfc3339(closesAt)
 
     let hash: Hash | undefined
     try {
@@ -136,9 +145,9 @@ export function CreateMarketForm() {
         abi: SIGNAL_ARC_MARKET_FACTORY_ABI,
         functionName: "createMarket",
         args: [
-          market.id,
-          market.title,
-          closeTimestampSeconds(market.closes_at),
+          marketId,
+          title,
+          closeTimestampSeconds(closesAtRfc3339),
           address,
           ARC_TESTNET_USDC_ADDRESS,
         ],
@@ -153,7 +162,20 @@ export function CreateMarketForm() {
       })
       const marketAddress = getDeployedMarketAddress(receipt)
 
-      await attachMarketContract(market.id, {
+      const response = await createMarket({
+        id: marketId,
+        creator_user_id: requiredText(formData, "creator_user_id"),
+        title,
+        description: optionalText(formData, "description"),
+        category: optionalText(formData, "category"),
+        cover_image_url: coverImageUrl.trim() || undefined,
+        outcome_yes_label: optionalText(formData, "outcome_yes_label"),
+        outcome_no_label: optionalText(formData, "outcome_no_label"),
+        collateral_asset: optionalText(formData, "collateral_asset"),
+        chain: requiredText(formData, "chain"),
+        resolution_source: optionalText(formData, "resolution_source"),
+        opens_at: opensAt ? toRfc3339(opensAt) : undefined,
+        closes_at: closesAtRfc3339,
         market_contract_address: marketAddress,
         market_deployment_tx_hash: hash,
         market_factory_address: SIGNAL_ARC_MARKET_FACTORY_ADDRESS,
@@ -161,37 +183,25 @@ export function CreateMarketForm() {
       })
 
       setDeployState({ status: "success", hash, marketAddress })
-      router.push(`/markets/${market.id}`)
+      setState({ status: "success", market: response.data.market })
+      router.push(`/markets/${marketId}`)
     } catch (error) {
+      const message = getDeployErrorMessage(error)
       setDeployState({
         status: "error",
-        message: getDeployErrorMessage(error),
+        message,
         hash,
       })
+      if (error instanceof ApiError) {
+        setState(getErrorState(error))
+      } else {
+        setState({
+          status: "error",
+          message,
+          requestId: null,
+        })
+      }
     }
-  }
-
-  if (state.status === "success") {
-    const canDeploy = Boolean(
-      isConnected &&
-        isArcTestnet &&
-        SIGNAL_ARC_MARKET_FACTORY_ADDRESS &&
-        !isDeploying,
-    )
-
-    return (
-      <CreateMarketDeployPanel
-        market={state.market}
-        deployState={deployState}
-        canDeploy={canDeploy}
-        isConnected={isConnected}
-        isArcTestnet={isArcTestnet}
-        isSwitchingChain={isSwitchingChain}
-        isDeploying={isDeploying}
-        onSwitchChain={() => switchChain({ chainId: arcTestnet.id })}
-        onDeploy={() => handleDeploy(state.market)}
-      />
-    )
   }
 
   return (
@@ -199,7 +209,7 @@ export function CreateMarketForm() {
       <CardHeader>
         <CardTitle>Create a Market</CardTitle>
         <CardDescription>
-          Launch a new USDC-settled prediction market on Arc Testnet.
+          Deploy the Arc Testnet contract first; the market becomes public only after deployment succeeds.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -231,7 +241,13 @@ export function CreateMarketForm() {
 
           <CreateMarketSubmitStatus
             state={state}
+            deployState={deployState}
             isUploadingImage={isUploadingImage}
+            canSubmit={canSubmit}
+            isConnected={isConnected}
+            isArcTestnet={isArcTestnet}
+            isSwitchingChain={isSwitchingChain}
+            onSwitchChain={() => switchChain({ chainId: arcTestnet.id })}
           />
         </form>
       </CardContent>

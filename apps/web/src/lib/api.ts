@@ -168,6 +168,7 @@ export type MarketResponse = {
 }
 
 export type CreateMarketRequest = {
+  id: string
   creator_user_id: string
   title: string
   description?: string
@@ -180,6 +181,10 @@ export type CreateMarketRequest = {
   resolution_source?: string
   opens_at?: string
   closes_at: string
+  market_contract_address: string
+  market_deployment_tx_hash: string
+  market_factory_address: string
+  resolver_address: string
 }
 
 export type CreateTradeIntentRequest = {
