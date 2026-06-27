@@ -58,10 +58,10 @@ export function TradePanel({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle>Place Trade</CardTitle>
+    <Card className="overflow-hidden">
+      <CardHeader className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>Trade Ticket</CardTitle>
           <Badge
             variant="outline"
             className="border-green-500/30 bg-green-500/10 text-green-300 text-xs"
@@ -69,11 +69,9 @@ export function TradePanel({
             Arc Testnet
           </Badge>
         </div>
-        <CardDescription>
-          This executes on Arc Testnet from your connected wallet. No production settlement.
-        </CardDescription>
+        <CardDescription>Choose a side and enter the USDC amount to trade.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6">
         <form className="grid gap-5" onSubmit={onSubmit}>
           <TradePreviewCard
             contractAddress={contractAddress}
@@ -86,11 +84,6 @@ export function TradePanel({
             <TradeAmountInput value={amount} onChange={onAmountChange} />
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            {amount || "0"} USDC will be sent as{" "}
-            {parsedAmount ? parsedAmount.toString() : "0"} base units.
-          </p>
-
           <TradeSubmitStatus state={state} />
 
           <TradeWalletState
@@ -101,11 +94,22 @@ export function TradePanel({
             onSwitchNetwork={onSwitchNetwork}
           />
 
-          <Button disabled={!canSubmit} type="submit" className="w-full sm:w-auto">
-            {state.status === "approving" ? "Approving USDC..." : null}
-            {state.status === "opening" ? "Opening position..." : null}
-            {!isPending ? `Trade ${outcome} on Arc Testnet` : null}
-          </Button>
+          <div className="grid gap-3 border-t border-border pt-4">
+            <div className="flex items-start justify-between gap-4 text-sm">
+              <span className="text-muted-foreground">Order amount</span>
+              <span className="text-right font-medium text-foreground">
+                {amount || "0"} USDC
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Network value: {parsedAmount ? parsedAmount.toString() : "0"} base units.
+            </p>
+            <Button disabled={!canSubmit} type="submit" className="h-11 w-full">
+              {state.status === "approving" ? "Approving USDC..." : null}
+              {state.status === "opening" ? "Opening position..." : null}
+              {!isPending ? `Trade ${outcome} on Arc Testnet` : null}
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>
