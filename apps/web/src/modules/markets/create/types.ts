@@ -10,6 +10,23 @@ export type SubmitState =
 
 export type DeployState =
   | { status: "idle" }
-  | { status: "deploying"; hash?: Hash }
-  | { status: "success"; hash: Hash; marketAddress: Address }
-  | { status: "error"; message: string; hash?: Hash }
+  | {
+      status: "deploying"
+      hash?: Hash
+      marketId?: string
+      marketTitle?: string
+    }
+  | {
+      status: "success"
+      hash: Hash
+      marketAddress: Address
+      marketId?: string
+      marketTitle?: string
+    }
+  | {
+      status: "error"
+      message: string
+      hash?: Hash
+      marketId?: string
+      marketTitle?: string
+    }

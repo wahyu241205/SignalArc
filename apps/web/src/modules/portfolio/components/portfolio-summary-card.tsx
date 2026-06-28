@@ -6,105 +6,158 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { InlineErrorState } from "@/components/shared"
+
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  formatPortfolioAmount,
+  formatWalletAddress,
+} from "../format"
+import type { MarketsState, PortfolioState } from "../types"
 
-import type { MarketsState } from "../types"
-import { truncatePortfolioId } from "../format"
+function sumPositionExposure(
+  portfolioState: PortfolioState,
+): { value: string; description: string } {
+  if (portfolioState.status === "empty") {
+    return {
+      value: "0",
+      description: "No loaded position exposure.",
+    }
+  }
 
-export function PortfolioSummaryCard({ state }: { state: MarketsState }) {
+  if (portfolioState.status !== "loaded") {
+    return {
+      value: "-",
+      description: "Load API position records to calculate exposure.",
+    }
+  }
+
+  const total = portfolioState.data.positions.reduce(
+    (sum, position) => sum + Number(position.quantity || 0),
+    0,
+  )
+
+  return {
+    value: formatPortfolioAmount(total),
+    description: "Sum of loaded position quantities.",
+  }
+}
+
+function MetricTile({
+  label,
+  value,
+  description,
+}: {
+  label: string
+  value: string
+  description: string
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border bg-muted/20 p-3">
+      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+        {label}
+      </p>
+      <p className="mt-2 break-words text-xl font-semibold text-foreground">
+        {value}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        {description}
+      </p>
+    </div>
+  )
+}
+
+export function PortfolioSummaryCard({
+  address,
+  isConnected,
+  marketsState,
+  portfolioState,
+}: {
+  address: string | undefined
+  isConnected: boolean
+  marketsState: MarketsState
+  portfolioState: PortfolioState
+}) {
+  const activePositions =
+    portfolioState.status === "loaded"
+      ? portfolioState.data.positions.length
+      : portfolioState.status === "empty"
+        ? 0
+        : null
+  const settlementCount =
+    portfolioState.status === "loaded"
+      ? portfolioState.data.settlements.length
+      : portfolioState.status === "empty"
+        ? 0
+        : null
+  const exposure = sumPositionExposure(portfolioState)
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Onchain Markets</CardTitle>
-        <CardDescription>
-          Arc Testnet deployment status for listed markets.
+        <CardTitle>Wallet Overview</CardTitle>
+        <CardDescription className="leading-6">
+          Portfolio data currently combines wallet identity with API position and
+          settlement records when a backend user ID is loaded.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        {state.status === "loading" ? (
-          <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
-        ) : null}
-
-        {state.status === "error" ? (
+      <CardContent className="grid gap-4">
+        {marketsState.status === "error" ? (
           <InlineErrorState
-            title="Unable to load onchain market status"
-            message={state.message}
-            requestId={state.requestId}
+            title="Unable to load market context"
+            message={marketsState.message}
+            requestId={marketsState.requestId}
           />
         ) : null}
 
-        {state.status === "loaded" ? (
-          <>
-            <div className="grid gap-3 md:hidden">
-              {state.markets.map((market) => (
-                <div key={market.id} className="rounded-lg border bg-card/50 p-3">
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-xs font-medium uppercase text-muted-foreground">
-                        Market
-                      </p>
-                      <p className="mt-1 text-sm font-medium leading-snug text-foreground">
-                        {market.title}
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs font-medium uppercase text-muted-foreground">
-                          Status
-                        </p>
-                        <p className="mt-1 text-sm">{market.onchain_deployment_status}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase text-muted-foreground">
-                          Contract
-                        </p>
-                        <p className="mt-1 font-mono text-xs">
-                          {market.market_contract_address
-                            ? truncatePortfolioId(market.market_contract_address)
-                            : "Not deployed"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricTile
+            label="Connected Wallet"
+            value={isConnected && address ? formatWalletAddress(address) : "Not connected"}
+            description={
+              isConnected
+                ? "Wallet identity is available for onchain context."
+                : "Connect a wallet to anchor this portfolio view."
+            }
+          />
+          <MetricTile
+            label="Active Positions"
+            value={activePositions === null ? "-" : String(activePositions)}
+            description={
+              activePositions === null
+                ? "Load API records to show positions."
+                : "Loaded position rows from the backend."
+            }
+          />
+          <MetricTile
+            label="Total Exposure"
+            value={exposure.value}
+            description={exposure.description}
+          />
+          <MetricTile
+            label="Claim / Refund Records"
+            value={settlementCount === null ? "-" : String(settlementCount)}
+            description={
+              settlementCount === null
+                ? "Load settlement records for claim history."
+                : "Loaded settlement rows; live claimability remains onchain."
+            }
+          />
+        </div>
 
-            <div className="hidden overflow-x-auto rounded-lg border md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Market</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Contract</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {state.markets.map((market) => (
-                    <TableRow key={market.id}>
-                      <TableCell className="max-w-[260px] truncate" title={market.title}>
-                        {market.title}
-                      </TableCell>
-                      <TableCell>{market.onchain_deployment_status}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {market.market_contract_address
-                          ? truncatePortfolioId(market.market_contract_address)
-                          : "Not deployed"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        ) : null}
+        <div className="rounded-lg border border-border bg-background/40 p-3 text-sm text-muted-foreground">
+          {marketsState.status === "loading" ? (
+            <span>Loading market metadata for portfolio cards...</span>
+          ) : null}
+          {marketsState.status === "loaded" ? (
+            <span>
+              {marketsState.markets.length} market
+              {marketsState.markets.length === 1 ? "" : "s"} available for title,
+              status, close time, and detail links.
+            </span>
+          ) : null}
+          {marketsState.status === "error" ? (
+            <span>Position cards will use raw market IDs until market metadata loads.</span>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   )

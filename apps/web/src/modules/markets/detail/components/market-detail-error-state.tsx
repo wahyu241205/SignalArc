@@ -20,7 +20,7 @@ export function MarketDetailErrorState({
   requestId: string | null
 }) {
   return (
-    <div className="mx-auto max-w-lg py-12">
+    <div className="mx-auto max-w-lg px-4 py-10 sm:py-12">
       <Card className="border-destructive/30 bg-destructive/5">
         <CardHeader className="space-y-2 text-center">
           <CardTitle className="text-lg text-destructive">
@@ -37,13 +37,14 @@ export function MarketDetailErrorState({
             </p>
           ) : null}
           <Separator />
-          <div className="flex items-center justify-center gap-3">
-            <Button asChild size="sm" variant="outline">
+          <div className="grid gap-3 sm:flex sm:items-center sm:justify-center">
+            <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
               <Link href="/markets">Back to markets</Link>
             </Button>
             <Button
               size="sm"
               variant="ghost"
+              className="w-full sm:w-auto"
               onClick={() => window.location.reload()}
             >
               Retry

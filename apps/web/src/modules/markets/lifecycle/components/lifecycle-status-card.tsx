@@ -21,7 +21,11 @@ function OnchainField({
       <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
         {label}
       </dt>
-      <dd className={`mt-1 break-all text-sm text-foreground ${mono ? "font-mono text-xs" : ""}`}>
+      <dd
+        className={`mt-1 break-all text-sm text-foreground ${
+          mono ? "font-mono text-xs" : ""
+        }`}
+      >
         {value}
       </dd>
     </div>
@@ -30,7 +34,7 @@ function OnchainField({
 
 export function LifecycleStatusCard({ data }: { data: LifecycleStatusData }) {
   return (
-    <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
       <OnchainField
         label="Contract Address"
         value={data.deployedContractAddress}

@@ -22,8 +22,8 @@ import { ResolutionOutcomeSelector } from "./resolution-outcome-selector"
 
 function ResolutionDetails({ resolution }: { resolution: Resolution }) {
   return (
-    <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <div>
+    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+      <div className="min-w-0 rounded-lg border border-border bg-muted/20 p-3">
         <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
           Status
         </dt>
@@ -31,7 +31,7 @@ function ResolutionDetails({ resolution }: { resolution: Resolution }) {
           {resolution.status}
         </dd>
       </div>
-      <div>
+      <div className="min-w-0 rounded-lg border border-border bg-muted/20 p-3">
         <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
           Winning Outcome
         </dt>
@@ -39,7 +39,7 @@ function ResolutionDetails({ resolution }: { resolution: Resolution }) {
           <ResolutionOutcomeSelector outcome={resolution.winning_outcome} />
         </dd>
       </div>
-      <div>
+      <div className="min-w-0 rounded-lg border border-border bg-muted/20 p-3">
         <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
           Resolver Type
         </dt>
@@ -47,15 +47,15 @@ function ResolutionDetails({ resolution }: { resolution: Resolution }) {
           {resolution.resolver_type ?? "-"}
         </dd>
       </div>
-      <div>
+      <div className="min-w-0 rounded-lg border border-border bg-muted/20 p-3">
         <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
           Evidence
         </dt>
-        <dd className="mt-1 text-sm font-medium text-foreground">
+        <dd className="mt-1 break-words text-sm font-medium text-foreground">
           {resolution.evidence_reference ?? "-"}
         </dd>
       </div>
-      <div>
+      <div className="min-w-0 rounded-lg border border-border bg-muted/20 p-3">
         <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
           Resolved
         </dt>

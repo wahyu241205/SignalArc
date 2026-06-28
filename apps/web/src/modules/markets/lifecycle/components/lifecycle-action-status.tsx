@@ -18,9 +18,13 @@ export function LifecycleActionStatus({
           </p>
         </div>
         {actionState.hash ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            <LifecycleTransactionCard hash={actionState.hash} />
-          </p>
+          <div className="mt-3">
+            <LifecycleTransactionCard
+              hash={actionState.hash}
+              status="pending"
+              label={actionState.label}
+            />
+          </div>
         ) : null}
       </div>
     )
@@ -35,9 +39,13 @@ export function LifecycleActionStatus({
             {actionState.label} confirmed on Arc Testnet
           </p>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          <LifecycleTransactionCard hash={actionState.hash} />
-        </p>
+        <div className="mt-3">
+          <LifecycleTransactionCard
+            hash={actionState.hash}
+            status="success"
+            label={actionState.label}
+          />
+        </div>
       </div>
     )
   }
@@ -55,9 +63,13 @@ export function LifecycleActionStatus({
           {actionState.message}
         </p>
         {actionState.hash ? (
-          <p className="mt-2 text-sm text-muted-foreground">
-            <LifecycleTransactionCard hash={actionState.hash} />
-          </p>
+          <div className="mt-3">
+            <LifecycleTransactionCard
+              hash={actionState.hash}
+              status="error"
+              label={actionState.label}
+            />
+          </div>
         ) : null}
       </div>
     )

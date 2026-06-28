@@ -1,4 +1,4 @@
-import { getArcscanAddressUrl } from "@/lib/contracts"
+import { getArcscanAddressUrl, getArcscanTxUrl } from "@/lib/contracts"
 
 export function formatMarketDate(value: string) {
   const date = new Date(value)
@@ -28,6 +28,27 @@ export function marketStatusBadgeClass(status: string) {
   }
 }
 
+export function onchainDeploymentBadgeClass(status: string) {
+  switch (status) {
+    case "DEPLOYED":
+      return "border-green-500/30 bg-green-500/10 text-green-300"
+    case "FAILED":
+      return "border-red-500/30 bg-red-500/10 text-red-300"
+    case "NOT_DEPLOYED":
+      return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
+    default:
+      return ""
+  }
+}
+
+export function formatDeploymentStatus(status: string) {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
 export function marketStatusContext(
   status: string,
   winningOutcome: string | null,
@@ -50,4 +71,8 @@ export function marketStatusContext(
 
 export function arcscanContractUrl(address: string) {
   return getArcscanAddressUrl(address)
+}
+
+export function arcscanTransactionUrl(hash: string) {
+  return getArcscanTxUrl(hash as `0x${string}`)
 }

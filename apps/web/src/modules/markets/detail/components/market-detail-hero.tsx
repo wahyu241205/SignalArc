@@ -8,10 +8,15 @@ export function MarketDetailHero({ market }: { market: Market }) {
       <img
         src={market.cover_image_url}
         alt={market.title}
-        className="h-48 w-full rounded-xl object-cover sm:h-64"
+        className="aspect-[16/10] w-full rounded-lg object-cover sm:aspect-[16/7]"
       />
     )
   }
 
-  return <div className="h-48 w-full rounded-xl bg-muted sm:h-64" aria-hidden="true" />
+  return (
+    <div
+      className="aspect-[16/10] w-full rounded-lg bg-muted sm:aspect-[16/7]"
+      aria-hidden="true"
+    />
+  )
 }

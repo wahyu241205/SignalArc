@@ -1,7 +1,7 @@
 "use client"
 
 import { type FormEvent, useEffect, useMemo, useState } from "react"
-import { isAddress, type Address, type Hash } from "viem"
+import { isAddress, zeroAddress, type Address, type Hash } from "viem"
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions"
 import { useAccount, useChainId, useConfig, useReadContract, useSwitchChain } from "wagmi"
 
@@ -26,10 +26,12 @@ import {
 
 export function TradeIntentPanel({
   marketId,
+  marketTitle,
   marketStatus,
   marketContractAddress,
 }: {
   marketId: string
+  marketTitle?: string
   marketStatus: string
   marketContractAddress: string | null
 }) {
@@ -48,6 +50,9 @@ export function TradeIntentPanel({
     marketContractAddress && isAddress(marketContractAddress)
       ? (marketContractAddress as Address)
       : null
+  const userAddress = address ?? zeroAddress
+  const readsEnabled = Boolean(contractAddress)
+  const walletReadsEnabled = readsEnabled && isConnected
   const parsedAmount = useMemo(() => {
     try {
       return parseUsdcAmount(amount)
@@ -61,7 +66,7 @@ export function TradeIntentPanel({
     functionName: "isOpen",
     chainId: ARC_TESTNET_CHAIN_ID,
     query: {
-      enabled: Boolean(contractAddress),
+      enabled: readsEnabled,
     },
   })
   const { data: contractStatus } = useReadContract({
@@ -70,7 +75,7 @@ export function TradeIntentPanel({
     functionName: "status",
     chainId: ARC_TESTNET_CHAIN_ID,
     query: {
-      enabled: Boolean(contractAddress),
+      enabled: readsEnabled,
     },
   })
   const { data: closeTimestamp } = useReadContract({
@@ -79,7 +84,27 @@ export function TradeIntentPanel({
     functionName: "closeTimestamp",
     chainId: ARC_TESTNET_CHAIN_ID,
     query: {
-      enabled: Boolean(contractAddress),
+      enabled: readsEnabled,
+    },
+  })
+  const { data: yesPosition } = useReadContract({
+    address: contractAddress ?? undefined,
+    abi: SIGNAL_ARC_MARKET_ABI,
+    functionName: "yesPositions",
+    args: [userAddress],
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: {
+      enabled: walletReadsEnabled,
+    },
+  })
+  const { data: noPosition } = useReadContract({
+    address: contractAddress ?? undefined,
+    abi: SIGNAL_ARC_MARKET_ABI,
+    functionName: "noPositions",
+    args: [userAddress],
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: {
+      enabled: walletReadsEnabled,
     },
   })
   const hasReachedCloseTime =
@@ -97,6 +122,7 @@ export function TradeIntentPanel({
 
   const disabledReason = getTradeDisabledReason({
     contractAddress,
+    contractStatus,
     isContractTradingClosed,
     hasReachedCloseTime,
     isConnected,
@@ -160,6 +186,7 @@ export function TradeIntentPanel({
   return (
     <TradePanel
       marketId={marketId}
+      marketTitle={marketTitle}
       contractAddress={contractAddress}
       walletAddress={address}
       outcome={outcome}
@@ -167,6 +194,8 @@ export function TradeIntentPanel({
       amount={amount}
       onAmountChange={setAmount}
       parsedAmount={parsedAmount}
+      yesPosition={yesPosition}
+      noPosition={noPosition}
       state={state}
       disabledReason={disabledReason}
       canSubmit={canSubmit}

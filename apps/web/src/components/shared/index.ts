@@ -4,3 +4,7 @@ export { LoadingSkeletonBlock, LoadingSkeletonList } from "./loading-skeleton"
 export { MetricCard } from "./metric-card"
 export { StatusBadge } from "./status-badge"
 export { TransactionLink, TransactionStatusLine } from "./transaction-link"
+export {
+  TransactionResultDialog,
+  type TransactionResultDialogState,
+} from "./transaction-result-dialog"

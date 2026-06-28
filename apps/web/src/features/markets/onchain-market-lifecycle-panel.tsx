@@ -27,8 +27,12 @@ import {
 } from "@/modules/markets/lifecycle"
 
 export function OnchainMarketLifecyclePanel({
+  marketId,
+  marketTitle,
   marketContractAddress,
 }: {
+  marketId: string
+  marketTitle?: string
   marketContractAddress: string | null
 }) {
   const config = useConfig()
@@ -283,6 +287,8 @@ export function OnchainMarketLifecyclePanel({
 
   return (
     <LifecyclePanel
+      marketId={marketId}
+      marketTitle={marketTitle}
       data={{
         deployedContractAddress,
         resolverAddress: resolverRead.data,

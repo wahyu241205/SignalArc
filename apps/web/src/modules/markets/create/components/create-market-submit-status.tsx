@@ -1,10 +1,80 @@
 import Link from "next/link"
 
-import { InlineErrorState } from "@/components/shared"
+import {
+  InlineErrorState,
+  TransactionResultDialog,
+  type TransactionResultDialogState,
+} from "@/components/shared"
 import { Button } from "@/components/ui/button"
 import { ChainStatusCard, TransactionLink } from "@/modules/wallet"
 
 import type { DeployState, SubmitState } from "../types"
+
+function isWalletRejected(message: string) {
+  return message.toLowerCase().includes("wallet transaction was rejected")
+}
+
+function getCreateDialogState(
+  state: SubmitState,
+  deployState: DeployState,
+): TransactionResultDialogState | null {
+  if (deployState.status === "deploying") {
+    return deployState.hash ? "pending" : "wallet_confirmation"
+  }
+
+  if (deployState.status === "success" && state.status === "success") {
+    return "success"
+  }
+
+  if (deployState.status === "error") {
+    return isWalletRejected(deployState.message) ? "rejected" : "error"
+  }
+
+  if (state.status === "error") {
+    return isWalletRejected(state.message) ? "rejected" : "error"
+  }
+
+  return null
+}
+
+function getCreateDialogEventId(state: SubmitState, deployState: DeployState) {
+  if (deployState.status === "deploying") {
+    return `create-deploying-${deployState.marketId ?? "market"}-${deployState.hash ?? "signature"}`
+  }
+
+  if (deployState.status === "success" && state.status === "success") {
+    return `create-success-${state.market.id}-${deployState.hash}`
+  }
+
+  if (deployState.status === "error") {
+    return `create-error-${deployState.marketId ?? "market"}-${deployState.hash ?? "no-hash"}-${deployState.message}`
+  }
+
+  if (state.status === "error") {
+    return `create-error-${state.message}-${state.requestId ?? "no-request"}`
+  }
+
+  return null
+}
+
+function getCreateDialogMessage(state: SubmitState, deployState: DeployState) {
+  if (deployState.status === "deploying" && !deployState.hash) {
+    return "Confirm deployment in your wallet. The backend save happens only after deployment succeeds."
+  }
+
+  if (deployState.status === "deploying") {
+    return "The market contract deployment was submitted and is waiting for Arc Testnet confirmation."
+  }
+
+  if (deployState.status === "success" && state.status === "success") {
+    return "The market contract deployed and the market was created after receipt confirmation."
+  }
+
+  if (deployState.status === "error") return deployState.message
+  if (state.status === "error") return state.message
+
+  return null
+}
 
 export function CreateMarketSubmitStatus({
   state,
@@ -25,6 +95,20 @@ export function CreateMarketSubmitStatus({
   isSwitchingChain: boolean
   onSwitchChain: () => void
 }) {
+  const dialogState = getCreateDialogState(state, deployState)
+  const marketId =
+    deployState.status === "idle"
+      ? state.status === "success"
+        ? state.market.id
+        : undefined
+      : deployState.marketId
+  const marketTitle =
+    deployState.status === "idle"
+      ? state.status === "success"
+        ? state.market.title
+        : undefined
+      : deployState.marketTitle
+
   return (
     <>
       {!isConnected ? (
@@ -84,6 +168,31 @@ export function CreateMarketSubmitStatus({
           <Link href="/markets">Cancel</Link>
         </Button>
       </div>
+      <TransactionResultDialog
+        eventId={getCreateDialogEventId(state, deployState)}
+        state={dialogState}
+        actionLabel="Deploy and Create Market"
+        marketLabel={marketTitle ?? marketId}
+        txHash={deployState.status === "idle" ? undefined : deployState.hash}
+        message={getCreateDialogMessage(state, deployState)}
+        nextStep={
+          dialogState === "success"
+            ? "The market is public because deployment confirmed before the backend market row was created."
+            : "No backend market is created unless the deployment transaction succeeds."
+        }
+        primaryAction={
+          dialogState === "success" && marketId
+            ? { label: "View market", href: `/markets/${encodeURIComponent(marketId)}` }
+            : undefined
+        }
+        details={[
+          {
+            label: "Market ID",
+            value: marketId,
+            monospace: true,
+          },
+        ]}
+      />
     </>
   )
 }
