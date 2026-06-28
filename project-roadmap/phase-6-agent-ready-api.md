@@ -128,8 +128,8 @@ Unsafe or not production-ready:
 
 - Circle CLI execution depends on runtime CLI/session availability.
 - Existing unconfigured/test fallback intent storage remains in-process.
-- Agent API routes do not yet enforce API keys, rate limits, or per-agent policy caps.
-- Intent creation does not yet enforce the same `agent_id` shape used by onboarding/wallet registration.
+- Agent API routes do not yet enforce API keys or rate limits.
+- Phase 6D now enforces the existing `agent_id` shape on intent, wallet, portfolio, activity, balance, faucet, session, confirm, and execute paths where an `agent_id` is present or read from a durable intent.
 
 ## Framework-Neutral Agent API Contract
 
@@ -139,7 +139,7 @@ Phase 6 should keep these concepts stable and channel-agnostic:
 | --- | --- |
 | Agent identity | `agent_id` is caller supplied, unique, non-generic, and stable across a session. |
 | Agent wallet/session | `agent_id` maps to a registered agent wallet and optional active session boundary; SignalArc never returns Circle secrets. |
-| Allowed actions | Wallet-scoped `allowed_actions` gate execution. |
+| Allowed actions | Wallet-scoped `allowed_actions` gate preview, confirmation when a wallet is available, and execution. |
 | Market discovery | Agents can list compact markets and fetch full market detail without wallet setup. |
 | Create intent | `POST /agent/intents` validates intent shape and returns preview plus warnings. |
 | Confirm intent | `POST /agent/intents/{intent_id}/confirm` returns an execution plan and still performs no broadcast. |
@@ -169,6 +169,9 @@ Phase 6A audit found:
 - Enforce chain `ARC-TESTNET` for all current execution and faucet flows.
 - Keep faucet endpoint pinned to the registered agent wallet and fixed testnet USDC behavior.
 - Require explicit confirm before execute.
+- Reject unconfirmed execute calls with `agent_intent_not_confirmed`.
+- Enforce wallet/session `allowed_actions` with `agent_action_forbidden`.
+- Enforce optional wallet `policy_metadata.max_trade_amount` for `buy_yes` / `buy_no` with `agent_policy_violation`.
 - Persist execution attempts before production use so failures and successful tx hashes are auditable.
 - Publish stable error codes and keep provider output sanitized.
 
@@ -224,17 +227,26 @@ Known limitations:
 
 ### 6D Agent Safety & Policy Layer
 
+Status: IMPLEMENTED LOCALLY in this phase.
+
 Goal:
 
 - Formalize safety policy before broader agent use.
 
-Likely work:
+Implemented:
 
-- Stable error-code catalog.
-- Per-agent allowed action policy.
-- Optional spend/amount caps once officially documented and implemented.
-- Rate limits/API keys if exposed beyond trusted testing.
-- Stronger `agent_id` validation on intent routes.
+- Applied stable `agent_id` validation to wallet/session, portfolio/activity, intent create/read/confirm/execute, balance, faucet, and disable paths where practical.
+- Rejected generic placeholder agent IDs with `400 agent_id_invalid`.
+- Enforced wallet `allowed_actions` for executable intent preview, confirm when a wallet exists, and execute with `403 agent_action_forbidden`.
+- Preserved preview -> confirm -> execute; unconfirmed executions fail with `409 agent_intent_not_confirmed`.
+- Kept existing amount validation for buy intents and added optional `policy_metadata.max_trade_amount` enforcement with `403 agent_policy_violation`.
+- Kept Circle/provider errors sanitized in public responses and durable execution failure records.
+- Added backend tests for invalid/generic agent IDs, disallowed actions, valid execution flow preservation, unconfirmed execution rejection, invalid amounts, max amount policy, and sanitized execution failures.
+
+Deferred:
+
+- API keys, rate limits, and paid access are still out of scope for this phase.
+- No autonomous unattended trading mode is enabled by default.
 
 ### 6E Agent Developer Surface
 

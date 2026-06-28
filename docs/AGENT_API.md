@@ -242,6 +242,15 @@ Failure codes:
 
 Agents preview, confirm, and execute intents through these endpoints. The configured backend stores intent and execution records in Postgres so callers can retry by idempotency key and operators can audit execution attempts. The in-process intent store remains a fallback for tests or unconfigured runtimes.
 
+Safety model:
+
+- Agent IDs are validated on Agent API paths and intent requests. Generic placeholders such as `agent_desi_001`, `default`, `test`, `demo`, `user`, `agent`, and `chatgpt` are rejected with `400 agent_id_invalid`.
+- Transaction actions follow preview -> confirm -> execute. `execute` rejects unconfirmed intents with `409 agent_intent_not_confirmed`.
+- Registered agent wallets carry `allowed_actions`. If a transaction action is not allowed for that wallet, SignalArc returns `403 agent_action_forbidden` before provider execution.
+- `buy_yes` and `buy_no` amounts must be positive finite decimal strings. If wallet `policy_metadata` includes `max_trade_amount`, buy amounts above that cap return `403 agent_policy_violation`.
+- Circle CLI and provider failures are sanitized. Public responses and durable execution records must not echo raw CLI output, credential paths, tokens, request IDs, session material, or emails.
+- Autonomous unattended trading is not enabled by default. External agents must still call the explicit confirm endpoint before execution.
+
 ### POST /agent/intents
 
 Creates a durable market intent preview. The request must include `agent_id`, `source_client`, `client_request_id`, `action`, and `user_wallet`. Duplicate requests with the same `agent_id`, `source_client`, and `client_request_id` return the existing intent instead of creating a duplicate record. Supported actions:
@@ -272,6 +281,21 @@ Confirms a previewed intent and produces an execution plan. SignalArc validates 
 ### POST /agent/intents/{intent_id}/execute
 
 Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. Execution mode is `circle_agent_wallet_cli` when the Circle provider is enabled. SignalArc creates a pending execution record before provider execution, then persists either the successful tx/readback result or a sanitized failure code/message.
+
+Stable intent/execution error codes:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 400 | `agent_id_invalid` | `agent_id` is missing, malformed, too short, or a generic placeholder. |
+| 400 | `agent_intent_invalid` | Intent validation failed; details may include the invalid fields. |
+| 400 | `agent_wallet_missing` | Execution was requested before a registered agent wallet was available. |
+| 403 | `agent_action_forbidden` | The action is not present in the wallet/session `allowed_actions`. |
+| 403 | `agent_policy_violation` | Optional wallet `policy_metadata` blocks the request, such as `max_trade_amount`. |
+| 404 | `agent_intent_not_found` | No intent exists for the supplied `intent_id`. |
+| 409 | `agent_intent_not_confirmed` | Execute was called before the preview was confirmed. |
+| 501 | `circle_agent_wallet_execution_not_enabled` | Circle Agent Wallet execution is not enabled in this runtime. |
+| 503 | `agent_execution_config_invalid` | Execution environment is not configured. |
+| 502 | `agent_execution_failed` | Provider execution failed; the response is sanitized. |
 
 ## Agent Portfolio And Activity
 

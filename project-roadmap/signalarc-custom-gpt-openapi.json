@@ -869,7 +869,7 @@
                   },
                   "amount": {
                     "type": "string",
-                    "description": "Required for buy_yes and buy_no. Decimal string such as 1000000."
+                    "description": "Required for buy_yes and buy_no. Positive finite decimal string such as 1000000. If wallet policy_metadata includes max_trade_amount, amounts above that cap are rejected with agent_policy_violation."
                   },
                   "outcome": {
                     "type": "string",
@@ -945,7 +945,7 @@
             }
           },
           "400": {
-            "description": "Invalid intent request. Common codes: invalid_json (request body must be valid JSON; for create_market send close_timestamp as RFC3339 such as 2026-05-31T23:59:00Z or as a unix-seconds integer string).",
+            "description": "Invalid intent request. Common codes: invalid_json, agent_id_invalid, agent_intent_invalid.",
             "content": {
               "application/json": {
                 "schema": {
@@ -955,7 +955,7 @@
             }
           },
           "403": {
-            "description": "Action not allowed for this agent",
+            "description": "Action or policy not allowed for this agent. Common codes: agent_action_forbidden, agent_policy_violation.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1163,7 +1163,7 @@
       "post": {
         "operationId": "executeAgentIntent",
         "summary": "Execute a confirmed SignalArc agent intent",
-        "description": "Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. Always reuse the exact intent_id returned by createAgentIntent and the exact agent_id returned by startAgentOnboarding.",
+        "description": "Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. SignalArc rejects unconfirmed intents with agent_intent_not_confirmed, rejects actions outside allowed_actions with agent_action_forbidden, and rejects optional policy_metadata violations with agent_policy_violation. Always reuse the exact intent_id returned by createAgentIntent and the exact agent_id returned by startAgentOnboarding.",
         "parameters": [
           {
             "name": "intent_id",
@@ -1225,7 +1225,7 @@
             }
           },
           "403": {
-            "description": "Action not allowed for this agent or wallet",
+            "description": "Action or policy not allowed for this agent wallet. Common codes: agent_action_forbidden, agent_policy_violation.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1245,7 +1245,7 @@
             }
           },
           "409": {
-            "description": "Intent not in confirmed state",
+            "description": "Intent not in confirmed state. Common code: agent_intent_not_confirmed.",
             "content": {
               "application/json": {
                 "schema": {

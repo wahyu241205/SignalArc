@@ -657,6 +657,52 @@ func TestAgentPortfolioRequiresValidAgentID(t *testing.T) {
 	}
 }
 
+func TestAgentEndpointsRejectGenericAgentID(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, newTestDurableAgentIntentRegistry())
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{
+			name:   "create intent",
+			method: http.MethodPost,
+			path:   "/agent/intents",
+			body: `{
+				"agent_id": "agent_desi_001",
+				"action": "buy_yes",
+				"user_wallet": "0x1111111111111111111111111111111111111111",
+				"market_id": "market-1",
+				"market_contract_address": "0x3333333333333333333333333333333333333333",
+				"amount": "12.5"
+			}`,
+		},
+		{name: "get wallet", method: http.MethodGet, path: "/agent/wallets/agent_desi_001"},
+		{name: "get balance", method: http.MethodGet, path: "/agent/wallets/agent_desi_001/balance"},
+		{name: "request faucet", method: http.MethodPost, path: "/agent/wallets/agent_desi_001/faucet"},
+		{name: "portfolio", method: http.MethodGet, path: "/agent/portfolio/agent_desi_001"},
+		{name: "activity", method: http.MethodGet, path: "/agent/activity/agent_desi_001"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(test.method, test.path, bytes.NewBufferString(test.body))
+			router.ServeHTTP(response, request)
+
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+			}
+			if !bytes.Contains(response.Body.Bytes(), []byte("agent_id_invalid")) {
+				t.Fatalf("expected agent_id_invalid, got %s", response.Body.String())
+			}
+		})
+	}
+}
+
 func TestAgentPortfolioReturnsWalletMetadataAndEmptyArrays(t *testing.T) {
 	walletRegistry := newTestAgentWalletRegistry()
 	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyYes)
@@ -2777,13 +2823,16 @@ func TestExecuteRejectsInactiveAgentWallet(t *testing.T) {
 func TestExecuteRejectsDisallowedAction(t *testing.T) {
 	store := agent.NewStore()
 	walletRegistry := newTestAgentWalletRegistry()
-	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyNo)
+	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyYes)
 	executor := &stubAgentExecutor{}
 	router := chi.NewRouter()
 	registerAgentIntentRoutes(router, store, walletRegistry, executor)
 
 	intentID := createValidAgentIntent(t, router)
 	confirmAgentIntent(t, router, intentID)
+	wallet := walletRegistry.wallets["agent_test_1"]
+	wallet.AllowedActions = []string{agent.ActionBuyNo}
+	walletRegistry.wallets["agent_test_1"] = wallet
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
@@ -2792,8 +2841,105 @@ func TestExecuteRejectsDisallowedAction(t *testing.T) {
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("expected execute status %d, got %d: %s", http.StatusForbidden, response.Code, response.Body.String())
 	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("agent_action_forbidden")) {
+		t.Fatalf("expected agent_action_forbidden, got %s", response.Body.String())
+	}
 	if executor.called {
 		t.Fatal("executor should not be called for disallowed action")
+	}
+}
+
+func TestCreateIntentRejectsDisallowedAction(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyNo)
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
+		"action": "buy_yes",
+		"agent_id": "agent_test_1",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "12.5"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusForbidden, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("agent_action_forbidden")) {
+		t.Fatalf("expected agent_action_forbidden, got %s", response.Body.String())
+	}
+}
+
+func TestCreateIntentRejectsInvalidBuyAmount(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
+		"action": "buy_yes",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "0"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Intent agentIntentResponse `json:"intent"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Intent.ValidationResult.Valid {
+		t.Fatal("expected invalid validation result")
+	}
+	if !containsString(body.Intent.ValidationResult.Errors, "amount must be positive") {
+		t.Fatalf("expected amount validation error, got %#v", body.Intent.ValidationResult.Errors)
+	}
+}
+
+func TestCreateIntentRejectsMaxTradeAmountPolicyViolation(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	_, err := walletRegistry.RegisterAgentWallet(context.Background(), repository.UpsertAgentWalletInput{
+		AgentID:            "agent_test_1",
+		UserWallet:         "0x1111111111111111111111111111111111111111",
+		AgentWalletAddress: "0x9999999999999999999999999999999999999999",
+		WalletProvider:     agent.WalletProviderCircleAgentWallet,
+		Chain:              agent.ChainArcTestnet,
+		AllowedActions:     []string{agent.ActionBuyYes},
+		Status:             agent.WalletStatusActive,
+		PolicyMetadata:     json.RawMessage(`{"max_trade_amount":"10"}`),
+	})
+	if err != nil {
+		t.Fatalf("register agent wallet: %v", err)
+	}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
+		"action": "buy_yes",
+		"agent_id": "agent_test_1",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "12.5"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusForbidden, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("agent_policy_violation")) {
+		t.Fatalf("expected agent_policy_violation, got %s", response.Body.String())
 	}
 }
 
