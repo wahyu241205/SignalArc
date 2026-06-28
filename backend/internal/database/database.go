@@ -40,6 +40,10 @@ var expectedPhase2Tables = []string{
 	"agent_wallets",
 	"agent_intents",
 	"agent_executions",
+	"analytics_indexer_state",
+	"analytics_markets",
+	"analytics_events",
+	"analytics_summary_cache",
 }
 
 var expectedMarketColumns = []string{
@@ -179,7 +183,7 @@ func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {
 		}
 	}
 
-	if result.MigrationVersion == 20 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
+	if result.MigrationVersion == 21 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
 		result.Status = "ok"
 	}
 

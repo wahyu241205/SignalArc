@@ -1,0 +1,283 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/wahyu241205/SignalArc/backend/internal/database"
+)
+
+const (
+	AnalyticsSummaryCacheKey  = "public_analytics_summary"
+	AnalyticsStatusOK         = "ok"
+	AnalyticsSourceCached     = "cached"
+	AnalyticsSourceIndexed    = "indexed"
+	AnalyticsSourceNotIndexed = "not_indexed"
+)
+
+type AnalyticsMetrics struct {
+	MarketsCreated       int64  `json:"markets_created"`
+	MarketContractsFound int64  `json:"market_contracts_found"`
+	TotalTrades          int64  `json:"total_trades"`
+	PositionEvents       int64  `json:"position_events"`
+	YesPositionEvents    int64  `json:"yes_position_events"`
+	NoPositionEvents     int64  `json:"no_position_events"`
+	UniqueWallets        int64  `json:"unique_wallets"`
+	TestnetUSDCVolume    string `json:"testnet_usdc_volume"`
+	ResolvedMarkets      int64  `json:"resolved_markets"`
+	CancelledMarkets     int64  `json:"cancelled_markets"`
+	ClaimEvents          int64  `json:"claim_events"`
+	PayoutsClaimed       int64  `json:"payouts_claimed"`
+	RefundsClaimed       int64  `json:"refunds_claimed"`
+}
+
+type AnalyticsSummary struct {
+	Status         string           `json:"status"`
+	SourceStatus   string           `json:"source_status"`
+	FactoryAddress string           `json:"factory_address"`
+	GeneratedAt    time.Time        `json:"generated_at"`
+	LatestEventAt  sql.NullTime     `json:"latest_event_at"`
+	LatestBlock    sql.NullInt64    `json:"latest_block"`
+	Metrics        AnalyticsMetrics `json:"metrics"`
+}
+
+type AnalyticsSummaryCacheInput struct {
+	CacheKey       string
+	FactoryAddress string
+	Summary        AnalyticsSummary
+	LatestBlock    sql.NullInt64
+	LatestEventAt  sql.NullTime
+	GeneratedAt    time.Time
+}
+
+type AnalyticsRepository struct {
+	db *database.DB
+}
+
+func NewAnalyticsRepository(db *database.DB) *AnalyticsRepository {
+	return &AnalyticsRepository{db: db}
+}
+
+func (r *AnalyticsRepository) GetSummary(ctx context.Context, cacheKey string, factoryAddress string) (AnalyticsSummary, error) {
+	summary, ok, err := r.GetLatestSummaryCache(ctx, cacheKey)
+	if err != nil {
+		return AnalyticsSummary{}, err
+	}
+	if ok {
+		summary.SourceStatus = AnalyticsSourceCached
+		if summary.Status == "" {
+			summary.Status = AnalyticsStatusOK
+		}
+		if summary.FactoryAddress == "" {
+			summary.FactoryAddress = factoryAddress
+		}
+		return summary, nil
+	}
+
+	return r.AggregateSummaryFallback(ctx, factoryAddress)
+}
+
+func (r *AnalyticsRepository) GetLatestSummaryCache(ctx context.Context, cacheKey string) (AnalyticsSummary, bool, error) {
+	var payload []byte
+	var factoryAddress string
+	var latestBlock sql.NullInt64
+	var latestEventAt sql.NullTime
+	var generatedAt time.Time
+
+	err := r.db.QueryRow(ctx, `
+		SELECT payload, factory_address, latest_block, latest_event_at, generated_at
+		FROM analytics_summary_cache
+		WHERE cache_key = $1
+	`, cacheKey).Scan(&payload, &factoryAddress, &latestBlock, &latestEventAt, &generatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AnalyticsSummary{}, false, nil
+	}
+	if err != nil {
+		return AnalyticsSummary{}, false, err
+	}
+
+	var summary AnalyticsSummary
+	if err := json.Unmarshal(payload, &summary); err != nil {
+		return AnalyticsSummary{}, false, err
+	}
+
+	if summary.FactoryAddress == "" {
+		summary.FactoryAddress = factoryAddress
+	}
+	if summary.GeneratedAt.IsZero() {
+		summary.GeneratedAt = generatedAt
+	}
+	if !summary.LatestBlock.Valid {
+		summary.LatestBlock = latestBlock
+	}
+	if !summary.LatestEventAt.Valid {
+		summary.LatestEventAt = latestEventAt
+	}
+
+	return summary, true, nil
+}
+
+func (r *AnalyticsRepository) UpsertSummaryCache(ctx context.Context, input AnalyticsSummaryCacheInput) (AnalyticsSummary, error) {
+	cacheKey := input.CacheKey
+	if cacheKey == "" {
+		cacheKey = AnalyticsSummaryCacheKey
+	}
+	generatedAt := input.GeneratedAt
+	if generatedAt.IsZero() {
+		generatedAt = time.Now().UTC()
+	}
+
+	summary := input.Summary
+	summary.GeneratedAt = generatedAt
+	summary.FactoryAddress = input.FactoryAddress
+	summary.LatestBlock = input.LatestBlock
+	summary.LatestEventAt = input.LatestEventAt
+	if summary.Status == "" {
+		summary.Status = AnalyticsStatusOK
+	}
+	if summary.SourceStatus == "" {
+		summary.SourceStatus = AnalyticsSourceCached
+	}
+
+	payload, err := json.Marshal(summary)
+	if err != nil {
+		return AnalyticsSummary{}, err
+	}
+
+	var saved AnalyticsSummary
+	err = r.db.QueryRow(ctx, `
+		INSERT INTO analytics_summary_cache (
+			cache_key,
+			factory_address,
+			payload,
+			latest_block,
+			latest_event_at,
+			generated_at
+		)
+		VALUES ($1, $2, $3::jsonb, $4, $5, $6)
+		ON CONFLICT (cache_key) DO UPDATE
+		SET
+			factory_address = EXCLUDED.factory_address,
+			payload = EXCLUDED.payload,
+			latest_block = EXCLUDED.latest_block,
+			latest_event_at = EXCLUDED.latest_event_at,
+			generated_at = EXCLUDED.generated_at,
+			updated_at = now()
+		RETURNING payload
+	`, cacheKey, input.FactoryAddress, payload, input.LatestBlock, input.LatestEventAt, generatedAt).Scan(&payload)
+	if err != nil {
+		return AnalyticsSummary{}, err
+	}
+	if err := json.Unmarshal(payload, &saved); err != nil {
+		return AnalyticsSummary{}, err
+	}
+
+	return saved, nil
+}
+
+func (r *AnalyticsRepository) AggregateSummaryFallback(ctx context.Context, factoryAddress string) (AnalyticsSummary, error) {
+	var metrics AnalyticsMetrics
+	var latestBlock sql.NullInt64
+	var latestEventAt sql.NullTime
+
+	err := r.db.QueryRow(ctx, `
+		WITH market_counts AS (
+			SELECT
+				count(*)::bigint AS market_contracts_found,
+				count(*) FILTER (WHERE status = 'RESOLVED')::bigint AS resolved_by_status,
+				count(*) FILTER (WHERE status = 'CANCELLED')::bigint AS cancelled_by_status
+			FROM analytics_markets
+			WHERE factory_address = $1
+		),
+		event_counts AS (
+			SELECT
+				count(*) FILTER (WHERE event_name = 'MarketDeployed')::bigint AS markets_created,
+				count(*) FILTER (WHERE event_name = 'PositionOpened')::bigint AS position_events,
+				count(*) FILTER (WHERE event_name = 'PositionOpened' AND side = 'YES')::bigint AS yes_position_events,
+				count(*) FILTER (WHERE event_name = 'PositionOpened' AND side = 'NO')::bigint AS no_position_events,
+				count(DISTINCT wallet_address) FILTER (WHERE wallet_address IS NOT NULL)::bigint AS unique_wallets,
+				COALESCE(sum(amount_base_units) FILTER (WHERE event_name = 'PositionOpened'), 0)::text AS testnet_usdc_volume,
+				count(DISTINCT market_address) FILTER (WHERE event_name = 'MarketResolved' AND market_address IS NOT NULL)::bigint AS resolved_by_event,
+				count(DISTINCT market_address) FILTER (WHERE event_name = 'MarketCancelled' AND market_address IS NOT NULL)::bigint AS cancelled_by_event,
+				count(*) FILTER (WHERE event_name IN ('PayoutClaimed', 'RefundClaimed'))::bigint AS claim_events,
+				count(*) FILTER (WHERE event_name = 'PayoutClaimed')::bigint AS payouts_claimed,
+				count(*) FILTER (WHERE event_name = 'RefundClaimed')::bigint AS refunds_claimed,
+				max(block_number) AS latest_block,
+				max(block_timestamp) AS latest_event_at
+			FROM analytics_events
+			WHERE factory_address = $1
+		)
+		SELECT
+			CASE
+				WHEN event_counts.markets_created > 0 THEN event_counts.markets_created
+				ELSE market_counts.market_contracts_found
+			END,
+			market_counts.market_contracts_found,
+			event_counts.position_events,
+			event_counts.position_events,
+			event_counts.yes_position_events,
+			event_counts.no_position_events,
+			event_counts.unique_wallets,
+			event_counts.testnet_usdc_volume,
+			CASE
+				WHEN event_counts.resolved_by_event > 0 THEN event_counts.resolved_by_event
+				ELSE market_counts.resolved_by_status
+			END,
+			CASE
+				WHEN event_counts.cancelled_by_event > 0 THEN event_counts.cancelled_by_event
+				ELSE market_counts.cancelled_by_status
+			END,
+			event_counts.claim_events,
+			event_counts.payouts_claimed,
+			event_counts.refunds_claimed,
+			event_counts.latest_block,
+			event_counts.latest_event_at
+		FROM market_counts, event_counts
+	`, factoryAddress).Scan(
+		&metrics.MarketsCreated,
+		&metrics.MarketContractsFound,
+		&metrics.TotalTrades,
+		&metrics.PositionEvents,
+		&metrics.YesPositionEvents,
+		&metrics.NoPositionEvents,
+		&metrics.UniqueWallets,
+		&metrics.TestnetUSDCVolume,
+		&metrics.ResolvedMarkets,
+		&metrics.CancelledMarkets,
+		&metrics.ClaimEvents,
+		&metrics.PayoutsClaimed,
+		&metrics.RefundsClaimed,
+		&latestBlock,
+		&latestEventAt,
+	)
+	if err != nil {
+		return AnalyticsSummary{}, err
+	}
+	if metrics.TestnetUSDCVolume == "" {
+		metrics.TestnetUSDCVolume = "0"
+	}
+
+	sourceStatus := AnalyticsSourceIndexed
+	if metrics.MarketsCreated == 0 &&
+		metrics.MarketContractsFound == 0 &&
+		metrics.PositionEvents == 0 &&
+		metrics.ResolvedMarkets == 0 &&
+		metrics.CancelledMarkets == 0 &&
+		metrics.ClaimEvents == 0 {
+		sourceStatus = AnalyticsSourceNotIndexed
+	}
+
+	return AnalyticsSummary{
+		Status:         AnalyticsStatusOK,
+		SourceStatus:   sourceStatus,
+		FactoryAddress: factoryAddress,
+		GeneratedAt:    time.Now().UTC(),
+		LatestEventAt:  latestEventAt,
+		LatestBlock:    latestBlock,
+		Metrics:        metrics,
+	}, nil
+}
