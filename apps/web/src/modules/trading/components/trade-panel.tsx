@@ -12,6 +12,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  TransactionResultDialog,
+  type TransactionResultDialogState,
+} from "@/components/shared"
 
 import type { TradeOutcome, TradeSubmitState } from "../types"
 import { TradeAmountInput } from "./trade-amount-input"
@@ -21,8 +25,69 @@ import { TradeSideSelector } from "./trade-side-selector"
 import { TradeSubmitStatus } from "./trade-submit-status"
 import { TradeWalletState } from "./trade-wallet-state"
 
+function isWalletRejected(message: string) {
+  return message.toLowerCase().includes("wallet transaction was rejected")
+}
+
+function getTradeDialogState(
+  state: TradeSubmitState,
+): TransactionResultDialogState | null {
+  if (state.status === "approving") {
+    return state.approveHash ? "pending" : "wallet_confirmation"
+  }
+
+  if (state.status === "opening") {
+    return state.openHash ? "pending" : "wallet_confirmation"
+  }
+
+  if (state.status === "success") return "success"
+
+  if (state.status === "error") {
+    return isWalletRejected(state.message) ? "rejected" : "error"
+  }
+
+  return null
+}
+
+function getTradeDialogMessage(state: TradeSubmitState) {
+  if (state.status === "approving" && !state.approveHash) {
+    return "Confirm the USDC approval in your wallet before the market transaction can be submitted."
+  }
+
+  if (state.status === "opening" && !state.openHash) {
+    return "Confirm the market transaction in your wallet to open this position."
+  }
+
+  if (state.status === "success") {
+    return "Your position was opened on Arc Testnet."
+  }
+
+  if (state.status === "error") return state.message
+
+  return null
+}
+
+function getTradeDialogEventId(state: TradeSubmitState) {
+  if (state.status === "idle") return null
+
+  if (state.status === "error") {
+    return `trade-error-${state.approveHash ?? "no-approval"}-${state.openHash ?? "no-open"}-${state.message}`
+  }
+
+  if (state.status === "approving") {
+    return `trade-approving-${state.approveHash ?? "signature"}`
+  }
+
+  if (state.status === "opening") {
+    return `trade-opening-${state.approveHash}-${state.openHash ?? "signature"}`
+  }
+
+  return `trade-success-${state.openHash}`
+}
+
 export function TradePanel({
   marketId,
+  marketTitle,
   contractAddress,
   walletAddress,
   outcome,
@@ -43,6 +108,7 @@ export function TradePanel({
   onSubmit,
 }: {
   marketId: string
+  marketTitle?: string
   contractAddress: Address | null
   walletAddress: Address | undefined
   outcome: TradeOutcome
@@ -62,6 +128,18 @@ export function TradePanel({
   onSwitchNetwork: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
+  const dialogState = getTradeDialogState(state)
+  const txHash =
+    state.status === "opening" || state.status === "success" || state.status === "error"
+      ? state.openHash
+      : state.status === "approving"
+        ? state.approveHash
+        : undefined
+  const approvalTxHash =
+    state.status === "opening" || state.status === "success" || state.status === "error"
+      ? state.approveHash
+      : undefined
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="space-y-3">
@@ -126,6 +204,34 @@ export function TradePanel({
             </Button>
           </div>
         </form>
+        <TransactionResultDialog
+          eventId={getTradeDialogEventId(state)}
+          state={dialogState}
+          actionLabel={`Buy ${outcome}`}
+          marketLabel={marketTitle ?? marketId}
+          outcome={outcome}
+          amount={`${amount || "0"} USDC`}
+          approvalTxHash={approvalTxHash}
+          txHash={txHash}
+          message={getTradeDialogMessage(state)}
+          nextStep={
+            state.status === "success"
+              ? "Review the inline receipt links, then check portfolio balances after reads refresh."
+              : "The inline trade ticket remains available behind this dialog."
+          }
+          primaryAction={
+            state.status === "success"
+              ? { label: "Check portfolio", href: "/portfolio" }
+              : undefined
+          }
+          details={[
+            {
+              label: "Market ID",
+              value: marketId,
+              monospace: true,
+            },
+          ]}
+        />
       </CardContent>
     </Card>
   )

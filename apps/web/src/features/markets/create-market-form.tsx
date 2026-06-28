@@ -139,7 +139,7 @@ export function CreateMarketForm() {
 
     let hash: Hash | undefined
     try {
-      setDeployState({ status: "deploying" })
+      setDeployState({ status: "deploying", marketId, marketTitle: title })
       hash = await writeContract(config, {
         address: SIGNAL_ARC_MARKET_FACTORY_ADDRESS,
         abi: SIGNAL_ARC_MARKET_FACTORY_ABI,
@@ -154,7 +154,7 @@ export function CreateMarketForm() {
         chainId: ARC_TESTNET_CHAIN_ID,
         account: address,
       })
-      setDeployState({ status: "deploying", hash })
+      setDeployState({ status: "deploying", hash, marketId, marketTitle: title })
 
       const receipt = await waitForTransactionReceipt(config, {
         hash,
@@ -182,7 +182,13 @@ export function CreateMarketForm() {
         resolver_address: address,
       })
 
-      setDeployState({ status: "success", hash, marketAddress })
+      setDeployState({
+        status: "success",
+        hash,
+        marketAddress,
+        marketId,
+        marketTitle: title,
+      })
       setState({ status: "success", market: response.data.market })
       router.push(`/markets/${marketId}`)
     } catch (error) {
@@ -191,6 +197,8 @@ export function CreateMarketForm() {
         status: "error",
         message,
         hash,
+        marketId,
+        marketTitle: title,
       })
       if (error instanceof ApiError) {
         setState(getErrorState(error))

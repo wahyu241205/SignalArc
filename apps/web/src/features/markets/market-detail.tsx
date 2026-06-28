@@ -128,10 +128,13 @@ export function MarketDetail({ marketId }: { marketId: string }) {
         >
           <TradeIntentPanel
             marketId={market.id}
+            marketTitle={market.title}
             marketStatus={market.status}
             marketContractAddress={market.market_contract_address}
           />
           <OnchainMarketLifecyclePanel
+            marketId={market.id}
+            marketTitle={market.title}
             marketContractAddress={market.market_contract_address}
           />
           <MarketResolutionPanel marketId={market.id} />

@@ -9,9 +9,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  TransactionResultDialog,
+  type TransactionResultDialogState,
+} from "@/components/shared"
 import { ChainStatusCard } from "@/modules/wallet"
 
 import type { LifecycleActionState, LifecycleStatusData } from "../types"
+import { formatUsdc } from "../format"
 import { LifecycleActionStatus } from "./lifecycle-action-status"
 import { LifecycleStatusCard } from "./lifecycle-status-card"
 
@@ -27,6 +32,8 @@ export function LifecycleNotDeployedCard() {
 }
 
 export function LifecyclePanel({
+  marketId,
+  marketTitle,
   data,
   isArcTestnet,
   isSwitchingChain,
@@ -47,6 +54,8 @@ export function LifecyclePanel({
   onResolveNo,
   onCancelMarket,
 }: {
+  marketId: string
+  marketTitle?: string
   data: LifecycleStatusData
   isArcTestnet: boolean
   isSwitchingChain: boolean
@@ -67,6 +76,11 @@ export function LifecyclePanel({
   onResolveNo: () => void
   onCancelMarket: () => void
 }) {
+  const dialogState = getLifecycleDialogState(actionState)
+  const actionAmount = actionState.status !== "idle" && actionState.label.startsWith("Claim")
+    ? formatUsdc(data.claimableAmount)
+    : undefined
+
   return (
     <Card className="border-indigo-500/20">
       <CardHeader>
@@ -163,7 +177,85 @@ export function LifecyclePanel({
         </div>
 
         <LifecycleActionStatus actionState={actionState} />
+        <TransactionResultDialog
+          eventId={getLifecycleDialogEventId(actionState)}
+          state={dialogState}
+          actionLabel={actionState.status === "idle" ? "Market Action" : actionState.label}
+          marketLabel={marketTitle ?? marketId}
+          amount={actionAmount}
+          txHash={actionState.status === "idle" ? undefined : actionState.hash}
+          message={getLifecycleDialogMessage(actionState)}
+          nextStep={
+            actionState.status === "success"
+              ? "Onchain market reads refresh after confirmation. Review the status card for the updated state."
+              : "The inline onchain status panel remains available behind this dialog."
+          }
+          primaryAction={
+            actionState.status === "success"
+              ? { label: "View market", href: `/markets/${encodeURIComponent(marketId)}` }
+              : undefined
+          }
+          details={[
+            {
+              label: "Market ID",
+              value: marketId,
+              monospace: true,
+            },
+          ]}
+        />
       </CardContent>
     </Card>
   )
+}
+
+function isWalletRejected(message: string) {
+  return message.toLowerCase().includes("wallet transaction was rejected")
+}
+
+function getLifecycleDialogState(
+  actionState: LifecycleActionState,
+): TransactionResultDialogState | null {
+  if (actionState.status === "pending") {
+    return actionState.hash ? "pending" : "wallet_confirmation"
+  }
+
+  if (actionState.status === "success") return "success"
+
+  if (actionState.status === "error") {
+    return isWalletRejected(actionState.message) ? "rejected" : "error"
+  }
+
+  return null
+}
+
+function getLifecycleDialogEventId(actionState: LifecycleActionState) {
+  if (actionState.status === "idle") return null
+
+  if (actionState.status === "pending") {
+    return `lifecycle-pending-${actionState.label}-${actionState.hash ?? "signature"}`
+  }
+
+  if (actionState.status === "success") {
+    return `lifecycle-success-${actionState.label}-${actionState.hash}`
+  }
+
+  return `lifecycle-error-${actionState.label}-${actionState.hash ?? "no-hash"}-${actionState.message}`
+}
+
+function getLifecycleDialogMessage(actionState: LifecycleActionState) {
+  if (actionState.status === "pending" && !actionState.hash) {
+    return `Confirm ${actionState.label} in your wallet before the transaction is submitted.`
+  }
+
+  if (actionState.status === "pending") {
+    return `${actionState.label} was submitted and is waiting for Arc Testnet confirmation.`
+  }
+
+  if (actionState.status === "success") {
+    return `${actionState.label} confirmed on Arc Testnet.`
+  }
+
+  if (actionState.status === "error") return actionState.message
+
+  return null
 }

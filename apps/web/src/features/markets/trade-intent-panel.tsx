@@ -26,10 +26,12 @@ import {
 
 export function TradeIntentPanel({
   marketId,
+  marketTitle,
   marketStatus,
   marketContractAddress,
 }: {
   marketId: string
+  marketTitle?: string
   marketStatus: string
   marketContractAddress: string | null
 }) {
@@ -184,6 +186,7 @@ export function TradeIntentPanel({
   return (
     <TradePanel
       marketId={marketId}
+      marketTitle={marketTitle}
       contractAddress={contractAddress}
       walletAddress={address}
       outcome={outcome}
