@@ -38,3 +38,29 @@ export type AnalyticsPublicLink = {
   label: string
   href: string
 }
+
+export type AnalyticsSummaryMetrics = {
+  markets_created: number
+  market_contracts_found: number
+  total_trades: number
+  position_events: number
+  yes_position_events: number
+  no_position_events: number
+  unique_wallets: number
+  testnet_usdc_volume: string
+  resolved_markets: number
+  cancelled_markets: number
+  claim_events: number
+  payouts_claimed: number
+  refunds_claimed: number
+}
+
+export type AnalyticsSummaryResponse = {
+  status: string
+  source_status: string
+  factory_address: string
+  generated_at: string | null
+  latest_event_at: string | null
+  latest_block: number | null
+  metrics: AnalyticsSummaryMetrics
+}

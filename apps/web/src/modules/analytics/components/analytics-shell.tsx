@@ -1,4 +1,6 @@
-import type { ComponentProps, ReactNode } from "react"
+"use client"
+
+import { useMemo, type ComponentProps, type ReactNode } from "react"
 import {
   ArrowUpRight,
   Bot,
@@ -23,6 +25,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   analyticsAgentIntegrationChecklist,
   analyticsBackendMetrics,
+  buildAnalyticsLifecycleMetrics,
+  buildAnalyticsMetrics,
+  formatAnalyticsTimestamp,
+  getAnalyticsFactoryAddress,
+  getAnalyticsFactoryExplorerUrl,
   analyticsFactory,
   analyticsFactoryProofPoints,
   analyticsLatestActivity,
@@ -32,10 +39,16 @@ import {
   analyticsPublicLinks,
   analyticsStatusBadges,
   analyticsTopMarkets,
+  isIndexedAnalyticsSummary,
 } from "../analytics-utils"
 import { shortenAnalyticsAddress } from "../format"
+import type { AnalyticsMetric, AnalyticsSummaryResponse } from "../types"
+import { useAnalyticsSummary } from "../use-analytics-summary"
 
 import { AnalyticsDisclaimerCard } from "./analytics-disclaimer-card"
+import { AnalyticsEmptyState } from "./analytics-empty-state"
+import { AnalyticsErrorState } from "./analytics-error-state"
+import { AnalyticsLoadingSkeleton } from "./analytics-loading-skeleton"
 import { AnalyticsSummaryGrid } from "./analytics-summary-grid"
 
 type ButtonVariant = ComponentProps<typeof Button>["variant"]
@@ -87,7 +100,22 @@ function DataRow({
   )
 }
 
-function AnalyticsHero() {
+function getMetricValue(metrics: AnalyticsMetric[], label: string, fallback: string) {
+  return metrics.find((metric) => metric.label === label)?.value ?? fallback
+}
+
+function AnalyticsHero({
+  summary,
+  metrics,
+  isLive,
+}: {
+  summary: AnalyticsSummaryResponse | null
+  metrics: AnalyticsMetric[]
+  isLive: boolean
+}) {
+  const createdMarkets = getMetricValue(metrics, "Markets Created", "126")
+  const testnetUsdc = getMetricValue(metrics, "Testnet USDC Collateral Volume", "149.77")
+
   return (
     <section className="grid gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)] lg:items-end">
       <div className="flex flex-col gap-6">
@@ -132,25 +160,32 @@ function AnalyticsHero() {
             </div>
             <div>
               <CardTitle>Data provenance</CardTitle>
-              <CardDescription>Static public analytics snapshot</CardDescription>
+              <CardDescription>
+                {isLive ? "Backend indexed analytics cache" : "Static fallback analytics snapshot"}
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Arc Testnet contract-level analytics are not yet reliably queryable through Dune for SignalArc&apos;s
-            required metrics, so this page provides a self-hosted public analytics view backed by Arcscan-derived
-            contract data and SignalArc backend references.
+            {isLive
+              ? "This page reads SignalArc's public backend analytics summary, which is rebuilt from Arcscan/Blockscout event ingestion owned by the backend."
+              : "The live backend analytics cache is unavailable or not indexed yet, so this page keeps the historical static snapshot visible as a fallback."}
           </p>
           <div className="grid grid-cols-2 gap-3 border-t border-border/50 pt-4">
             <div>
-              <p className="text-2xl font-semibold text-foreground">126</p>
+              <p className="text-2xl font-semibold text-foreground">{createdMarkets}</p>
               <p className="text-xs text-muted-foreground">Created markets</p>
             </div>
             <div>
-              <p className="text-2xl font-semibold text-foreground">149.77</p>
+              <p className="text-2xl font-semibold text-foreground">{testnetUsdc}</p>
               <p className="text-xs text-muted-foreground">Testnet USDC</p>
             </div>
+          </div>
+          <div className="border-t border-border/50 pt-4">
+            <p className="break-all font-mono text-xs text-muted-foreground">
+              Factory: {getAnalyticsFactoryAddress(summary)}
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -158,24 +193,107 @@ function AnalyticsHero() {
   )
 }
 
-function ExecutiveMetricsSection() {
+function AnalyticsFreshnessSection({
+  summary,
+  isLive,
+  status,
+}: {
+  summary: AnalyticsSummaryResponse | null
+  isLive: boolean
+  status: "loading" | "loaded" | "error"
+}) {
+  const sourceStatus = summary?.source_status ?? (status === "loading" ? "loading" : "fallback")
+  const generatedAt = summary ? formatAnalyticsTimestamp(summary.generated_at) : "Not available"
+  const latestEventAt = summary ? formatAnalyticsTimestamp(summary.latest_event_at) : "Not available"
+  const latestBlock = summary?.latest_block ? summary.latest_block.toLocaleString("en-US") : "Not indexed yet"
+
+  return (
+    <Card className="border-border/60 bg-card/60">
+      <CardContent className="grid gap-4 py-5 sm:grid-cols-2 lg:grid-cols-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Source status</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className={
+                isLive
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+              }
+            >
+              {sourceStatus}
+            </Badge>
+            {!isLive ? <span className="text-xs text-muted-foreground">Static fallback visible</span> : null}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Generated at</p>
+          <p className="mt-2 text-sm text-foreground">{generatedAt}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Latest event</p>
+          <p className="mt-2 text-sm text-foreground">{latestEventAt}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Latest block</p>
+          <p className="mt-2 text-sm text-foreground">{latestBlock}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Factory</p>
+          <a
+            href={getAnalyticsFactoryExplorerUrl(summary)}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 block break-all font-mono text-xs text-indigo-200 hover:text-indigo-100"
+          >
+            {getAnalyticsFactoryAddress(summary)}
+          </a>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ExecutiveMetricsSection({
+  state,
+  metrics,
+  isLive,
+}: {
+  state: ReturnType<typeof useAnalyticsSummary>
+  metrics: AnalyticsMetric[]
+  isLive: boolean
+}) {
   return (
     <section className="flex flex-col gap-7">
       <SectionHeading
         title="Executive Metrics"
         description="A contract-derived summary of verified deployment, created YES/NO markets, participating wallets, testnet collateral movement, and market lifecycle activity."
       />
-      <AnalyticsSummaryGrid metrics={analyticsMetrics} />
+      {state.status === "loading" ? <AnalyticsLoadingSkeleton /> : null}
+      {state.status === "error" ? (
+        <AnalyticsErrorState
+          message={`${state.message} The historical static analytics snapshot is shown below as a fallback.`}
+        />
+      ) : null}
+      {state.status === "loaded" && !isLive ? <AnalyticsEmptyState /> : null}
+      {state.status !== "loading" ? <AnalyticsSummaryGrid metrics={metrics} /> : null}
     </section>
   )
 }
 
-function FactorySection() {
+function FactorySection({ summary, isLive }: { summary: AnalyticsSummaryResponse | null; isLive: boolean }) {
+  const factoryAddress = getAnalyticsFactoryAddress(summary)
+  const factoryExplorerUrl = getAnalyticsFactoryExplorerUrl(summary)
+
   return (
     <section className="flex flex-col gap-7">
       <SectionHeading
-        title="Legacy Verified Factory Snapshot"
-        description="SignalArc's historical Arc Testnet proof-of-activity is anchored by a legacy verified YES/NO market factory contract. The active factory is tracked separately; legacy metrics are kept attached to the factory that produced them."
+        title={isLive ? "Active Analytics Factory" : "Legacy Verified Factory Snapshot"}
+        description={
+          isLive
+            ? "Live analytics are keyed to the active factory used by the backend indexer. Child market activity is aggregated from contracts discovered through that factory."
+            : "When the backend cache is unavailable or not indexed, SignalArc keeps the historical Arc Testnet proof-of-activity snapshot visible."
+        }
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
@@ -187,7 +305,7 @@ function FactorySection() {
                   <Factory className="size-5" aria-hidden="true" />
                 </div>
                 <div>
-                  <CardTitle>{analyticsFactory.name}</CardTitle>
+                  <CardTitle>{isLive ? "Active SignalArcMarketFactory" : analyticsFactory.name}</CardTitle>
                   <CardDescription>Canonical market deployment registry</CardDescription>
                 </div>
               </div>
@@ -199,16 +317,31 @@ function FactorySection() {
           </CardHeader>
           <CardContent>
             <dl>
-              <DataRow label="Contract name" value={analyticsFactory.name} />
-              <DataRow label="Address" value={analyticsFactory.address} mono />
+              <DataRow label="Contract name" value={isLive ? "SignalArcMarketFactory" : analyticsFactory.name} />
+              <DataRow label="Address" value={factoryAddress} mono />
               <DataRow label="Verified" value="Yes" />
               <DataRow label="Network" value="Arc Testnet" />
-              <DataRow label="Deployment tx" value={analyticsFactory.deploymentTx} mono />
-              <DataRow label="Deployer" value={analyticsFactory.deployer} mono />
-              <DataRow label="Deployment block" value={analyticsFactory.deploymentBlock} />
-              <DataRow label="Deployment timestamp" value={analyticsFactory.deploymentTimestamp} mono />
-              <DataRow label="Factory transactions" value={analyticsFactory.totalTransactions} />
-              <DataRow label="Latest market created" value={analyticsFactory.latestMarket} mono />
+              {isLive ? (
+                <>
+                  <DataRow label="Source status" value={summary?.source_status ?? "not_indexed"} />
+                  <DataRow label="Latest indexed block" value={summary?.latest_block?.toLocaleString("en-US") ?? "Not indexed yet"} />
+                  <DataRow label="Latest indexed event" value={formatAnalyticsTimestamp(summary?.latest_event_at ?? null)} mono />
+                  <DataRow label="Cache generated" value={formatAnalyticsTimestamp(summary?.generated_at ?? null)} mono />
+                  <DataRow
+                    label="Market contracts"
+                    value={summary?.metrics.market_contracts_found.toLocaleString("en-US") ?? "0"}
+                  />
+                </>
+              ) : (
+                <>
+                  <DataRow label="Deployment tx" value={analyticsFactory.deploymentTx} mono />
+                  <DataRow label="Deployer" value={analyticsFactory.deployer} mono />
+                  <DataRow label="Deployment block" value={analyticsFactory.deploymentBlock} />
+                  <DataRow label="Deployment timestamp" value={analyticsFactory.deploymentTimestamp} mono />
+                  <DataRow label="Factory transactions" value={analyticsFactory.totalTransactions} />
+                  <DataRow label="Latest market created" value={analyticsFactory.latestMarket} mono />
+                </>
+              )}
             </dl>
           </CardContent>
         </Card>
@@ -235,9 +368,13 @@ function FactorySection() {
           </Card>
 
           <div className="flex flex-col gap-2">
-            <ExternalButton href={analyticsFactory.explorerUrl}>View Legacy Factory on Arcscan</ExternalButton>
-            <ExternalButton href={analyticsFactory.deploymentTxUrl}>View Legacy Deployment Transaction</ExternalButton>
-            <ExternalButton href={analyticsLatestActivity.txUrl}>View Legacy Latest Activity</ExternalButton>
+            <ExternalButton href={factoryExplorerUrl}>View Factory on Arcscan</ExternalButton>
+            {!isLive ? (
+              <>
+                <ExternalButton href={analyticsFactory.deploymentTxUrl}>View Legacy Deployment Transaction</ExternalButton>
+                <ExternalButton href={analyticsLatestActivity.txUrl}>View Legacy Latest Activity</ExternalButton>
+              </>
+            ) : null}
           </div>
         </div>
       </div>
@@ -308,7 +445,15 @@ function MarketsSection() {
   )
 }
 
-function LifecycleSection() {
+function LifecycleSection({
+  lifecycleMetrics,
+  summary,
+  isLive,
+}: {
+  lifecycleMetrics: ReadonlyArray<{ label: string; value: string }>
+  summary: AnalyticsSummaryResponse | null
+  isLive: boolean
+}) {
   return (
     <section className="flex flex-col gap-7">
       <SectionHeading
@@ -318,7 +463,7 @@ function LifecycleSection() {
 
       <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
         <div className="grid grid-cols-3 gap-3 self-start">
-          {analyticsLifecycleMetrics.map((item) => (
+          {lifecycleMetrics.map((item) => (
             <Card key={item.label} size="sm" className="border-border/60 bg-card/60">
               <CardHeader>
                 <CardTitle className="text-3xl font-semibold">{item.value}</CardTitle>
@@ -336,19 +481,33 @@ function LifecycleSection() {
               </div>
               <div>
                 <CardTitle>Latest recorded activity</CardTitle>
-                <CardDescription>Most recent market creation in the analytics snapshot</CardDescription>
+                <CardDescription>
+                  {isLive ? "Most recent indexed analytics event" : "Most recent market creation in the fallback snapshot"}
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <dl>
-              <DataRow label="Timestamp" value={analyticsLatestActivity.timestamp} mono />
-              <DataRow label="Transaction" value={analyticsLatestActivity.tx} mono />
-              <DataRow label="Market" value={analyticsLatestActivity.market} mono />
+              <DataRow
+                label="Timestamp"
+                value={isLive ? formatAnalyticsTimestamp(summary?.latest_event_at ?? null) : analyticsLatestActivity.timestamp}
+                mono
+              />
+              <DataRow
+                label={isLive ? "Latest block" : "Transaction"}
+                value={isLive ? summary?.latest_block?.toLocaleString("en-US") ?? "Not indexed yet" : analyticsLatestActivity.tx}
+                mono
+              />
+              <DataRow
+                label={isLive ? "Factory" : "Market"}
+                value={isLive ? getAnalyticsFactoryAddress(summary) : analyticsLatestActivity.market}
+                mono
+              />
             </dl>
             <div className="pt-4">
-              <ExternalButton href={analyticsLatestActivity.txUrl} variant="default">
-                Inspect Latest Activity
+              <ExternalButton href={isLive ? getAnalyticsFactoryExplorerUrl(summary) : analyticsLatestActivity.txUrl} variant="default">
+                Inspect {isLive ? "Factory" : "Latest Activity"}
               </ExternalButton>
             </div>
           </CardContent>
@@ -430,7 +589,14 @@ function AgentWalletSection() {
   )
 }
 
-function PublicLinksSection() {
+function PublicLinksSection({ metrics, isLive }: { metrics: AnalyticsMetric[]; isLive: boolean }) {
+  const createdMarkets = getMetricValue(metrics, "Markets Created", "126")
+  const totalTrades = getMetricValue(metrics, "Total Trades", "806")
+  const uniqueWallets = getMetricValue(metrics, "Unique Participating Wallets", "218")
+  const testnetUsdc = getMetricValue(metrics, "Testnet USDC Collateral Volume", "149.77")
+  const resolvedMarkets = getMetricValue(metrics, "Resolved Markets", "105")
+  const claimEvents = getMetricValue(metrics, "Claim Events", "393")
+
   return (
     <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
       <Card className="border-border/60 bg-card/60">
@@ -475,9 +641,10 @@ function PublicLinksSection() {
         }
       >
         <p className="text-sm leading-relaxed text-muted-foreground">
-          The strongest signals in this snapshot are a verified factory, 126 created markets, 806 total trades, 218
-          unique participating wallets, 149.77 testnet USDC in aggregate collateral movement, 105 resolved markets, and
-          393 claim events.
+          The strongest signals in this {isLive ? "backend cache" : "fallback snapshot"} are a verified factory,{" "}
+          {createdMarkets} created markets, {totalTrades} total trades, {uniqueWallets} unique participating wallets,{" "}
+          {testnetUsdc} testnet USDC in aggregate collateral movement, {resolvedMarkets} resolved markets, and{" "}
+          {claimEvents} claim events.
         </p>
       </AnalyticsDisclaimerCard>
     </section>
@@ -533,6 +700,20 @@ function NotesSection() {
 }
 
 export function AnalyticsShell() {
+  const state = useAnalyticsSummary()
+  const liveSummary =
+    state.status === "loaded" && isIndexedAnalyticsSummary(state.summary) ? state.summary : null
+  const isLive = Boolean(liveSummary)
+  const metrics = useMemo(
+    () => (liveSummary ? buildAnalyticsMetrics(liveSummary) : analyticsMetrics),
+    [liveSummary],
+  )
+  const lifecycleMetrics = useMemo(
+    () => (liveSummary ? buildAnalyticsLifecycleMetrics(liveSummary) : analyticsLifecycleMetrics),
+    [liveSummary],
+  )
+  const freshnessStatus = state.status === "loaded" ? "loaded" : state.status
+
   return (
     <>
       <div className="relative overflow-hidden">
@@ -540,15 +721,16 @@ export function AnalyticsShell() {
 
         <div className="relative px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-16 sm:gap-20">
-            <AnalyticsHero />
-            <ExecutiveMetricsSection />
+            <AnalyticsHero summary={liveSummary} metrics={metrics} isLive={isLive} />
+            <AnalyticsFreshnessSection summary={state.status === "loaded" ? state.summary : null} isLive={isLive} status={freshnessStatus} />
+            <ExecutiveMetricsSection state={state} metrics={metrics} isLive={isLive} />
             <Separator className="opacity-40" />
-            <FactorySection />
+            <FactorySection summary={liveSummary} isLive={isLive} />
             <MarketsSection />
-            <LifecycleSection />
+            <LifecycleSection lifecycleMetrics={lifecycleMetrics} summary={liveSummary} isLive={isLive} />
             <Separator className="opacity-40" />
             <AgentWalletSection />
-            <PublicLinksSection />
+            <PublicLinksSection metrics={metrics} isLive={isLive} />
             <NotesSection />
           </div>
         </div>
