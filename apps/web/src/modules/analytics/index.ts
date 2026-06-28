@@ -3,8 +3,11 @@ export type {
   AnalyticsFactorySnapshot,
   AnalyticsMetric,
   AnalyticsPublicLink,
+  AnalyticsSummaryMetrics,
+  AnalyticsSummaryResponse,
   AnalyticsTopMarket,
 } from "./types"
+export { getAnalyticsSummary } from "./api"
 export {
   formatAnalyticsMetricValue,
   shortenAnalyticsAddress,
@@ -12,6 +15,8 @@ export {
 export {
   analyticsAgentIntegrationChecklist,
   analyticsBackendMetrics,
+  buildAnalyticsLifecycleMetrics,
+  buildAnalyticsMetrics,
   analyticsFactory,
   analyticsFactoryProofPoints,
   analyticsLatestActivity,
@@ -21,7 +26,13 @@ export {
   analyticsPublicLinks,
   analyticsStatusBadges,
   analyticsTopMarkets,
+  formatAnalyticsTimestamp,
+  formatTestnetUsdcBaseUnits,
+  getAnalyticsFactoryAddress,
+  getAnalyticsFactoryExplorerUrl,
+  isIndexedAnalyticsSummary,
 } from "./analytics-utils"
+export { useAnalyticsSummary } from "./use-analytics-summary"
 export { AnalyticsShell } from "./components/analytics-shell"
 export { AnalyticsMetricCard } from "./components/analytics-metric-card"
 export { AnalyticsSummaryGrid } from "./components/analytics-summary-grid"

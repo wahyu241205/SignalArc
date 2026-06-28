@@ -3,8 +3,184 @@ import type {
   AnalyticsFactorySnapshot,
   AnalyticsMetric,
   AnalyticsPublicLink,
+  AnalyticsSummaryResponse,
   AnalyticsTopMarket,
 } from "./types"
+
+const ACTIVE_FACTORY_ADDRESS = "0x02555FC5EE3c53938f2F0356e963865503442A56"
+const ARCSCAN_BASE_URL = "https://testnet.arcscan.app"
+
+function formatInteger(value: number) {
+  return new Intl.NumberFormat("en-US").format(value)
+}
+
+function formatWholeDigits(value: string) {
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+}
+
+export function formatTestnetUsdcBaseUnits(value: string, decimals = 6) {
+  const rawValue = value.trim()
+
+  if (!/^\d+$/.test(rawValue)) {
+    return "0"
+  }
+
+  const paddedValue = rawValue.padStart(decimals + 1, "0")
+  const wholeDigits = paddedValue.slice(0, -decimals) || "0"
+  const fractionalDigits = paddedValue.slice(-decimals).replace(/0+$/, "")
+  const whole = formatWholeDigits(wholeDigits.replace(/^0+(?=\d)/, ""))
+
+  if (!fractionalDigits) {
+    return whole
+  }
+
+  return `${whole}.${fractionalDigits}`
+}
+
+export function isIndexedAnalyticsSummary(summary: AnalyticsSummaryResponse | null) {
+  return Boolean(
+    summary &&
+      summary.status === "ok" &&
+      (summary.source_status === "indexed" || summary.source_status === "cached"),
+  )
+}
+
+export function formatAnalyticsTimestamp(value: string | null) {
+  if (!value) {
+    return "Not indexed yet"
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date)
+}
+
+export function buildAnalyticsMetrics(summary: AnalyticsSummaryResponse): AnalyticsMetric[] {
+  const { metrics } = summary
+
+  return [
+    {
+      label: "Markets Created",
+      value: formatInteger(metrics.markets_created),
+      description: "MarketDeployed events indexed from the active SignalArc factory",
+      unit: "testnet markets",
+      featured: false,
+    },
+    {
+      label: "Market Contracts Found",
+      value: formatInteger(metrics.market_contracts_found),
+      description: "Market contract addresses discovered from indexed factory events",
+      unit: "verified records",
+      featured: false,
+    },
+    {
+      label: "Total Trades",
+      value: formatInteger(metrics.total_trades),
+      description: "Aggregate YES/NO position events indexed from child market contracts",
+      unit: "onchain events",
+      featured: true,
+    },
+    {
+      label: "Position Events",
+      value: formatInteger(metrics.position_events),
+      description: "YES/NO position events across discovered market contracts",
+      unit: "onchain events",
+      featured: false,
+    },
+    {
+      label: "Unique Participating Wallets",
+      value: formatInteger(metrics.unique_wallets),
+      description: "Unique wallet addresses participating in indexed market activity",
+      unit: "wallets",
+      featured: false,
+    },
+    {
+      label: "Testnet USDC Collateral Volume",
+      value: formatTestnetUsdcBaseUnits(metrics.testnet_usdc_volume),
+      description: "Aggregate Arc Testnet USDC collateral movement from base-unit event amounts",
+      unit: "testnet USDC",
+      featured: true,
+    },
+    {
+      label: "YES Position Events",
+      value: formatInteger(metrics.yes_position_events),
+      description: "YES-side position events",
+      unit: "events",
+      featured: false,
+    },
+    {
+      label: "NO Position Events",
+      value: formatInteger(metrics.no_position_events),
+      description: "NO-side position events",
+      unit: "events",
+      featured: false,
+    },
+    {
+      label: "Resolved Markets",
+      value: formatInteger(metrics.resolved_markets),
+      description: "Markets with indexed resolution events",
+      unit: "testnet markets",
+      featured: false,
+    },
+    {
+      label: "Cancelled Markets",
+      value: formatInteger(metrics.cancelled_markets),
+      description: "Markets with indexed cancellation events",
+      unit: "testnet markets",
+      featured: false,
+    },
+    {
+      label: "Claim Events",
+      value: formatInteger(metrics.claim_events),
+      description: "Payout/refund claim events detected",
+      unit: "onchain events",
+      featured: false,
+    },
+    {
+      label: "Payouts Claimed",
+      value: formatInteger(metrics.payouts_claimed),
+      description: "Payout claim events from resolved markets",
+      unit: "onchain events",
+      featured: false,
+    },
+    {
+      label: "Refunds Claimed",
+      value: formatInteger(metrics.refunds_claimed),
+      description: "Refund claim events from cancelled markets",
+      unit: "onchain events",
+      featured: false,
+    },
+  ]
+}
+
+export function buildAnalyticsLifecycleMetrics(summary: AnalyticsSummaryResponse) {
+  const { metrics } = summary
+
+  return [
+    { label: "Resolved markets", value: formatInteger(metrics.resolved_markets) },
+    { label: "Cancelled markets", value: formatInteger(metrics.cancelled_markets) },
+    { label: "Claim events", value: formatInteger(metrics.claim_events) },
+  ]
+}
+
+export function getAnalyticsFactoryAddress(summary: AnalyticsSummaryResponse | null) {
+  return summary?.factory_address || ACTIVE_FACTORY_ADDRESS
+}
+
+export function getAnalyticsFactoryExplorerUrl(summary: AnalyticsSummaryResponse | null) {
+  return `${ARCSCAN_BASE_URL}/address/${getAnalyticsFactoryAddress(summary)}`
+}
 
 export const analyticsFactory: AnalyticsFactorySnapshot = {
   name: "Legacy SignalArcMarketFactory",
@@ -32,11 +208,11 @@ export const analyticsLatestActivity: AnalyticsActivitySnapshot = {
 
 export const analyticsStatusBadges = [
   "Arc Testnet",
-  "Legacy Factory Snapshot",
-  "126 Historical Markets",
+  "Backend Cache",
+  "Active Factory",
   "Testnet USDC",
   "Public Proof-of-Activity",
-  "Dune Pending Reliable Indexing",
+  "Explorer-Indexed Logs",
 ] as const
 
 export const analyticsMetrics: AnalyticsMetric[] = [
@@ -206,20 +382,19 @@ export const analyticsPublicLinks: AnalyticsPublicLink[] = [
   { label: "Website", href: "https://www.signalarc.fun" },
   { label: "Docs", href: "https://docs.signalarc.fun" },
   { label: "GitHub", href: "https://github.com/wahyu241205/SignalArc" },
-  { label: "Active factory on Arcscan", href: "https://testnet.arcscan.app/address/0x02555FC5EE3c53938f2F0356e963865503442A56" },
+  { label: "Active factory on Arcscan", href: `${ARCSCAN_BASE_URL}/address/${ACTIVE_FACTORY_ADDRESS}` },
   { label: "Legacy analytics factory on Arcscan", href: analyticsFactory.explorerUrl },
   { label: "Latest activity", href: analyticsLatestActivity.txUrl },
 ]
 
 export const analyticsLimitations = [
-  "Metrics represent a historical Arc Testnet proof-of-activity snapshot from the legacy factory.",
+  "Live metrics are sourced from SignalArc's backend analytics cache when indexed data is available.",
+  "The historical static snapshot remains a fallback when the backend cache is unavailable or not indexed.",
   "Volume represents testnet USDC collateral activity, not production or mainnet trading volume.",
   "Unique participants are counted as wallet addresses, not real-world users.",
   "Circle Agent Wallet session and onboarding metrics are sourced from backend data, not chain data alone.",
   "Direct Circle Agent Wallet attribution is not visible from chain data alone.",
   "Arc Testnet data is not yet reliably queryable through Dune for the required contract-level analytics.",
-  "The active factory may differ from the legacy analytics snapshot factory shown for historical proof-of-activity.",
-  "The active factory may differ from the legacy analytics snapshot factory shown for historical proof-of-activity.",
   "This dashboard does not imply audited production custody or mainnet financial activity.",
 ] as const
 

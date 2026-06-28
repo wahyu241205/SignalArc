@@ -18,6 +18,7 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /signalarc-api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o /analytics-backfill ./cmd/analytics-backfill
 
 FROM node:20.18.2-alpine3.20
 
@@ -32,6 +33,7 @@ RUN apk add --no-cache \
     && npm cache clean --force
 
 COPY --from=builder /signalarc-api /usr/local/bin/signalarc-api
+COPY --from=builder /analytics-backfill /usr/local/bin/analytics-backfill
 
 EXPOSE 4000
 

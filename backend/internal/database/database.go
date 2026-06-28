@@ -93,6 +93,11 @@ func (db *DB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return db.pool.QueryRow(ctx, sql, args...)
 }
 
+func (db *DB) Exec(ctx context.Context, sql string, args ...any) error {
+	_, err := db.pool.Exec(ctx, sql, args...)
+	return err
+}
+
 func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {
 	ctx, cancel := context.WithTimeout(parent, checkTimeout)
 	defer cancel()
