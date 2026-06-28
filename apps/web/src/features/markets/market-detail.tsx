@@ -9,6 +9,7 @@ import { ApiError, getMarket } from "@/lib/api"
 import {
   MarketDetailErrorState,
   MarketDetailLoadingSkeleton,
+  MarketActivityCard,
   MarketMetadataCard,
   MarketOutcomeCard,
   MarketSummaryCard,
@@ -117,6 +118,7 @@ export function MarketDetail({ marketId }: { marketId: string }) {
           <MarketSummaryCard market={market} />
           <MarketOutcomeCard market={market} />
           <MarketMetadataCard market={market} />
+          <MarketActivityCard market={market} />
         </div>
 
         <aside

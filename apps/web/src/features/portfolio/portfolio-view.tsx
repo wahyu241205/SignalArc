@@ -7,6 +7,7 @@ import { getMarkets, getUserPositions, getUserSettlements } from "@/lib/api"
 import {
   getMarketsErrorState,
   getPortfolioErrorState,
+  PortfolioActivityCard,
   PortfolioAdvancedLookup,
   PortfolioEmptyState,
   PortfolioErrorState,
@@ -124,15 +125,27 @@ export function PortfolioView() {
             settlements={[]}
             marketsState={marketsState}
           />
+          <PortfolioActivityCard
+            positions={[]}
+            settlements={[]}
+            marketsState={marketsState}
+          />
         </>
       ) : null}
       {state.status === "error" ? <PortfolioErrorState message={state.message} requestId={state.requestId} /> : null}
       {state.status === "loaded" ? (
-        <PortfolioPositionCard
-          positions={state.data.positions}
-          settlements={state.data.settlements}
-          marketsState={marketsState}
-        />
+        <>
+          <PortfolioPositionCard
+            positions={state.data.positions}
+            settlements={state.data.settlements}
+            marketsState={marketsState}
+          />
+          <PortfolioActivityCard
+            positions={state.data.positions}
+            settlements={state.data.settlements}
+            marketsState={marketsState}
+          />
+        </>
       ) : null}
     </PortfolioShell>
   )

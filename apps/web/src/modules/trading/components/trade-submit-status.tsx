@@ -4,6 +4,36 @@ import { TransactionLink } from "@/modules/wallet"
 
 import type { TradeSubmitState } from "../types"
 
+function TradeTransactionRow({
+  label,
+  hash,
+  status,
+}: {
+  label: string
+  hash?: `0x${string}`
+  status: "pending" | "success" | "error" | "not_available"
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border bg-background/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <dt className="text-xs uppercase tracking-wider text-muted-foreground/70">
+          {label}
+        </dt>
+        <span className="rounded-md border border-border bg-background/50 px-2 py-1 text-xs capitalize text-muted-foreground">
+          {status.replace("_", " ")}
+        </span>
+      </div>
+      <dd className="mt-2">
+        {hash ? (
+          <TransactionLink hash={hash} />
+        ) : (
+          <span className="text-sm text-muted-foreground">Not available</span>
+        )}
+      </dd>
+    </div>
+  )
+}
+
 function TradeExecutionResult({
   state,
 }: {
@@ -22,22 +52,16 @@ function TradeExecutionResult({
         transactions below before refreshing balances.
       </p>
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-muted-foreground/70">
-            USDC Approval
-          </dt>
-          <dd className="mt-0.5">
-            <TransactionLink hash={state.approveHash} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-muted-foreground/70">
-            Open Position
-          </dt>
-          <dd className="mt-0.5">
-            <TransactionLink hash={state.openHash} />
-          </dd>
-        </div>
+        <TradeTransactionRow
+          label="USDC Approval"
+          hash={state.approveHash}
+          status="success"
+        />
+        <TradeTransactionRow
+          label="Open Position"
+          hash={state.openHash}
+          status="success"
+        />
       </dl>
     </div>
   )
@@ -61,14 +85,22 @@ function PendingState({
         Arc Testnet receipt finality.
       </p>
       {state.approveHash ? (
-        <p className="mt-3 text-sm text-muted-foreground">
-          Approval: <TransactionLink hash={state.approveHash} />
-        </p>
+        <dl className="mt-3">
+          <TradeTransactionRow
+            label="Approval"
+            hash={state.approveHash}
+            status="pending"
+          />
+        </dl>
       ) : null}
       {state.status === "opening" && state.openHash ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          Market transaction: <TransactionLink hash={state.openHash} />
-        </p>
+        <dl className="mt-2">
+          <TradeTransactionRow
+            label="Market transaction"
+            hash={state.openHash}
+            status="pending"
+          />
+        </dl>
       ) : null}
     </div>
   )
@@ -90,14 +122,22 @@ export function TradeSubmitStatus({ state }: { state: TradeSubmitState }) {
             No new position is recorded unless the market transaction confirms.
           </p>
           {state.approveHash ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              Approval: <TransactionLink hash={state.approveHash} />
-            </p>
+            <dl className="mt-3">
+              <TradeTransactionRow
+                label="Approval"
+                hash={state.approveHash}
+                status="error"
+              />
+            </dl>
           ) : null}
           {state.openHash ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              Market transaction: <TransactionLink hash={state.openHash} />
-            </p>
+            <dl className="mt-2">
+              <TradeTransactionRow
+                label="Market transaction"
+                hash={state.openHash}
+                status="error"
+              />
+            </dl>
           ) : null}
         </div>
       ) : null}
