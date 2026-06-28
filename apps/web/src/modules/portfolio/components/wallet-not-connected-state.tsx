@@ -1,5 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card"
 
+import { formatWalletAddress } from "../format"
+
 function WalletIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -21,16 +23,24 @@ function WalletIcon({ className }: { className?: string }) {
 export function WalletNotConnectedState() {
   return (
     <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+      <CardContent className="flex flex-col items-start gap-4 p-5 sm:flex-row sm:items-center sm:p-6">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
           <WalletIcon className="h-6 w-6 text-muted-foreground" />
         </div>
-        <p className="text-sm text-muted-foreground">
-          Connect your wallet to view your portfolio.
-        </p>
-        <p className="text-xs text-muted-foreground/70">
-          Positions are read-only until wallet-to-user mapping is implemented.
-        </p>
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-foreground">
+            Connect wallet to anchor portfolio context
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            After connecting, this page can show the active wallet address and
+            align future position, exposure, claim, refund, and activity views
+            around that wallet.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground/70">
+            Backend wallet-indexed portfolio loading is not implemented yet; use
+            the API lookup below for existing records.
+          </p>
+        </div>
       </CardContent>
     </Card>
   )
@@ -39,13 +49,15 @@ export function WalletNotConnectedState() {
 export function WalletIdentityCard({ address }: { address: string }) {
   return (
     <Card className="border-indigo-500/20">
-      <CardContent className="flex items-center gap-3 pt-6">
+      <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:p-6">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-500/10">
           <WalletIcon className="h-5 w-5 text-indigo-400" />
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">Connected Wallet</p>
-          <p className="font-mono text-xs text-muted-foreground">{address}</p>
+          <p className="mt-1 break-all font-mono text-xs text-muted-foreground" title={address}>
+            {formatWalletAddress(address)}
+          </p>
         </div>
       </CardContent>
     </Card>

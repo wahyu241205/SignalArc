@@ -1,4 +1,10 @@
-export { formatPortfolioDate, truncatePortfolioId } from "./format"
+export {
+  formatMarketStatus,
+  formatPortfolioAmount,
+  formatPortfolioDate,
+  formatWalletAddress,
+  truncatePortfolioId,
+} from "./format"
 export { getMarketsErrorState, getPortfolioErrorState } from "./portfolio-utils"
 export { PortfolioEmptyState } from "./components/portfolio-empty-state"
 export { PortfolioErrorState } from "./components/portfolio-error-state"

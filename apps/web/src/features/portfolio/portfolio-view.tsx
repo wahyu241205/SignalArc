@@ -91,8 +91,17 @@ export function PortfolioView() {
 
   return (
     <PortfolioShell>
-      {isConnected && address ? <WalletIdentityCard address={address} /> : <WalletNotConnectedState />}
-      <PortfolioSummaryCard state={marketsState} />
+      {isConnected && address ? (
+        <WalletIdentityCard address={address} />
+      ) : (
+        <WalletNotConnectedState />
+      )}
+      <PortfolioSummaryCard
+        address={address}
+        isConnected={isConnected}
+        marketsState={marketsState}
+        portfolioState={state}
+      />
       <PortfolioAdvancedLookup
         showAdvanced={showAdvanced}
         isLoading={state.status === "loading"}
@@ -100,11 +109,30 @@ export function PortfolioView() {
         onSubmit={handleSubmit}
       />
 
+      {state.status === "idle" ? (
+        <PortfolioEmptyState
+          title="No portfolio lookup loaded"
+          description="Connect a wallet for identity context, then use the demo lookup to load existing API position and settlement records."
+        />
+      ) : null}
       {state.status === "loading" ? <PortfolioLoadingSkeleton /> : null}
-      {state.status === "empty" ? <PortfolioEmptyState /> : null}
+      {state.status === "empty" ? (
+        <>
+          <PortfolioEmptyState />
+          <PortfolioPositionCard
+            positions={[]}
+            settlements={[]}
+            marketsState={marketsState}
+          />
+        </>
+      ) : null}
       {state.status === "error" ? <PortfolioErrorState message={state.message} requestId={state.requestId} /> : null}
       {state.status === "loaded" ? (
-        <PortfolioPositionCard positions={state.data.positions} settlements={state.data.settlements} />
+        <PortfolioPositionCard
+          positions={state.data.positions}
+          settlements={state.data.settlements}
+          marketsState={marketsState}
+        />
       ) : null}
     </PortfolioShell>
   )

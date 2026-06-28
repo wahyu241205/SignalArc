@@ -19,7 +19,7 @@ export function PortfolioShell({
 }: {
   children: ReactNode
 }) {
-  return <div className="grid gap-6">{children}</div>
+  return <div className="grid gap-4 sm:gap-6">{children}</div>
 }
 
 export function PortfolioAdvancedLookup({
@@ -40,15 +40,16 @@ export function PortfolioAdvancedLookup({
         onClick={onToggleAdvanced}
         className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
-        {showAdvanced ? "Hide" : "Show"} demo lookup (advanced)
+        {showAdvanced ? "Hide" : "Show"} API position lookup
       </button>
 
       {showAdvanced ? (
         <Card className="mt-3">
           <CardHeader>
-            <CardTitle className="text-sm">Demo Lookup</CardTitle>
-            <CardDescription className="text-xs">
-              Look up positions by backend user ID. This is a local demo fallback.
+            <CardTitle className="text-sm">API Position Lookup</CardTitle>
+            <CardDescription className="text-xs leading-5">
+              Load existing backend position and settlement records by user ID.
+              Wallet-indexed portfolio loading is not implemented yet.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -68,7 +69,7 @@ export function PortfolioAdvancedLookup({
                   className="text-sm"
                 />
               </div>
-              <Button disabled={isLoading} type="submit" size="sm">
+              <Button disabled={isLoading} type="submit" size="sm" className="w-full sm:w-auto">
                 {isLoading ? "Loading..." : "Load"}
               </Button>
             </form>
