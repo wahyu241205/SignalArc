@@ -79,7 +79,7 @@ export function LifecyclePanel({
             Arc Testnet
           </Badge>
         </div>
-        <CardDescription>
+        <CardDescription className="leading-6">
           Market-specific browser-wallet reads and lifecycle transactions. No real funds or production settlement.
         </CardDescription>
       </CardHeader>
@@ -99,7 +99,7 @@ export function LifecyclePanel({
             <p className="text-sm text-muted-foreground">{claimDisabledReason}</p>
           ) : null}
           <Button
-            className="w-full sm:w-fit"
+            className="w-full"
             disabled={!canClaim || isPending}
             onClick={onClaim}
             type="button"
@@ -117,7 +117,7 @@ export function LifecyclePanel({
               {resolverDisabledReason ?? resolverActionReason}
             </p>
           ) : null}
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <Button
               disabled={Boolean(closeDisabledReason)}
               onClick={onCloseMarket}

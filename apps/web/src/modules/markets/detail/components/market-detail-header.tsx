@@ -9,8 +9,10 @@ import { getMarketCategoryLabel } from "@/modules/categories"
 import type { Market } from "@/lib/api"
 
 import {
+  formatDeploymentStatus,
   marketStatusBadgeClass,
   marketStatusContext,
+  onchainDeploymentBadgeClass,
 } from "../format"
 
 function ShareMarketButton({ market }: { market: Market }) {
@@ -52,7 +54,13 @@ function ShareMarketButton({ market }: { market: Market }) {
   }
 
   return (
-    <Button type="button" variant="outline" size="sm" onClick={handleShare}>
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="w-full sm:w-auto"
+      onClick={handleShare}
+    >
       {status === "copied"
         ? "Link copied"
         : status === "shared"
@@ -67,22 +75,31 @@ export function MarketDetailHeader({ market }: { market: Market }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className={marketStatusBadgeClass(market.status)}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Badge
+            variant="outline"
+            className={marketStatusBadgeClass(market.status)}
+          >
             {market.status}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={onchainDeploymentBadgeClass(market.onchain_deployment_status)}
+          >
+            {formatDeploymentStatus(market.onchain_deployment_status)}
           </Badge>
           <Badge variant="secondary">
             {getMarketCategoryLabel(market.category)}
           </Badge>
-          <span className="text-xs text-muted-foreground">
+          <span className="min-w-0 text-xs text-muted-foreground">
             {market.collateral_asset} - {market.chain}
           </span>
         </div>
         <ShareMarketButton market={market} />
       </div>
 
-      <CardTitle className="text-xl leading-snug sm:text-2xl">
+      <CardTitle className="max-w-4xl break-words text-2xl leading-tight sm:text-3xl">
         {market.title}
       </CardTitle>
 
