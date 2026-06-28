@@ -410,6 +410,19 @@ func (r *AgentIntentsRepository) ListAgentExecutionsByAgentID(ctx context.Contex
 	return scanAgentExecutions(rows)
 }
 
+func (r *AgentIntentsRepository) ListAgentExecutionsByIntentID(ctx context.Context, intentID string, limit int) ([]AgentExecution, error) {
+	rows, err := r.db.Query(ctx, agentExecutionSelectSQL+`
+		WHERE intent_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2
+	`, intentID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAgentExecutions(rows)
+}
+
 func (r *AgentIntentsRepository) updateIntentTerminalStatus(ctx context.Context, intentID string, status string) (AgentIntent, error) {
 	var intent AgentIntent
 	err := r.db.QueryRow(ctx, `

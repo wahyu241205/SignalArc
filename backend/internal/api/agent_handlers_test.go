@@ -479,6 +479,16 @@ func (registry *testDurableAgentIntentRegistry) ListAgentExecutionsByAgentID(_ c
 	return executions, nil
 }
 
+func (registry *testDurableAgentIntentRegistry) ListAgentExecutionsByIntentID(_ context.Context, intentID string, _ int) ([]repository.AgentExecution, error) {
+	executions := []repository.AgentExecution{}
+	for _, execution := range registry.executions {
+		if execution.IntentID == intentID {
+			executions = append(executions, execution)
+		}
+	}
+	return executions, nil
+}
+
 func (registry *testDurableAgentIntentRegistry) markIntentTerminal(intentID string, status string) (repository.AgentIntent, error) {
 	intent, ok := registry.intents[intentID]
 	if !ok {
@@ -628,6 +638,110 @@ func TestConfirmAgentIntentPersistsDurableStatus(t *testing.T) {
 	}
 	if !intent.ConfirmedAt.Valid {
 		t.Fatal("expected confirmed_at to be set")
+	}
+}
+
+func TestAgentPortfolioRequiresValidAgentID(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, newTestDurableAgentIntentRegistry())
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/portfolio/not-valid", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("agent_id_invalid")) {
+		t.Fatalf("expected agent_id_invalid, got %s", response.Body.String())
+	}
+}
+
+func TestAgentPortfolioReturnsWalletMetadataAndEmptyArrays(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyYes)
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil, newTestDurableAgentIntentRegistry())
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/portfolio/agent_test_1", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Portfolio agentPortfolioResponse `json:"portfolio"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode portfolio response: %v", err)
+	}
+	if body.Portfolio.AgentID != "agent_test_1" {
+		t.Fatalf("expected agent_test_1, got %q", body.Portfolio.AgentID)
+	}
+	if body.Portfolio.AgentWalletAddress != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("unexpected agent wallet %q", body.Portfolio.AgentWalletAddress)
+	}
+	if len(body.Portfolio.Positions) != 0 {
+		t.Fatalf("expected empty positions, got %#v", body.Portfolio.Positions)
+	}
+	if len(body.Portfolio.Settlements) != 0 {
+		t.Fatalf("expected empty settlements, got %#v", body.Portfolio.Settlements)
+	}
+	if len(body.Portfolio.UnavailableFields) == 0 {
+		t.Fatal("expected unavailable_fields explaining data limitations")
+	}
+}
+
+func TestAgentActivityHandlesNoActivity(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyYes)
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil, newTestDurableAgentIntentRegistry())
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/activity/agent_test_1", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	var body struct {
+		Activity agentActivityResponse `json:"activity"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode activity response: %v", err)
+	}
+	if body.Activity.AgentID != "agent_test_1" {
+		t.Fatalf("expected agent_test_1, got %q", body.Activity.AgentID)
+	}
+	if len(body.Activity.Items) != 0 {
+		t.Fatalf("expected no activity items, got %#v", body.Activity.Items)
+	}
+}
+
+func TestAgentMarketResponseIncludesContractAddress(t *testing.T) {
+	responses := newAgentMarketResponses([]repository.Market{
+		{
+			ID:                    "market-1",
+			Title:                 "Will SignalArc keep agent markets readable?",
+			Status:                "OPEN",
+			CollateralAsset:       "USDC",
+			Chain:                 "Arc Testnet",
+			ClosesAt:              time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			MarketContractAddress: sql.NullString{String: "0x3333333333333333333333333333333333333333", Valid: true},
+		},
+	})
+
+	if len(responses) != 1 {
+		t.Fatalf("expected one response, got %d", len(responses))
+	}
+	if responses[0].MarketContractAddress == nil || *responses[0].MarketContractAddress != "0x3333333333333333333333333333333333333333" {
+		t.Fatalf("expected market contract address, got %#v", responses[0].MarketContractAddress)
+	}
+	if responses[0].Title == "" || responses[0].Status == "" {
+		t.Fatalf("expected existing compact market fields to remain populated: %#v", responses[0])
 	}
 }
 
@@ -2402,6 +2516,137 @@ func TestExecuteConfirmedIntentPersistsDurableExecutionFailure(t *testing.T) {
 	}
 	if strings.Contains(execution.ErrorMessage.String, "rpc unavailable") {
 		t.Fatalf("durable error message should be sanitized, got %q", execution.ErrorMessage.String)
+	}
+}
+
+func TestAgentActivityReturnsDurableIntentAndExecutionActivity(t *testing.T) {
+	durableRegistry := newTestDurableAgentIntentRegistry()
+	store := agent.NewStore()
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyYes)
+	executor := &stubAgentExecutor{
+		result: agent.ExecutionResult{
+			AgentID:                "agent_test_1",
+			AgentWalletAddress:     "0x9999999999999999999999999999999999999999",
+			WalletProvider:         agent.WalletProviderCircleAgentWallet,
+			Action:                 agent.ActionBuyYes,
+			Status:                 agent.StatusExecuted,
+			ExecutionMode:          agent.ExecutionModeCircleAgentWalletCLI,
+			Network:                agent.NetworkArcTestnet,
+			MarketContractAddress:  "0x3333333333333333333333333333333333333333",
+			BroadcastPerformed:     true,
+			ApproveTransactionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			TransactionHash:        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Readback: agent.ExecutionReadback{
+				YesPositions:    "1000000",
+				TotalYes:        "1000000",
+				TotalCollateral: "1000000",
+				USDCBalance:     "1000000",
+			},
+		},
+	}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, walletRegistry, executor, durableRegistry)
+
+	intentID := createValidAgentIntent(t, router)
+	confirmAgentIntent(t, router, intentID)
+	executor.result.IntentID = intentID
+
+	executeResponse := httptest.NewRecorder()
+	executeRequest := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(executeResponse, executeRequest)
+	if executeResponse.Code != http.StatusOK {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusOK, executeResponse.Code, executeResponse.Body.String())
+	}
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/activity/agent_test_1", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected activity status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	var body struct {
+		Activity agentActivityResponse `json:"activity"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode activity response: %v", err)
+	}
+	if len(body.Activity.Items) < 2 {
+		t.Fatalf("expected intent and execution activity, got %#v", body.Activity.Items)
+	}
+	var executionItem agentActivityItemResponse
+	for _, item := range body.Activity.Items {
+		if item.Type == "execution" {
+			executionItem = item
+			break
+		}
+	}
+	if executionItem.Type != "execution" {
+		t.Fatalf("expected execution item, got %#v", body.Activity.Items)
+	}
+	if executionItem.TransactionHash != executor.result.TransactionHash {
+		t.Fatalf("expected transaction hash %q, got %q", executor.result.TransactionHash, executionItem.TransactionHash)
+	}
+	if executionItem.ApproveTransactionHash != executor.result.ApproveTransactionHash {
+		t.Fatalf("expected approve hash %q, got %q", executor.result.ApproveTransactionHash, executionItem.ApproveTransactionHash)
+	}
+	if executionItem.Readback["yes_positions"] != "1000000" {
+		t.Fatalf("expected readback yes_positions, got %#v", executionItem.Readback)
+	}
+}
+
+func TestAgentIntentExecutionsIncludesFailureFields(t *testing.T) {
+	durableRegistry := newTestDurableAgentIntentRegistry()
+	store := agent.NewStore()
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionCreateMarket)
+	executor := &stubAgentExecutor{err: errors.New("upstream secret detail")}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, walletRegistry, executor, durableRegistry)
+
+	intentID := createAgentIntent(t, router, `{
+		"agent_id": "agent_test_1",
+		"source_client": "test_client",
+		"client_request_id": "client_req_execution_lookup_failure",
+		"action": "create_market",
+		"user_wallet": "0x1111111111111111111111111111111111111111",
+		"market_id": "agent-market-execution-lookup",
+		"question": "Will SignalArc expose execution failure history?",
+		"close_timestamp": "1767225600",
+		"resolver": "0x2222222222222222222222222222222222222222",
+		"collateral_token": "0x3333333333333333333333333333333333333333"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+
+	executeResponse := httptest.NewRecorder()
+	executeRequest := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(executeResponse, executeRequest)
+	if executeResponse.Code != http.StatusBadGateway {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusBadGateway, executeResponse.Code, executeResponse.Body.String())
+	}
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/intents/"+intentID+"/executions", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected executions status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	var body struct {
+		Executions []agentActivityItemResponse `json:"executions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode executions response: %v", err)
+	}
+	if len(body.Executions) != 1 {
+		t.Fatalf("expected one execution, got %#v", body.Executions)
+	}
+	if body.Executions[0].ErrorCode != "agent_execution_failed" {
+		t.Fatalf("expected sanitized error code, got %q", body.Executions[0].ErrorCode)
+	}
+	if strings.Contains(body.Executions[0].ErrorMessage, "secret detail") {
+		t.Fatalf("expected sanitized error message, got %q", body.Executions[0].ErrorMessage)
 	}
 }
 

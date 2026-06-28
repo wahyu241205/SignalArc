@@ -92,8 +92,11 @@ Available now:
 | ARC-TESTNET faucet | `POST /agent/wallets/{agent_id}/faucet` |
 | Market intent preview | `POST /agent/intents` |
 | Intent lookup | `GET /agent/intents/{intent_id}` |
+| Intent executions | `GET /agent/intents/{intent_id}/executions` |
 | Confirm intent | `POST /agent/intents/{intent_id}/confirm` |
 | Execute intent | `POST /agent/intents/{intent_id}/execute` |
+| Agent portfolio | `GET /agent/portfolio/{agent_id}` |
+| Agent activity | `GET /agent/activity/{agent_id}` |
 | Markets list (read-only) | `GET /markets` |
 | Market detail (read-only) | `GET /markets/{market_id}` |
 | Agent-readable market list | `GET /agent/markets` |
@@ -258,6 +261,10 @@ For `create_market`, `close_timestamp` MUST be either a UTC RFC3339 string such 
 
 Returns the current durable intent preview, confirmed, executed, or failed state.
 
+### GET /agent/intents/{intent_id}/executions
+
+Returns durable execution attempts for one intent. Items include status, tx hashes, readback JSON, and sanitized error code/message when available.
+
 ### POST /agent/intents/{intent_id}/confirm
 
 Confirms a previewed intent and produces an execution plan. SignalArc validates intent shape and returns a transaction plan without broadcasting.
@@ -265,6 +272,34 @@ Confirms a previewed intent and produces an execution plan. SignalArc validates 
 ### POST /agent/intents/{intent_id}/execute
 
 Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. Execution mode is `circle_agent_wallet_cli` when the Circle provider is enabled. SignalArc creates a pending execution record before provider execution, then persists either the successful tx/readback result or a sanitized failure code/message.
+
+## Agent Portfolio And Activity
+
+### GET /agent/portfolio/{agent_id}
+
+Returns a compact read-only portfolio summary for a registered agent wallet.
+
+The current portfolio read model uses existing durable Agent API records. `positions` are derived from executed `buy_yes` / `buy_no` agent intents and executions. They are not live onchain balance readbacks yet. Existing settlement rows are internal-user keyed, not agent-wallet keyed, so `settlements` is currently an empty array and unavailable fields explain the gap.
+
+Stable top-level fields include:
+
+- `agent_id`
+- `agent_wallet_address`
+- `chain`
+- `wallet_provider`
+- `active_positions_count`
+- `resolved_or_closed_positions_count`
+- `claimable_refundable_count`
+- `total_exposure`
+- `positions`
+- `settlements`
+- `unavailable_fields`
+
+### GET /agent/activity/{agent_id}
+
+Returns recent agent-readable activity from durable intent and execution records. Items are framework-neutral and include intent/execution type, action, status, market id, market contract address, amount, outcome/side, tx hashes, sanitized error fields, readback, and timestamps when available.
+
+Agents with a registered wallet but no activity return an empty `items` array. Unknown agents return `404 agent_wallet_not_found`; invalid `agent_id` values return `400 agent_id_invalid`.
 
 ## Agent-Readable Market Discovery
 
@@ -288,6 +323,7 @@ Response shape:
       "category": "product",
       "collateral_asset": "USDC",
       "chain": "Arc Testnet",
+      "market_contract_address": "0x...",
       "closes_at": "2026-06-01T00:00:00Z",
       "resolution_source": "Project repository evidence"
     }

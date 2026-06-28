@@ -81,8 +81,8 @@ Execution is intentionally fail-closed unless the backend runtime has Circle CLI
 | Confirm intent | Implemented. | Produces an execution plan only; no transaction is broadcast. |
 | Execute intent | Implemented for configured Circle CLI runtime. | Execution supports `create_market`, `buy_yes`, `buy_no`, `close_market`, `resolve_market`, `claim_payout`, `cancel_market`, and `claim_refund` through `circle_agent_wallet_cli` when enabled. |
 | Execution result | Implemented and persisted. | `agent_executions` records pending, executed, and failed attempts with tx hashes, readback JSON, and sanitized errors. |
-| Portfolio/positions read model | Partly implemented. | Existing DB routes are keyed by internal `user_id`, not `agent_id`, wallet address, or agent wallet. |
-| Activity/history read model | Partly implemented. | Trades, positions, settlements exist as backend repositories/routes, but no unified agent activity feed exists. |
+| Portfolio/positions read model | Implemented as a first durable read model. | `GET /agent/portfolio/{agent_id}` uses registered wallet metadata and executed agent buy intents/executions; live wallet-indexed contract balances remain unavailable. |
+| Activity/history read model | Implemented for Agent API records. | `GET /agent/activity/{agent_id}` and `GET /agent/intents/{intent_id}/executions` expose durable intents/executions with tx hashes, readbacks, and sanitized failures. |
 | Stable error codes | Partly implemented. | Many handler errors use stable codes; Phase 6B/6D should formalize and document the complete error catalog. |
 | OpenAPI surface | Partly aligned. | Custom GPT schema covers most live agent routes. Phase 6A added `getAgentIntent` and aligned `ExecutionResult` fields with the handler response. |
 
@@ -202,16 +202,25 @@ Implemented:
 
 ### 6C Agent Market / Portfolio / Activity API
 
+Status: IMPLEMENTED LOCALLY in this phase.
+
 Goal:
 
 - Give external agents stable read models for markets, positions, claims, refunds, and history.
 
-Likely work:
+Implemented:
 
-- Add compact `GET /agent/markets/{id}` if useful.
-- Add agent-wallet keyed portfolio/positions endpoint.
-- Add agent-wallet keyed activity/history endpoint.
-- Unify reads across intents, executions, trades, positions, settlements, and market lifecycle where available.
+- Added `GET /agent/portfolio/{agent_id}` with registered wallet metadata, intent/execution-derived positions, total exposure where amounts parse, empty settlements, and explicit unavailable field notes.
+- Added `GET /agent/activity/{agent_id}` with framework-neutral activity items derived from durable `agent_intents` and `agent_executions`.
+- Added `GET /agent/intents/{intent_id}/executions` for intent-scoped execution history.
+- Extended compact `GET /agent/markets` responses with `market_contract_address` while preserving existing fields and the deployed-market filter.
+- Reused existing Phase 6B tables; no new migration was required.
+
+Known limitations:
+
+- Portfolio positions are derived from executed buy intents/executions, not live onchain balance readbacks.
+- Existing `positions`, `settlements`, and `trades` tables are internal-user keyed and are not yet safely joinable to `agent_id` or agent wallet address.
+- Claimable/refundable eligibility remains unavailable until wallet-indexed claim/refund state is indexed.
 
 ### 6D Agent Safety & Policy Layer
 

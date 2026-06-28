@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -97,6 +99,7 @@ type durableAgentIntentRegistry interface {
 	MarkAgentExecutionFailed(context.Context, string, repository.FailAgentExecutionInput) (repository.AgentExecution, error)
 	ListAgentIntentsByAgentID(context.Context, string, int) ([]repository.AgentIntent, error)
 	ListAgentExecutionsByAgentID(context.Context, string, int) ([]repository.AgentExecution, error)
+	ListAgentExecutionsByIntentID(context.Context, string, int) ([]repository.AgentExecution, error)
 }
 
 type agentWalletBalanceResponse struct {
@@ -220,6 +223,61 @@ type agentExecutionResponse struct {
 	ApproveTransactionHash string                `json:"approve_transaction_hash,omitempty"`
 	TransactionHash        string                `json:"transaction_hash"`
 	Readback               agentReadbackResponse `json:"readback"`
+}
+
+type agentPortfolioResponse struct {
+	AgentID                        string                           `json:"agent_id"`
+	AgentWalletAddress             string                           `json:"agent_wallet_address"`
+	Chain                          string                           `json:"chain"`
+	WalletProvider                 string                           `json:"wallet_provider"`
+	ActivePositionsCount           int                              `json:"active_positions_count"`
+	ResolvedOrClosedPositionsCount int                              `json:"resolved_or_closed_positions_count"`
+	ClaimableRefundableCount       int                              `json:"claimable_refundable_count"`
+	TotalExposure                  string                           `json:"total_exposure"`
+	Positions                      []agentPortfolioPositionResponse `json:"positions"`
+	Settlements                    []any                            `json:"settlements"`
+	UnavailableFields              []string                         `json:"unavailable_fields"`
+}
+
+type agentPortfolioPositionResponse struct {
+	Source                string `json:"source"`
+	IntentID              string `json:"intent_id"`
+	Action                string `json:"action"`
+	Status                string `json:"status"`
+	MarketID              string `json:"market_id,omitempty"`
+	MarketContractAddress string `json:"market_contract_address,omitempty"`
+	Amount                string `json:"amount,omitempty"`
+	Outcome               string `json:"outcome,omitempty"`
+	TransactionHash       string `json:"transaction_hash,omitempty"`
+	CreatedAt             string `json:"created_at"`
+	UpdatedAt             string `json:"updated_at"`
+}
+
+type agentActivityResponse struct {
+	AgentID string                      `json:"agent_id"`
+	Items   []agentActivityItemResponse `json:"items"`
+}
+
+type agentActivityItemResponse struct {
+	ID                     string         `json:"id"`
+	Type                   string         `json:"type"`
+	Action                 string         `json:"action"`
+	Status                 string         `json:"status"`
+	IntentID               string         `json:"intent_id,omitempty"`
+	MarketID               string         `json:"market_id,omitempty"`
+	MarketTitle            string         `json:"market_title,omitempty"`
+	MarketContractAddress  string         `json:"market_contract_address,omitempty"`
+	Amount                 string         `json:"amount,omitempty"`
+	Outcome                string         `json:"outcome,omitempty"`
+	Side                   string         `json:"side,omitempty"`
+	TransactionHash        string         `json:"transaction_hash,omitempty"`
+	ApproveTransactionHash string         `json:"approve_transaction_hash,omitempty"`
+	ErrorCode              string         `json:"error_code,omitempty"`
+	ErrorMessage           string         `json:"error_message,omitempty"`
+	Readback               map[string]any `json:"readback,omitempty"`
+	CreatedAt              string         `json:"created_at"`
+	UpdatedAt              string         `json:"updated_at"`
+	CompletedAt            string         `json:"completed_at,omitempty"`
 }
 
 type agentReadbackResponse struct {
@@ -720,6 +778,77 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 		})
 	})
 
+	router.Get("/agent/portfolio/{agent_id}", func(w http.ResponseWriter, r *http.Request) {
+		agentID, ok := validateAgentIDPath(w, chi.URLParam(r, "agent_id"))
+		if !ok {
+			return
+		}
+		wallet, err := walletRegistry.GetAgentWalletByAgentID(r.Context(), agentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_wallet_not_found", "agent wallet not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_portfolio_get_failed", "failed to get agent portfolio")
+			return
+		}
+
+		intents := []repository.AgentIntent{}
+		executions := []repository.AgentExecution{}
+		if durableIntents != nil {
+			intents, err = durableIntents.ListAgentIntentsByAgentID(r.Context(), agentID, defaultListLimit)
+			if err != nil {
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_portfolio_get_failed", "failed to get agent portfolio")
+				return
+			}
+			executions, err = durableIntents.ListAgentExecutionsByAgentID(r.Context(), agentID, defaultListLimit)
+			if err != nil {
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_portfolio_get_failed", "failed to get agent portfolio")
+				return
+			}
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"portfolio": newAgentPortfolioResponse(wallet, intents, executions),
+		})
+	})
+
+	router.Get("/agent/activity/{agent_id}", func(w http.ResponseWriter, r *http.Request) {
+		agentID, ok := validateAgentIDPath(w, chi.URLParam(r, "agent_id"))
+		if !ok {
+			return
+		}
+		if _, err := walletRegistry.GetAgentWalletByAgentID(r.Context(), agentID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_wallet_not_found", "agent wallet not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_activity_get_failed", "failed to get agent activity")
+			return
+		}
+		if durableIntents == nil {
+			httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+				"activity": agentActivityResponse{AgentID: agentID, Items: []agentActivityItemResponse{}},
+			})
+			return
+		}
+
+		intents, err := durableIntents.ListAgentIntentsByAgentID(r.Context(), agentID, defaultListLimit)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_activity_get_failed", "failed to get agent activity")
+			return
+		}
+		executions, err := durableIntents.ListAgentExecutionsByAgentID(r.Context(), agentID, defaultListLimit)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_activity_get_failed", "failed to get agent activity")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"activity": newAgentActivityResponse(agentID, intents, executions),
+		})
+	})
+
 	router.Post("/agent/intents", func(w http.ResponseWriter, r *http.Request) {
 		var request createAgentIntentRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -813,6 +942,34 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 
 		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
 			"intent": newAgentIntentResponse(intent),
+		})
+	})
+
+	router.Get("/agent/intents/{id}/executions", func(w http.ResponseWriter, r *http.Request) {
+		intentID := chi.URLParam(r, "id")
+		if durableIntents == nil {
+			httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+				"executions": []agentActivityItemResponse{},
+			})
+			return
+		}
+		intent, err := durableIntents.GetAgentIntentByIntentID(r.Context(), intentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				httpjson.WriteError(w, http.StatusNotFound, "agent_intent_not_found", "agent intent not found")
+				return
+			}
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_execution_get_failed", "failed to get agent executions")
+			return
+		}
+		executions, err := durableIntents.ListAgentExecutionsByIntentID(r.Context(), intentID, defaultListLimit)
+		if err != nil {
+			httpjson.WriteError(w, http.StatusInternalServerError, "agent_execution_get_failed", "failed to get agent executions")
+			return
+		}
+
+		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+			"executions": newAgentExecutionActivityItems([]repository.AgentIntent{intent}, executions),
 		})
 	})
 
@@ -1475,6 +1632,136 @@ func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {
 	}
 }
 
+func newAgentPortfolioResponse(wallet repository.AgentWallet, intents []repository.AgentIntent, executions []repository.AgentExecution) agentPortfolioResponse {
+	executionsByIntentID := map[string]repository.AgentExecution{}
+	for _, execution := range executions {
+		if execution.IntentID == "" {
+			continue
+		}
+		current, ok := executionsByIntentID[execution.IntentID]
+		if !ok || execution.CreatedAt.After(current.CreatedAt) {
+			executionsByIntentID[execution.IntentID] = execution
+		}
+	}
+
+	positions := []agentPortfolioPositionResponse{}
+	totalExposure := big.NewRat(0, 1)
+	for _, intent := range intents {
+		if intent.Action != agent.ActionBuyYes && intent.Action != agent.ActionBuyNo {
+			continue
+		}
+		execution, ok := executionsByIntentID[intent.IntentID]
+		if !ok || execution.Status != repository.AgentExecutionStatusExecuted {
+			continue
+		}
+
+		amount := nullStringValue(intent.Amount)
+		if value, ok := new(big.Rat).SetString(amount); ok {
+			totalExposure.Add(totalExposure, value)
+		}
+		positions = append(positions, agentPortfolioPositionResponse{
+			Source:                "agent_intent_execution",
+			IntentID:              intent.IntentID,
+			Action:                intent.Action,
+			Status:                execution.Status,
+			MarketID:              nullStringValue(intent.MarketID),
+			MarketContractAddress: firstNonEmpty(nullStringValue(intent.MarketContractAddress), nullStringValue(execution.MarketContractAddress)),
+			Amount:                amount,
+			Outcome:               outcomeFromAgentAction(intent.Action, nullStringValue(intent.Outcome)),
+			TransactionHash:       nullStringValue(execution.TransactionHash),
+			CreatedAt:             intent.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+			UpdatedAt:             intent.UpdatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+		})
+	}
+
+	sort.SliceStable(positions, func(i int, j int) bool {
+		return positions[i].CreatedAt > positions[j].CreatedAt
+	})
+
+	return agentPortfolioResponse{
+		AgentID:                        wallet.AgentID,
+		AgentWalletAddress:             wallet.AgentWalletAddress,
+		Chain:                          wallet.Chain,
+		WalletProvider:                 wallet.WalletProvider,
+		ActivePositionsCount:           len(positions),
+		ResolvedOrClosedPositionsCount: 0,
+		ClaimableRefundableCount:       0,
+		TotalExposure:                  ratToDecimalString(totalExposure),
+		Positions:                      positions,
+		Settlements:                    []any{},
+		UnavailableFields: []string{
+			"positions are derived from executed agent buy intents and are not live contract balance readbacks",
+			"resolved_or_closed_positions_count is unavailable until wallet-indexed position lifecycle records exist",
+			"claimable_refundable_count is unavailable until wallet-indexed claim/refund eligibility records exist",
+			"settlements are unavailable because existing settlement rows are internal-user keyed, not agent-wallet keyed",
+		},
+	}
+}
+
+func newAgentActivityResponse(agentID string, intents []repository.AgentIntent, executions []repository.AgentExecution) agentActivityResponse {
+	items := []agentActivityItemResponse{}
+	for _, intent := range intents {
+		items = append(items, agentActivityItemResponse{
+			ID:                    intent.IntentID,
+			Type:                  "intent",
+			IntentID:              intent.IntentID,
+			Action:                intent.Action,
+			Status:                intent.Status,
+			MarketID:              nullStringValue(intent.MarketID),
+			MarketContractAddress: nullStringValue(intent.MarketContractAddress),
+			Amount:                nullStringValue(intent.Amount),
+			Outcome:               outcomeFromAgentAction(intent.Action, nullStringValue(intent.Outcome)),
+			Side:                  sideFromAgentAction(intent.Action),
+			CreatedAt:             intent.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+			UpdatedAt:             intent.UpdatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+		})
+	}
+	items = append(items, newAgentExecutionActivityItems(intents, executions)...)
+	sort.SliceStable(items, func(i int, j int) bool {
+		return items[i].CreatedAt > items[j].CreatedAt
+	})
+	return agentActivityResponse{AgentID: agentID, Items: items}
+}
+
+func newAgentExecutionActivityItems(intents []repository.AgentIntent, executions []repository.AgentExecution) []agentActivityItemResponse {
+	intentsByID := map[string]repository.AgentIntent{}
+	for _, intent := range intents {
+		intentsByID[intent.IntentID] = intent
+	}
+
+	items := make([]agentActivityItemResponse, 0, len(executions))
+	for _, execution := range executions {
+		intent := intentsByID[execution.IntentID]
+		item := agentActivityItemResponse{
+			ID:                     execution.ID,
+			Type:                   "execution",
+			IntentID:               execution.IntentID,
+			Action:                 execution.Action,
+			Status:                 execution.Status,
+			MarketID:               nullStringValue(intent.MarketID),
+			MarketContractAddress:  firstNonEmpty(nullStringValue(execution.MarketContractAddress), nullStringValue(intent.MarketContractAddress)),
+			Amount:                 nullStringValue(intent.Amount),
+			Outcome:                outcomeFromAgentAction(execution.Action, nullStringValue(intent.Outcome)),
+			Side:                   sideFromAgentAction(execution.Action),
+			TransactionHash:        nullStringValue(execution.TransactionHash),
+			ApproveTransactionHash: nullStringValue(execution.ApproveTransactionHash),
+			ErrorCode:              nullStringValue(execution.ErrorCode),
+			ErrorMessage:           nullStringValue(execution.ErrorMessage),
+			Readback:               jsonObjectMap(execution.Readback),
+			CreatedAt:              execution.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+			UpdatedAt:              execution.UpdatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+		}
+		if execution.CompletedAt.Valid {
+			item.CompletedAt = execution.CompletedAt.Time.Format("2006-01-02T15:04:05.000000000Z07:00")
+		}
+		items = append(items, item)
+	}
+	sort.SliceStable(items, func(i int, j int) bool {
+		return items[i].CreatedAt > items[j].CreatedAt
+	})
+	return items
+}
+
 func newDurableAgentIntentInput(intent agent.Intent) repository.CreateAgentIntentInput {
 	validationResult, _ := json.Marshal(intent.ValidationResult)
 	warnings, _ := json.Marshal(intent.Warnings)
@@ -1538,7 +1825,24 @@ func newAgentIntentFromRepository(intent repository.AgentIntent) agent.Intent {
 }
 
 func newAgentExecutionReadbackJSON(readback agent.ExecutionReadback) json.RawMessage {
-	bytes, err := json.Marshal(readback)
+	bytes, err := json.Marshal(agentReadbackResponse{
+		MarketCount:     readback.MarketCount,
+		CreatedMarket:   readback.CreatedMarket,
+		IsMarket:        readback.IsMarket,
+		MarketStatus:    readback.MarketStatus,
+		WinningOutcome:  readback.WinningOutcome,
+		YesPositions:    readback.YesPositions,
+		NoPositions:     readback.NoPositions,
+		TotalYes:        readback.TotalYes,
+		TotalNo:         readback.TotalNo,
+		TotalCollateral: readback.TotalCollateral,
+		ClaimablePayout: readback.ClaimablePayout,
+		ClaimableRefund: readback.ClaimableRefund,
+		HasClaimed:      readback.HasClaimed,
+		IsOpen:          readback.IsOpen,
+		USDCBalance:     readback.USDCBalance,
+		USDCAllowance:   readback.USDCAllowance,
+	})
 	if err != nil {
 		return json.RawMessage(`{}`)
 	}
@@ -1568,6 +1872,65 @@ func newAgentExecutionFailure(err error) agentExecutionFailure {
 	default:
 		return agentExecutionFailure{Status: http.StatusBadGateway, Code: "agent_execution_failed", Message: "agent execution failed"}
 	}
+}
+
+func validateAgentIDPath(w http.ResponseWriter, rawAgentID string) (string, bool) {
+	agentID, validationErrors := validateAgentID(rawAgentID)
+	if len(validationErrors) > 0 {
+		httpjson.WriteJSON(w, http.StatusBadRequest, map[string]any{
+			"error": map[string]any{
+				"code":    "agent_id_invalid",
+				"message": "agent_id validation failed",
+				"details": validationErrors,
+			},
+		})
+		return "", false
+	}
+	return agentID, true
+}
+
+func outcomeFromAgentAction(action string, fallback string) string {
+	if fallback != "" {
+		return fallback
+	}
+	switch action {
+	case agent.ActionBuyYes:
+		return "yes"
+	case agent.ActionBuyNo:
+		return "no"
+	default:
+		return ""
+	}
+}
+
+func sideFromAgentAction(action string) string {
+	switch action {
+	case agent.ActionBuyYes, agent.ActionBuyNo:
+		return "buy"
+	default:
+		return ""
+	}
+}
+
+func ratToDecimalString(value *big.Rat) string {
+	if value == nil || value.Sign() == 0 {
+		return "0"
+	}
+	if value.IsInt() {
+		return value.Num().String()
+	}
+	return value.FloatString(18)
+}
+
+func jsonObjectMap(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	decoded := map[string]any{}
+	if err := json.Unmarshal(raw, &decoded); err != nil || len(decoded) == 0 {
+		return nil
+	}
+	return decoded
 }
 
 func newAgentExecutionPlanResponse(executionPlan agent.ExecutionPlan) agentExecutionPlanResponse {

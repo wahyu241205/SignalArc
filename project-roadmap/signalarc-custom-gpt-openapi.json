@@ -153,6 +153,114 @@
         }
       }
     },
+    "/agent/portfolio/{agent_id}": {
+      "get": {
+        "operationId": "getAgentPortfolio",
+        "summary": "Get SignalArc agent portfolio",
+        "description": "Returns a compact read-only portfolio summary for a registered SignalArc agent wallet. Positions are derived from durable executed agent buy intents/executions and are not live onchain balance readbacks.",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent portfolio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "portfolio": {
+                      "$ref": "#/components/schemas/AgentPortfolio"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid agent_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent wallet not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/activity/{agent_id}": {
+      "get": {
+        "operationId": "getAgentActivity",
+        "summary": "Get SignalArc agent activity",
+        "description": "Returns recent framework-neutral activity for a registered SignalArc agent from durable intent and execution records.",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent activity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "activity": {
+                      "$ref": "#/components/schemas/AgentActivity"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid agent_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent wallet not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/agent/onboarding/start": {
       "post": {
         "operationId": "startAgentOnboarding",
@@ -1004,6 +1112,53 @@
         }
       }
     },
+    "/agent/intents/{intent_id}/executions": {
+      "get": {
+        "operationId": "listAgentIntentExecutions",
+        "summary": "List SignalArc agent intent executions",
+        "description": "Returns durable execution attempts for one agent intent, including tx hashes, readback JSON, and sanitized error fields when available.",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Intent executions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "executions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentActivityItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Intent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/agent/intents/{intent_id}/execute": {
       "post": {
         "operationId": "executeAgentIntent",
@@ -1591,7 +1746,133 @@
           "closes_at": {
             "type": "string"
           },
+          "market_contract_address": {
+            "type": "string"
+          },
           "resolution_source": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentPortfolio": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "agent_wallet_address": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "wallet_provider": {
+            "type": "string"
+          },
+          "active_positions_count": {
+            "type": "integer"
+          },
+          "resolved_or_closed_positions_count": {
+            "type": "integer"
+          },
+          "claimable_refundable_count": {
+            "type": "integer"
+          },
+          "total_exposure": {
+            "type": "string"
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "settlements": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "unavailable_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AgentActivity": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentActivityItem"
+            }
+          }
+        }
+      },
+      "AgentActivityItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "intent_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "market_id": {
+            "type": "string"
+          },
+          "market_title": {
+            "type": "string"
+          },
+          "market_contract_address": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string"
+          },
+          "transaction_hash": {
+            "type": "string"
+          },
+          "approve_transaction_hash": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "error_message": {
+            "type": "string"
+          },
+          "readback": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "completed_at": {
             "type": "string"
           }
         }
