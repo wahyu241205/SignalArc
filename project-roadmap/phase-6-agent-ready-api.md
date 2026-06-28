@@ -250,13 +250,21 @@ Deferred:
 
 ### 6E Agent Developer Surface
 
+Status: IMPLEMENTED LOCALLY in this phase.
+
 Goal:
 
 - Make SignalArc usable by any external agent framework without channel lock-in.
 
-Likely work:
+Implemented:
 
-- Framework-neutral Agent API docs.
-- OpenAPI cleanup with examples for generic HTTP clients.
-- Custom GPT-specific instructions moved to an integration guide.
-- SDK/tool examples that never require private keys or Circle secrets.
+- Reworked `docs/AGENT_API.md` as the canonical framework-neutral HTTP integration guide.
+- Added concrete cURL examples for market discovery, onboarding, wallet/session reads, buy intent creation, confirm, execute, intent lookup, intent executions, portfolio, and activity.
+- Documented base URLs, local development URL, identity/wallet/session model, supported actions, durable intent/execution records, idempotency, safety policy, stable errors, limitations, and non-goals.
+- Aligned OpenAPI schema naming around `AgentIntent`, `AgentExecution`, `AgentPortfolio`, `AgentActivityItem`, and `AgentError`.
+- Added `project-roadmap/phase-6-local-smoke-test.md` with local validation commands, backend boot checks, Agent API curl sequence, and expected safe failures.
+
+Deferred:
+
+- No new SDK package was added.
+- Custom GPT remains supported by the existing schema, but channel-specific bot behavior is not part of the core Agent API contract.

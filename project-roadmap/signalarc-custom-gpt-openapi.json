@@ -63,7 +63,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -108,7 +108,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -145,7 +145,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -189,7 +189,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -199,7 +199,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -243,7 +243,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -253,7 +253,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -365,7 +365,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -375,7 +375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -385,7 +385,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -395,7 +395,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -462,7 +462,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -472,7 +472,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -482,7 +482,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -492,7 +492,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -502,7 +502,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -545,7 +545,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -592,7 +592,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -639,7 +639,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -686,7 +686,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -696,7 +696,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -706,7 +706,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -753,7 +753,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -763,7 +763,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -773,7 +773,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -783,7 +783,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -949,7 +949,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -959,7 +959,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -969,7 +969,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1040,7 +1040,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1050,7 +1050,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1060,7 +1060,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1104,7 +1104,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1151,7 +1151,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1207,7 +1207,7 @@
                       "$ref": "#/components/schemas/AgentIntent"
                     },
                     "execution": {
-                      "$ref": "#/components/schemas/ExecutionResult"
+                      "$ref": "#/components/schemas/AgentExecution"
                     }
                   }
                 }
@@ -1219,7 +1219,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1229,7 +1229,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1239,7 +1239,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1249,7 +1249,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1259,7 +1259,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1269,7 +1269,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1279,7 +1279,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1290,17 +1290,25 @@
   },
   "components": {
     "schemas": {
-      "ErrorResponse": {
+      "AgentError": {
         "type": "object",
         "properties": {
           "error": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "details": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -1601,7 +1609,7 @@
           }
         }
       },
-      "ExecutionResult": {
+      "AgentExecution": {
         "type": "object",
         "properties": {
           "intent_id": {
