@@ -18,7 +18,8 @@ function TradeExecutionResult({
         </p>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        This is a real connected-wallet transaction on Arc Testnet. No production settlement.
+        Your connected wallet opened this position on Arc Testnet. Track the
+        transactions below before refreshing balances.
       </p>
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
         <div>
@@ -56,7 +57,8 @@ function PendingState({
         <p className="text-sm font-medium text-blue-200">{label}</p>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        Confirm the wallet prompt, then wait for the Arc Testnet transaction to confirm.
+        Keep this page open. The ticket will update after wallet confirmation and
+        Arc Testnet receipt finality.
       </p>
       {state.approveHash ? (
         <p className="mt-3 text-sm text-muted-foreground">
@@ -84,6 +86,9 @@ export function TradeSubmitStatus({ state }: { state: TradeSubmitState }) {
             </p>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{state.message}</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            No new position is recorded unless the market transaction confirms.
+          </p>
           {state.approveHash ? (
             <p className="mt-2 text-sm text-muted-foreground">
               Approval: <TransactionLink hash={state.approveHash} />

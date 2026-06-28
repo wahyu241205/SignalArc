@@ -94,7 +94,16 @@ export function LifecyclePanel({
         ) : null}
 
         <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-4">
-          <h3 className="text-sm font-medium text-foreground">Claim</h3>
+          <div>
+            <h3 className="text-sm font-medium text-foreground">
+              {claimButtonLabel}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {claimButtonLabel === "Claim Refund"
+                ? "Cancelled markets return eligible connected-wallet collateral."
+                : "Resolved markets allow eligible connected wallets to claim payouts."}
+            </p>
+          </div>
           {claimDisabledReason ? (
             <p className="text-sm text-muted-foreground">{claimDisabledReason}</p>
           ) : null}

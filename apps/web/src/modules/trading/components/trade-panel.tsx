@@ -15,6 +15,7 @@ import {
 
 import type { TradeOutcome, TradeSubmitState } from "../types"
 import { TradeAmountInput } from "./trade-amount-input"
+import { TradePositionCard } from "./trade-position-card"
 import { TradePreviewCard } from "./trade-preview-card"
 import { TradeSideSelector } from "./trade-side-selector"
 import { TradeSubmitStatus } from "./trade-submit-status"
@@ -29,6 +30,8 @@ export function TradePanel({
   amount,
   onAmountChange,
   parsedAmount,
+  yesPosition,
+  noPosition,
   state,
   disabledReason,
   canSubmit,
@@ -47,6 +50,8 @@ export function TradePanel({
   amount: string
   onAmountChange: (value: string) => void
   parsedAmount: bigint | null
+  yesPosition: bigint | undefined
+  noPosition: bigint | undefined
   state: TradeSubmitState
   disabledReason: string | null
   canSubmit: boolean
@@ -77,6 +82,16 @@ export function TradePanel({
             contractAddress={contractAddress}
             marketId={marketId}
             walletAddress={walletAddress}
+            outcome={outcome}
+            amount={amount}
+            parsedAmount={parsedAmount}
+          />
+
+          <TradePositionCard
+            walletAddress={walletAddress}
+            yesPosition={yesPosition}
+            noPosition={noPosition}
+            isConnected={isConnected}
           />
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -96,13 +111,13 @@ export function TradePanel({
 
           <div className="grid gap-3 border-t border-border pt-4">
             <div className="flex items-start justify-between gap-4 text-sm">
-              <span className="text-muted-foreground">Order amount</span>
+              <span className="text-muted-foreground">Expected action</span>
               <span className="text-right font-medium text-foreground">
-                {amount || "0"} USDC
+                Buy {outcome} with {amount || "0"} USDC
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Network value: {parsedAmount ? parsedAmount.toString() : "0"} base units.
+              The wallet submits USDC approval first, then opens the market position.
             </p>
             <Button disabled={!canSubmit} type="submit" className="h-11 w-full">
               {state.status === "approving" ? "Approving USDC..." : null}

@@ -3,6 +3,11 @@ import { parseUnits } from "viem"
 import { USDC_ERC20_DECIMALS } from "@/lib/contracts"
 
 import type { TradeDisabledReasonInput } from "./types"
+import {
+  MARKET_STATUS_CANCELLED,
+  MARKET_STATUS_CLOSED,
+  MARKET_STATUS_RESOLVED,
+} from "./trade-intent"
 
 export function parseUsdcAmount(value: string) {
   const normalized = value.trim()
@@ -27,14 +32,26 @@ export function getTradeDisabledReason(input: TradeDisabledReasonInput) {
   if (!input.contractAddress) {
     return "Onchain contract not deployed for this market."
   }
-  if (input.isContractTradingClosed || input.hasReachedCloseTime) {
-    return "Trading is closed for this market."
+  if (input.contractStatus === MARKET_STATUS_RESOLVED) {
+    return "Market resolved. Trading is closed; check payout eligibility below."
+  }
+  if (input.contractStatus === MARKET_STATUS_CANCELLED) {
+    return "Market cancelled. Trading is closed; check refund eligibility below."
+  }
+  if (
+    input.contractStatus === MARKET_STATUS_CLOSED ||
+    input.isContractOpen === false ||
+    input.hasReachedCloseTime
+  ) {
+    return "Market closed. Trading is unavailable while resolution is pending."
+  }
+  if (input.isContractTradingClosed) {
+    return "Onchain market status is not open."
   }
   if (!input.isConnected) return "Connect wallet to trade."
   if (!input.isArcTestnet) return "Switch to Arc Testnet."
-  if (!input.isTradingOpen) return "Trading is not open for this market."
-  if (input.isContractOpen === false) {
-    return "Trading is closed for this market."
+  if (!input.isTradingOpen) {
+    return "Backend market status is not open for trading."
   }
   if (!input.parsedAmount) return "Enter a valid USDC amount."
 

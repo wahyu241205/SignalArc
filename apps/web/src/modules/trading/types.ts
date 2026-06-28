@@ -11,6 +11,7 @@ export type TradeOutcome = "YES" | "NO"
 
 export type TradeDisabledReasonInput = {
   contractAddress: string | null
+  contractStatus: number | undefined
   isContractTradingClosed: boolean
   hasReachedCloseTime: boolean
   isConnected: boolean
