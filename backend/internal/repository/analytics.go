@@ -54,6 +54,46 @@ type AnalyticsSummaryCacheInput struct {
 	GeneratedAt    time.Time
 }
 
+type UpsertAnalyticsMarketInput struct {
+	MarketAddress          string
+	FactoryAddress         string
+	MarketIDHash           string
+	CreatorAddress         string
+	ResolverAddress        string
+	CollateralTokenAddress string
+	Question               string
+	CloseTimestamp         sql.NullTime
+	DeploymentTxHash       string
+	DeploymentBlock        sql.NullInt64
+	DeploymentTimestamp    sql.NullTime
+	LastIndexedBlock       sql.NullInt64
+}
+
+type InsertAnalyticsEventInput struct {
+	ChainID         int
+	ContractAddress string
+	MarketAddress   string
+	FactoryAddress  string
+	EventName       string
+	TransactionHash string
+	BlockNumber     int64
+	LogIndex        int
+	BlockTimestamp  sql.NullTime
+	WalletAddress   string
+	Side            string
+	AmountBaseUnits string
+	Raw             json.RawMessage
+}
+
+type UpdateAnalyticsIndexerStateInput struct {
+	Source            string
+	FactoryAddress    string
+	LastIndexedBlock  int64
+	LastIndexedLogKey string
+	LastSuccessAt     time.Time
+	LastError         string
+}
+
 type AnalyticsRepository struct {
 	db *database.DB
 }
@@ -177,6 +217,162 @@ func (r *AnalyticsRepository) UpsertSummaryCache(ctx context.Context, input Anal
 	}
 
 	return saved, nil
+}
+
+func (r *AnalyticsRepository) UpsertAnalyticsMarket(ctx context.Context, input UpsertAnalyticsMarketInput) error {
+	return r.db.Exec(ctx, `
+		INSERT INTO analytics_markets (
+			market_address,
+			factory_address,
+			market_id_hash,
+			creator_address,
+			resolver_address,
+			collateral_token_address,
+			question,
+			close_timestamp,
+			deployment_tx_hash,
+			deployment_block,
+			deployment_timestamp,
+			last_indexed_block
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (market_address) DO UPDATE
+		SET
+			factory_address = EXCLUDED.factory_address,
+			market_id_hash = COALESCE(EXCLUDED.market_id_hash, analytics_markets.market_id_hash),
+			creator_address = COALESCE(EXCLUDED.creator_address, analytics_markets.creator_address),
+			resolver_address = COALESCE(EXCLUDED.resolver_address, analytics_markets.resolver_address),
+			collateral_token_address = COALESCE(EXCLUDED.collateral_token_address, analytics_markets.collateral_token_address),
+			question = COALESCE(EXCLUDED.question, analytics_markets.question),
+			close_timestamp = COALESCE(EXCLUDED.close_timestamp, analytics_markets.close_timestamp),
+			deployment_tx_hash = COALESCE(EXCLUDED.deployment_tx_hash, analytics_markets.deployment_tx_hash),
+			deployment_block = COALESCE(EXCLUDED.deployment_block, analytics_markets.deployment_block),
+			deployment_timestamp = COALESCE(EXCLUDED.deployment_timestamp, analytics_markets.deployment_timestamp),
+			last_indexed_block = GREATEST(
+				COALESCE(EXCLUDED.last_indexed_block, 0),
+				COALESCE(analytics_markets.last_indexed_block, 0)
+			),
+			updated_at = now()
+	`,
+		input.MarketAddress,
+		input.FactoryAddress,
+		nullableText(input.MarketIDHash),
+		nullableText(input.CreatorAddress),
+		nullableText(input.ResolverAddress),
+		nullableText(input.CollateralTokenAddress),
+		nullableText(input.Question),
+		input.CloseTimestamp,
+		nullableText(input.DeploymentTxHash),
+		input.DeploymentBlock,
+		input.DeploymentTimestamp,
+		input.LastIndexedBlock,
+	)
+}
+
+func (r *AnalyticsRepository) InsertAnalyticsEvent(ctx context.Context, input InsertAnalyticsEventInput) (bool, error) {
+	raw := input.Raw
+	if len(raw) == 0 {
+		raw = json.RawMessage(`{}`)
+	}
+	amountBaseUnits := input.AmountBaseUnits
+	if amountBaseUnits == "" {
+		amountBaseUnits = "0"
+	}
+
+	var inserted bool
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO analytics_events (
+			chain_id,
+			contract_address,
+			market_address,
+			factory_address,
+			event_name,
+			transaction_hash,
+			block_number,
+			log_index,
+			block_timestamp,
+			wallet_address,
+			side,
+			amount_base_units,
+			raw
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
+		ON CONFLICT (chain_id, transaction_hash, log_index) DO NOTHING
+		RETURNING true
+	`,
+		input.ChainID,
+		input.ContractAddress,
+		nullableText(input.MarketAddress),
+		nullableText(input.FactoryAddress),
+		input.EventName,
+		input.TransactionHash,
+		input.BlockNumber,
+		input.LogIndex,
+		input.BlockTimestamp,
+		nullableText(input.WalletAddress),
+		nullableText(input.Side),
+		amountBaseUnits,
+		raw,
+	).Scan(&inserted)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return inserted, nil
+}
+
+func (r *AnalyticsRepository) UpdateAnalyticsIndexerState(ctx context.Context, input UpdateAnalyticsIndexerStateInput) error {
+	lastSuccessAt := sql.NullTime{}
+	if !input.LastSuccessAt.IsZero() {
+		lastSuccessAt = sql.NullTime{Time: input.LastSuccessAt, Valid: true}
+	}
+
+	return r.db.Exec(ctx, `
+		INSERT INTO analytics_indexer_state (
+			source,
+			factory_address,
+			last_indexed_block,
+			last_indexed_log_key,
+			last_success_at,
+			last_error
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (source) DO UPDATE
+		SET
+			factory_address = EXCLUDED.factory_address,
+			last_indexed_block = GREATEST(
+				analytics_indexer_state.last_indexed_block,
+				EXCLUDED.last_indexed_block
+			),
+			last_indexed_log_key = EXCLUDED.last_indexed_log_key,
+			last_success_at = EXCLUDED.last_success_at,
+			last_error = EXCLUDED.last_error,
+			updated_at = now()
+	`,
+		input.Source,
+		input.FactoryAddress,
+		input.LastIndexedBlock,
+		nullableText(input.LastIndexedLogKey),
+		lastSuccessAt,
+		nullableText(input.LastError),
+	)
+}
+
+func (r *AnalyticsRepository) RebuildAnalyticsSummaryCache(ctx context.Context, factoryAddress string) (AnalyticsSummary, error) {
+	summary, err := r.AggregateSummaryFallback(ctx, factoryAddress)
+	if err != nil {
+		return AnalyticsSummary{}, err
+	}
+	return r.UpsertSummaryCache(ctx, AnalyticsSummaryCacheInput{
+		CacheKey:       AnalyticsSummaryCacheKey,
+		FactoryAddress: factoryAddress,
+		Summary:        summary,
+		LatestBlock:    summary.LatestBlock,
+		LatestEventAt:  summary.LatestEventAt,
+		GeneratedAt:    summary.GeneratedAt,
+	})
 }
 
 func (r *AnalyticsRepository) AggregateSummaryFallback(ctx context.Context, factoryAddress string) (AnalyticsSummary, error) {
