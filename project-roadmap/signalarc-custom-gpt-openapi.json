@@ -960,6 +960,50 @@
         }
       }
     },
+    "/agent/intents/{intent_id}": {
+      "get": {
+        "operationId": "getAgentIntent",
+        "summary": "Get a SignalArc agent intent",
+        "description": "Returns an in-memory agent intent by intent_id. This is useful immediately after preview or confirmation, but intents are not durable across backend restarts yet.",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Intent found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "intent": {
+                      "$ref": "#/components/schemas/AgentIntent"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Intent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/agent/intents/{intent_id}/execute": {
       "post": {
         "operationId": "executeAgentIntent",
@@ -1408,22 +1452,7 @@
           "intent_id": {
             "type": "string"
           },
-          "execution_mode": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "tx_hash": {
-            "type": "string"
-          },
-          "transaction_hash": {
-            "type": "string"
-          },
-          "block_number": {
-            "type": "integer"
-          },
-          "chain": {
+          "agent_id": {
             "type": "string"
           },
           "agent_wallet_address": {
@@ -1432,14 +1461,35 @@
           "wallet_provider": {
             "type": "string"
           },
+          "action": {
+            "type": "string"
+          },
+          "execution_mode": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "agent_factory_address": {
+            "type": "string"
+          },
+          "market_contract_address": {
+            "type": "string"
+          },
+          "broadcast_performed": {
+            "type": "boolean"
+          },
+          "approve_transaction_hash": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "transaction_hash": {
+            "type": "string"
+          },
           "readback": {
             "type": "object"
-          },
-          "error": {
-            "type": "string"
-          },
-          "executed_at": {
-            "type": "string"
           }
         }
       },

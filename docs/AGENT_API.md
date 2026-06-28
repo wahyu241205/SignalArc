@@ -91,6 +91,7 @@ Available now:
 | Balance (read-only) | `GET /agent/wallets/{agent_id}/balance` |
 | ARC-TESTNET faucet | `POST /agent/wallets/{agent_id}/faucet` |
 | Market intent preview | `POST /agent/intents` |
+| Intent lookup | `GET /agent/intents/{intent_id}` |
 | Confirm intent | `POST /agent/intents/{intent_id}/confirm` |
 | Execute intent | `POST /agent/intents/{intent_id}/execute` |
 | Markets list (read-only) | `GET /markets` |
@@ -240,7 +241,7 @@ Agents preview, confirm, and execute intents through these endpoints. They are d
 
 ### POST /agent/intents
 
-Creates a market intent preview. The request must include `agent_id`, `source_client`, `client_request_id`, `action`, and `user_wallet`. Supported actions:
+Creates a market intent preview. The request must include `agent_id`, `source_client`, `client_request_id`, `action`, and `user_wallet`. Intent preview records are currently in-memory backend state and are not durable across backend restarts. Supported actions:
 
 - `create_market`
 - `buy_yes`
@@ -253,9 +254,13 @@ Creates a market intent preview. The request must include `agent_id`, `source_cl
 
 For `create_market`, `close_timestamp` MUST be either a UTC RFC3339 string such as `2026-05-31T23:59:00Z` or a unix-seconds integer string such as `1780000000`. Natural-language values such as `default` or `end of May 2026` are rejected with `invalid_json` (when the body itself fails to parse) or with a stable `400` validation error such as `close_timestamp must be a unix-seconds integer or an RFC3339 timestamp such as 2026-05-31T23:59:00Z`. The Custom GPT MUST convert natural-language dates to RFC3339 before calling the Action.
 
+### GET /agent/intents/{intent_id}
+
+Returns the current in-memory intent preview or confirmed state. This is useful immediately after preview or confirmation, but it is not a durable audit/history endpoint yet.
+
 ### POST /agent/intents/{intent_id}/confirm
 
-Confirms a previewed intent and produces an execution plan. SignalArc validates allowed actions, market state, and ARC-TESTNET chain.
+Confirms a previewed intent and produces an execution plan. SignalArc validates intent shape and returns a transaction plan without broadcasting.
 
 ### POST /agent/intents/{intent_id}/execute
 
