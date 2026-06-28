@@ -20,7 +20,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 import {
   analyticsAgentIntegrationChecklist,
@@ -38,10 +37,8 @@ import {
   analyticsMetrics,
   analyticsPublicLinks,
   analyticsStatusBadges,
-  analyticsTopMarkets,
   isIndexedAnalyticsSummary,
 } from "../analytics-utils"
-import { shortenAnalyticsAddress } from "../format"
 import type { AnalyticsMetric, AnalyticsSummaryResponse } from "../types"
 import { useAnalyticsSummary } from "../use-analytics-summary"
 
@@ -383,66 +380,7 @@ function FactorySection({ summary, isLive }: { summary: AnalyticsSummaryResponse
 }
 
 function MarketsSection() {
-  return (
-    <section className="flex flex-col gap-7">
-      <SectionHeading
-        title="Created YES/NO Markets"
-        description="Each market created by the factory represents an individual YES/NO prediction market contract. Trading and lifecycle activity lives at the market-contract level, while the factory provides the canonical market creation registry."
-      />
-
-      <Card className="border-border/60 bg-card/60">
-        <CardHeader className="border-b border-border/50">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Top markets by collateral</CardTitle>
-              <CardDescription>Five leading contracts from the 126-market Arc Testnet deployment</CardDescription>
-            </div>
-            <Badge variant="outline">Testnet USDC</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="px-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[320px] pl-4">Question</TableHead>
-                <TableHead>Contract</TableHead>
-                <TableHead className="text-right">Collateral</TableHead>
-                <TableHead className="text-right">Position events</TableHead>
-                <TableHead className="pr-4 text-right">Explorer</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {analyticsTopMarkets.map((market) => (
-                <TableRow key={market.address}>
-                  <TableCell className="max-w-[520px] whitespace-normal pl-4 font-medium">{market.question}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground" title={market.address}>
-                    {shortenAnalyticsAddress(market.address)}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {market.collateral} <span className="text-xs text-muted-foreground">testnet USDC</span>
-                  </TableCell>
-                  <TableCell className="text-right">{market.positionEvents}</TableCell>
-                  <TableCell className="pr-4 text-right">
-                    <Button asChild variant="ghost" size="sm">
-                      <a
-                        href={market.explorerUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`View ${market.address} on Arcscan`}
-                      >
-                        Arcscan
-                        <ArrowUpRight data-icon="inline-end" />
-                      </a>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </section>
-  )
+  return null
 }
 
 function LifecycleSection({
