@@ -63,7 +63,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -108,7 +108,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -145,7 +145,115 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/portfolio/{agent_id}": {
+      "get": {
+        "operationId": "getAgentPortfolio",
+        "summary": "Get SignalArc agent portfolio",
+        "description": "Returns a compact read-only portfolio summary for a registered SignalArc agent wallet. Positions are derived from durable executed agent buy intents/executions and are not live onchain balance readbacks.",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent portfolio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "portfolio": {
+                      "$ref": "#/components/schemas/AgentPortfolio"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid agent_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent wallet not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/activity/{agent_id}": {
+      "get": {
+        "operationId": "getAgentActivity",
+        "summary": "Get SignalArc agent activity",
+        "description": "Returns recent framework-neutral activity for a registered SignalArc agent from durable intent and execution records.",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent activity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "activity": {
+                      "$ref": "#/components/schemas/AgentActivity"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid agent_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent wallet not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -257,7 +365,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -267,7 +375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -277,7 +385,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -287,7 +395,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -354,7 +462,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -364,7 +472,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -374,7 +482,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -384,7 +492,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -394,7 +502,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -437,7 +545,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -484,7 +592,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -531,7 +639,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -578,7 +686,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -588,7 +696,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -598,7 +706,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -645,7 +753,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -655,7 +763,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -665,7 +773,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -675,7 +783,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -687,7 +795,7 @@
       "post": {
         "operationId": "createAgentIntent",
         "summary": "Create a SignalArc agent intent preview",
-        "description": "Creates an agent intent preview. Reuse the exact agent_id from startAgentOnboarding and send valid JSON. For action=create_market, close_timestamp MUST be a UTC RFC3339 string such as 2026-05-31T23:59:00Z or a unix-seconds integer string such as 1780000000. Convert natural-language dates first.",
+        "description": "Creates a durable agent intent preview. Reuse the exact agent_id from startAgentOnboarding and send valid JSON. Duplicate agent_id + source_client + client_request_id requests return the existing intent. For action=create_market, close_timestamp MUST be a UTC RFC3339 string such as 2026-05-31T23:59:00Z or a unix-seconds integer string such as 1780000000. Convert natural-language dates first.",
         "requestBody": {
           "required": true,
           "content": {
@@ -761,7 +869,7 @@
                   },
                   "amount": {
                     "type": "string",
-                    "description": "Required for buy_yes and buy_no. Decimal string such as 1000000."
+                    "description": "Required for buy_yes and buy_no. Positive finite decimal string such as 1000000. If wallet policy_metadata includes max_trade_amount, amounts above that cap are rejected with agent_policy_violation."
                   },
                   "outcome": {
                     "type": "string",
@@ -837,21 +945,21 @@
             }
           },
           "400": {
-            "description": "Invalid intent request. Common codes: invalid_json (request body must be valid JSON; for create_market send close_timestamp as RFC3339 such as 2026-05-31T23:59:00Z or as a unix-seconds integer string).",
+            "description": "Invalid intent request. Common codes: invalid_json, agent_id_invalid, agent_intent_invalid.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
           },
           "403": {
-            "description": "Action not allowed for this agent",
+            "description": "Action or policy not allowed for this agent. Common codes: agent_action_forbidden, agent_policy_violation.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -861,7 +969,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -932,7 +1040,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -942,7 +1050,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -952,7 +1060,98 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/intents/{intent_id}": {
+      "get": {
+        "operationId": "getAgentIntent",
+        "summary": "Get a SignalArc agent intent",
+        "description": "Returns a durable agent intent by intent_id. Configured backend runtimes store intent preview, confirmation, executed, and failed state in Postgres.",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Intent found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "intent": {
+                      "$ref": "#/components/schemas/AgentIntent"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Intent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/intents/{intent_id}/executions": {
+      "get": {
+        "operationId": "listAgentIntentExecutions",
+        "summary": "List SignalArc agent intent executions",
+        "description": "Returns durable execution attempts for one agent intent, including tx hashes, readback JSON, and sanitized error fields when available.",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Intent executions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "executions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentActivityItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Intent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -964,7 +1163,7 @@
       "post": {
         "operationId": "executeAgentIntent",
         "summary": "Execute a confirmed SignalArc agent intent",
-        "description": "Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. Always reuse the exact intent_id returned by createAgentIntent and the exact agent_id returned by startAgentOnboarding.",
+        "description": "Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. SignalArc rejects unconfirmed intents with agent_intent_not_confirmed, rejects actions outside allowed_actions with agent_action_forbidden, and rejects optional policy_metadata violations with agent_policy_violation. Always reuse the exact intent_id returned by createAgentIntent and the exact agent_id returned by startAgentOnboarding.",
         "parameters": [
           {
             "name": "intent_id",
@@ -1008,7 +1207,7 @@
                       "$ref": "#/components/schemas/AgentIntent"
                     },
                     "execution": {
-                      "$ref": "#/components/schemas/ExecutionResult"
+                      "$ref": "#/components/schemas/AgentExecution"
                     }
                   }
                 }
@@ -1020,17 +1219,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
           },
           "403": {
-            "description": "Action not allowed for this agent or wallet",
+            "description": "Action or policy not allowed for this agent wallet. Common codes: agent_action_forbidden, agent_policy_violation.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1040,17 +1239,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
           },
           "409": {
-            "description": "Intent not in confirmed state",
+            "description": "Intent not in confirmed state. Common code: agent_intent_not_confirmed.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1060,7 +1259,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1070,7 +1269,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1080,7 +1279,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AgentError"
                 }
               }
             }
@@ -1091,17 +1290,25 @@
   },
   "components": {
     "schemas": {
-      "ErrorResponse": {
+      "AgentError": {
         "type": "object",
         "properties": {
           "error": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "details": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -1402,28 +1609,13 @@
           }
         }
       },
-      "ExecutionResult": {
+      "AgentExecution": {
         "type": "object",
         "properties": {
           "intent_id": {
             "type": "string"
           },
-          "execution_mode": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "tx_hash": {
-            "type": "string"
-          },
-          "transaction_hash": {
-            "type": "string"
-          },
-          "block_number": {
-            "type": "integer"
-          },
-          "chain": {
+          "agent_id": {
             "type": "string"
           },
           "agent_wallet_address": {
@@ -1432,14 +1624,35 @@
           "wallet_provider": {
             "type": "string"
           },
+          "action": {
+            "type": "string"
+          },
+          "execution_mode": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "agent_factory_address": {
+            "type": "string"
+          },
+          "market_contract_address": {
+            "type": "string"
+          },
+          "broadcast_performed": {
+            "type": "boolean"
+          },
+          "approve_transaction_hash": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "transaction_hash": {
+            "type": "string"
+          },
           "readback": {
             "type": "object"
-          },
-          "error": {
-            "type": "string"
-          },
-          "executed_at": {
-            "type": "string"
           }
         }
       },
@@ -1541,7 +1754,133 @@
           "closes_at": {
             "type": "string"
           },
+          "market_contract_address": {
+            "type": "string"
+          },
           "resolution_source": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentPortfolio": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "agent_wallet_address": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "string"
+          },
+          "wallet_provider": {
+            "type": "string"
+          },
+          "active_positions_count": {
+            "type": "integer"
+          },
+          "resolved_or_closed_positions_count": {
+            "type": "integer"
+          },
+          "claimable_refundable_count": {
+            "type": "integer"
+          },
+          "total_exposure": {
+            "type": "string"
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "settlements": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "unavailable_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AgentActivity": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentActivityItem"
+            }
+          }
+        }
+      },
+      "AgentActivityItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "intent_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "market_id": {
+            "type": "string"
+          },
+          "market_title": {
+            "type": "string"
+          },
+          "market_contract_address": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string"
+          },
+          "transaction_hash": {
+            "type": "string"
+          },
+          "approve_transaction_hash": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "error_message": {
+            "type": "string"
+          },
+          "readback": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "completed_at": {
             "type": "string"
           }
         }

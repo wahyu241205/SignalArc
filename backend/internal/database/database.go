@@ -38,6 +38,8 @@ var expectedPhase2Tables = []string{
 	"webhooks",
 	"agent_access",
 	"agent_wallets",
+	"agent_intents",
+	"agent_executions",
 }
 
 var expectedMarketColumns = []string{
@@ -177,7 +179,7 @@ func (db *DB) ValidateSchema(parent context.Context) (SchemaValidation, error) {
 		}
 	}
 
-	if result.MigrationVersion == 19 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
+	if result.MigrationVersion == 20 && !result.Dirty && len(result.MissingTables) == 0 && len(result.MissingColumns) == 0 {
 		result.Status = "ok"
 	}
 

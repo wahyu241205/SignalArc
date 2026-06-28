@@ -8,7 +8,7 @@ https://api.signalarc.fun
 
 For local development, use http://localhost:4000. Local-only references such as ngrok tunnels are development conveniences, not production endpoints.
 
-The production API is live on GCP Cloud Run service `signalarc-backend-api` behind the custom domain `api.signalarc.fun`. The Cloud Run image bundles Node/npm and the global Circle CLI (`@circle-fin/cli`) so ARC-TESTNET agent flows can run inside the container. The production database is GCP Cloud SQL, migrated to version 18.
+The production API is live on GCP Cloud Run service `signalarc-backend-api` behind the custom domain `api.signalarc.fun`. The Cloud Run image bundles Node/npm and the global Circle CLI (`@circle-fin/cli`) so ARC-TESTNET agent flows can run inside the container. Phase 6 deployment requires the production database to be migrated through schema version 20 before the Agent API durable intent, execution, portfolio, and activity surfaces are considered current.
 
 ## API Status
 
@@ -64,12 +64,18 @@ Agent endpoints (live, see [Agent API](./AGENT_API.md) for the full reference):
 | POST | `/agent/onboarding/verify` | Verify OTP, register agent wallet, and activate session. |
 | GET | `/agent/onboarding/{onboarding_id}` | Get onboarding status. |
 | GET | `/agent/sessions/{agent_id}` | Get active agent session. |
+| POST | `/agent/wallets` | Register or upsert an agent wallet record. |
 | GET | `/agent/wallets/{agent_id}` | Get registered agent wallet. |
 | GET | `/agent/wallets/{agent_id}/balance` | Read-only Circle Agent Wallet balance. |
 | POST | `/agent/wallets/{agent_id}/faucet` | Request ARC-TESTNET faucet funding for the registered agent wallet. |
+| POST | `/agent/wallets/{agent_id}/disable` | Disable a registered agent wallet. |
 | POST | `/agent/intents` | Create an agent intent preview. |
+| GET | `/agent/intents/{intent_id}` | Get the current durable intent state. |
 | POST | `/agent/intents/{intent_id}/confirm` | Confirm an agent intent. |
 | POST | `/agent/intents/{intent_id}/execute` | Execute a confirmed agent intent. |
+| GET | `/agent/intents/{intent_id}/executions` | List durable execution attempts for an intent. |
+| GET | `/agent/portfolio/{agent_id}` | Read agent portfolio summary derived from durable agent records. |
+| GET | `/agent/activity/{agent_id}` | Read agent activity/history derived from durable agent records. |
 
 ## Common Response Shapes
 
@@ -176,7 +182,7 @@ Response:
 ```json
 {
   "status": "ok",
-  "migration_version": 19,
+  "migration_version": 20,
   "dirty": false,
   "missing_tables": []
 }
@@ -574,4 +580,6 @@ Known errors: none from handler logic.
 
 ## Agent Endpoints
 
-The agent surface (onboarding, OTP verify, session, wallet, balance, ARC-TESTNET faucet, and intent preview/confirm/execute) is documented in detail in the dedicated [Agent API](./AGENT_API.md) reference. The Custom GPT shipped with SignalArc is preconfigured against `https://api.signalarc.fun` and exercises these endpoints end-to-end.
+The Agent API surface is documented in detail in [Agent API](./AGENT_API.md), which is the canonical framework-neutral reference and can be shared with external agents, agent frameworks, and custom HTTP clients. It covers onboarding, OTP verify, sessions, wallets, balance, ARC-TESTNET faucet, market discovery, durable intent preview/confirm/execute, durable execution records, intent execution history, portfolio, activity, idempotency through `agent_id + source_client + client_request_id`, and Phase 6 safety/policy checks such as `agent_id` validation, `allowed_actions`, explicit confirmation, and optional `policy_metadata.max_trade_amount`.
+
+The Custom GPT shipped with SignalArc is preconfigured against `https://api.signalarc.fun`, but the Agent API contract is not Custom GPT-specific.

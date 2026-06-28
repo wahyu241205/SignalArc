@@ -1,246 +1,79 @@
 # Agent API
 
-SignalArc exposes agent-driven prediction market flows through a structured HTTP API designed for AI agents, institutional dashboards, monitoring systems, and Custom GPT actions. The same surface powers the SignalArc GPT Agent that judges and end users interact with directly.
+SignalArc exposes a framework-neutral Agent API for Arc Testnet YES/NO prediction market workflows. Any external agent runtime can integrate through HTTP: Custom GPTs, Claude Code, LangChain, ElizaOS, Telegram or WhatsApp bots, Hermes, OpenClaw, internal dashboards, or a plain script.
 
-Live production API base:
+SignalArc owns the API, wallet/session records, intent lifecycle, execution coordination, and read models. It does not own the user's agent runtime, prompt loop, messaging channel, or autonomous policy engine.
+
+## Base URLs
+
+Production:
 
 ```text
 https://api.signalarc.fun
 ```
 
-The production API is live on GCP Cloud Run service `signalarc-backend-api` behind the custom domain `api.signalarc.fun`. The Cloud Run image bundles Node/npm and the Circle CLI (`@circle-fin/cli`) so ARC-TESTNET agent flows can run inside the container. The production database is GCP Cloud SQL, migrated to version 18.
-
-ngrok URLs are local development conveniences only. They are not production endpoints and are not used by the published GPT Agent.
-
-## Custom GPT Integration
-
-The published SignalArc GPT Agent is preconfigured to call `https://api.signalarc.fun`. End users and judges do not need to import OpenAPI manually.
-
-For maintainers who need to re-import the schema:
+Local development:
 
 ```text
-https://raw.githubusercontent.com/wahyu241205/SignalArc/main/project-roadmap/signalarc-custom-gpt-openapi.json
+http://localhost:4000
 ```
 
-### Custom GPT instruction block
+Useful local health checks:
 
-The published SignalArc GPT Agent SHOULD use the following instruction block to keep onboarding and intent flow stable for non-developer users:
+```bash
+curl http://localhost:4000/health
+curl http://localhost:4000/readyz
+curl http://localhost:4000/schema/validate
+```
 
-- Always call a SignalArc Action when the user asks to onboard, verify, register, check session/wallet/balance, request faucet, list markets, create/confirm/execute an intent, or use words such as cek, call, panggil, test, daftar, onboarding, saldo, wallet, faucet, or market.
-- Never answer those user requests from documentation or memory; always call the matching Action.
-- Generate a unique `agent_id` per user before calling `startAgentOnboarding`. Recommended shape `agent_<slug>_chatgpt_<suffix>`, for example `agent_sanatarau21_chatgpt_001`. Reuse the exact returned `agent_id` for every subsequent operation in the session.
-- Never use generic placeholder `agent_id` values such as `signalarc-gpt-agent`, `agent_desi_001`, `default`, `test`, `demo`, `user`, `agent`, or `chatgpt`. The SignalArc backend rejects these with `agent_onboarding_invalid` or `agent_wallet_invalid`.
-- For `create_market` intents, always send `close_timestamp` as a UTC RFC3339 string such as `2026-05-31T23:59:00Z` or as a unix-seconds integer string such as `1780000000`. Never send natural-language values such as "default", "end of May 2026", or "soon"; convert the user's intent to RFC3339 first.
-- If the user gives an ambiguous date, ask one short clarification question before calling the Action.
-- For market discovery, call `listAgentMarkets` (`GET /agent/markets`) or `listMarkets` (`GET /markets`).
+## Non-Goals
 
-### agent_id naming rules
+- No smart contract changes.
+- No Smart Contract V2.
+- No channel-specific bot design.
+- No autonomous unattended trading by default.
+- No mainnet funding.
+- No arbitrary transfers, swaps, withdrawals, or deposits.
+- No private keys, seed phrases, Circle API keys, Circle session tokens, or credential paths in API responses.
 
-The backend validates `agent_id` on `POST /agent/onboarding/start` and `POST /agent/wallets`. Validation rules:
+## Agent Identity
 
-- Required.
+`agent_id` is the stable caller-supplied identity for an external agent/user pair. Reuse the same `agent_id` across onboarding, wallet/session reads, intent creation, confirmation, execution, portfolio, and activity.
+
+Validation rules:
+
+- Required on onboarding, wallet registration, wallet/session reads, portfolio/activity reads, and intent requests where an agent identity is present.
 - Must start with `agent_`.
 - Must be at least 10 characters long.
-- May only contain ASCII letters, digits, underscore, or hyphen.
-- Must not match any of the documented generic placeholders: `signalarc-gpt-agent`, `signalarc_gpt_agent`, `agent_desi_001`, `default`, `defaultagent`, `default_agent`, `test`, `testagent`, `test_agent`, `demo`, `demoagent`, `demo_agent`, `user`, `useragent`, `user_agent`, `agent`, `chatgpt`, `chatgpt_agent` (case-insensitive).
+- May contain ASCII letters, digits, underscores, and hyphens.
+- Must not be a generic placeholder such as `signalarc-gpt-agent`, `agent_desi_001`, `default`, `test`, `demo`, `user`, `agent`, or `chatgpt`.
 
-Recommended live shapes:
-
-- `agent_sanatarau21_chatgpt_001`
-- `agent_adenhusen65_live_002`
-
-## Live Architecture
-
-| Surface | Target |
-| --- | --- |
-| `https://signalarc.fun` | Vercel frontend. |
-| `https://api.signalarc.fun` | GCP Cloud Run service `signalarc-backend-api`. |
-| Production database | GCP Cloud SQL PostgreSQL, schema version 18. |
-| Backend container image | Includes `@circle-fin/cli` global on PATH so `circle wallet ...` commands run inside the container. |
-
-## Agent Flow Overview
-
-The end-to-end agent flow looks like this:
+Safe example used in this guide:
 
 ```text
-onboarding start
-    -> OTP verify
-        -> active session
-            -> wallet
-                -> balance
-                    -> faucet
-                        -> create intent
-                            -> confirm intent
-                                -> execute intent
+agent_demo_custom_001
 ```
 
-Each step maps to a backend endpoint described below.
+## Wallet And Session Model
 
-## Capability Status
+An agent wallet is a SignalArc database record keyed by `agent_id`. Current production flows resolve and register a Circle Agent Wallet on `ARC-TESTNET`.
 
-Available now:
-
-| Capability | Endpoint |
-| --- | --- |
-| Health | `GET /health` |
-| Onboarding start | `POST /agent/onboarding/start` |
-| OTP verify | `POST /agent/onboarding/verify` |
-| Onboarding lookup | `GET /agent/onboarding/{onboarding_id}` |
-| Active session | `GET /agent/sessions/{agent_id}` |
-| Registered wallet | `GET /agent/wallets/{agent_id}` |
-| Balance (read-only) | `GET /agent/wallets/{agent_id}/balance` |
-| ARC-TESTNET faucet | `POST /agent/wallets/{agent_id}/faucet` |
-| Market intent preview | `POST /agent/intents` |
-| Confirm intent | `POST /agent/intents/{intent_id}/confirm` |
-| Execute intent | `POST /agent/intents/{intent_id}/execute` |
-| Markets list (read-only) | `GET /markets` |
-| Market detail (read-only) | `GET /markets/{market_id}` |
-| Agent-readable market list | `GET /agent/markets` |
-
-Not available / out of scope:
-
-- Arbitrary transfer.
-- Withdraw / deposit.
-- Logout / agent session management endpoints.
-- Mainnet funding.
-- Arc mainnet contract deployment.
-- API key enforcement, paid access, autonomous trading, or production SLA.
-
-## Onboarding and Session Endpoints
-
-### POST /agent/onboarding/start
-
-Starts SignalArc Circle Agent Wallet onboarding and dispatches the OTP email through Circle.
-
-```bash
-curl -X POST https://api.signalarc.fun/agent/onboarding/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "agent_sanatarau21_chatgpt_001",
-    "user_email": "you@example.com",
-    "source_client": "chatgpt_custom_action",
-    "channel": "chatgpt"
-  }'
-```
-
-Response includes the onboarding record and a `next_step` value such as `circle_otp_required`. Raw Circle request IDs are not exposed.
-
-The backend rejects generic placeholder `agent_id` values such as `signalarc-gpt-agent`, `agent_desi_001`, `default`, `test`, `demo`, `user`, `agent`, or `chatgpt` with HTTP 400 `agent_onboarding_invalid`.
-
-### POST /agent/onboarding/verify
-
-Verifies the OTP, registers the resolved Circle Agent Wallet address in the SignalArc database, and activates an agent session.
-
-```bash
-curl -X POST https://api.signalarc.fun/agent/onboarding/verify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "onboarding_id": "agent_onboarding_xxx",
-    "otp": "123456"
-  }'
-```
-
-Successful verification returns the onboarding, agent wallet, and agent session records, with `next_step` set to `agent_session_active`.
-
-### GET /agent/onboarding/{onboarding_id}
-
-Returns the current onboarding record. Useful for poll-style flows.
-
-### GET /agent/sessions/{agent_id}
-
-Returns the active agent session, including `agent_wallet_address`, `wallet_provider`, `chain`, and `allowed_actions`.
-
-### GET /agent/wallets/{agent_id}
-
-Returns the registered agent wallet record managed by SignalArc.
-
-### GET /agent/wallets/{agent_id}/balance
-
-Returns a read-only Circle Agent Wallet balance snapshot.
-
-```json
-{
-  "agent_wallet_balance": {
-    "agent_id": "agent_sanatarau21_chatgpt_001",
-    "agent_wallet_address": "0x...",
-    "chain": "ARC-TESTNET",
-    "balances": []
-  }
-}
-```
-
-Errors map to `404 agent_wallet_not_found`, `501 circle_agent_wallet_balance_not_configured`, or `502 circle_agent_wallet_balance_failed`.
-
-## ARC-TESTNET Faucet
-
-### POST /agent/wallets/{agent_id}/faucet
-
-Requests ARC-TESTNET faucet funding for the registered agent wallet on behalf of an active SignalArc agent. SignalArc forwards the request to the documented Circle CLI testnet faucet using only the registered wallet address.
-
-Endpoint properties:
-
-- ARC-TESTNET only.
-- Token is fixed to `usdc`.
-- No request body.
-- Uses only the registered `agent_wallet_address` from the SignalArc database.
-- Does not accept arbitrary recipient addresses; any `address`, `chain`, or `token` in the request body is ignored.
-- Does not transfer, swap, execute contracts, create markets, or use mainnet funding.
-
-Example:
-
-```bash
-curl -X POST https://api.signalarc.fun/agent/wallets/agent_sanatarau21_chatgpt_001/faucet
-```
-
-Underlying Circle CLI command shape (run inside the Cloud Run container, never exposed to the caller):
-
-```text
-circle wallet fund --address <registered_agent_wallet_address> --chain ARC-TESTNET --token usdc --output json
-```
-
-Success response (200):
-
-```json
-{
-  "agent_wallet_faucet": {
-    "agent_id": "agent_sanatarau21_chatgpt_001",
-    "agent_wallet_address": "0x9999999999999999999999999999999999999999",
-    "chain": "ARC-TESTNET",
-    "token": "usdc",
-    "status": "requested",
-    "result": {}
-  }
-}
-```
-
-Response fields:
+Important fields:
 
 | Field | Meaning |
 | --- | --- |
-| `agent_id` | The SignalArc agent identifier. |
-| `agent_wallet_address` | The registered Circle Agent Wallet address SignalArc actually targeted. |
-| `chain` | Always `ARC-TESTNET`. |
-| `token` | Always `usdc`. |
-| `status` | Always `requested` when SignalArc successfully forwarded the call. SignalArc does not claim provider-side success. |
-| `result` | Parsed Circle CLI JSON output when the CLI returned JSON, or `{ "message": "..." }` when the CLI returned successful text-only output. Sensitive content is sanitized server-side. |
+| `agent_wallet_address` | Registered wallet address SignalArc will target. |
+| `wallet_provider` | Current production provider is `circle_agent_wallet`. |
+| `chain` | Current execution and faucet flows require `ARC-TESTNET`. |
+| `allowed_actions` | Wallet/session scoped action allowlist. |
+| `policy_metadata` | Optional policy object; `max_trade_amount` is enforced for buy intents when present. |
+| `status` | Wallet must be `active` for execution and faucet flows. |
 
-Failure codes:
+SignalArc never asks the external agent to provide a private key. Circle OTPs, request IDs, session files, tokens, and credentials are not exposed in public responses.
 
-| Status | Code | Meaning |
-| --- | --- | --- |
-| 404 | `agent_wallet_not_found` | No registered agent wallet exists for the supplied `agent_id`. |
-| 409 | `agent_wallet_status_invalid` | Registered agent wallet exists but is not `active`. |
-| 409 | `agent_wallet_chain_invalid` | Registered agent wallet exists but is not on `ARC-TESTNET`. |
-| 501 | `circle_agent_wallet_faucet_not_configured` | Faucet helper is not enabled in this runtime. |
-| 502 | `circle_agent_wallet_faucet_failed` | Circle CLI faucet command failed; SignalArc returns a generic error and never echoes raw CLI output, credential paths, tokens, request IDs, session material, or emails. |
+## Supported Actions
 
-## Market Intent Lifecycle
-
-Agents preview, confirm, and execute intents through these endpoints. They are documented at the surface level here; see the OpenAPI schema for full request/response shapes.
-
-### POST /agent/intents
-
-Creates a market intent preview. The request must include `agent_id`, `source_client`, `client_request_id`, `action`, and `user_wallet`. Supported actions:
+Intent actions:
 
 - `create_market`
 - `buy_yes`
@@ -251,78 +84,257 @@ Creates a market intent preview. The request must include `agent_id`, `source_cl
 - `cancel_market`
 - `claim_refund`
 
-For `create_market`, `close_timestamp` MUST be either a UTC RFC3339 string such as `2026-05-31T23:59:00Z` or a unix-seconds integer string such as `1780000000`. Natural-language values such as `default` or `end of May 2026` are rejected with `invalid_json` (when the body itself fails to parse) or with a stable `400` validation error such as `close_timestamp must be a unix-seconds integer or an RFC3339 timestamp such as 2026-05-31T23:59:00Z`. The Custom GPT MUST convert natural-language dates to RFC3339 before calling the Action.
+`buy_yes` and `buy_no` require a positive finite decimal `amount`. `create_market` requires `question`, `resolver`, `collateral_token`, and `close_timestamp` as UTC RFC3339 or unix-seconds string.
 
-### POST /agent/intents/{intent_id}/confirm
+## Lifecycle
 
-Confirms a previewed intent and produces an execution plan. SignalArc validates allowed actions, market state, and ARC-TESTNET chain.
+Transaction actions must follow this lifecycle:
 
-### POST /agent/intents/{intent_id}/execute
-
-Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. Execution mode is `circle_agent_wallet_cli`.
-
-## Agent-Readable Market Discovery
-
-### GET /agent/markets
-
-Returns up to 50 markets in a compact shape suitable for market discovery and signal-reading workflows.
-
-```bash
-curl https://api.signalarc.fun/agent/markets
+```text
+create intent preview -> confirm intent -> execute confirmed intent
 ```
 
-Response shape:
+`POST /agent/intents` validates shape and returns a preview. It does not broadcast.
+
+`POST /agent/intents/{intent_id}/confirm` confirms the preview and returns an execution plan. It does not broadcast.
+
+`POST /agent/intents/{intent_id}/execute` executes only a confirmed intent through the configured wallet provider. Unconfirmed execution returns `409 agent_intent_not_confirmed`.
+
+Configured backends persist durable intent and execution records in Postgres. The in-process store remains a fallback for tests and unconfigured runtimes.
+
+## Idempotency
+
+Intent creation supports idempotency with:
+
+- `agent_id`
+- `source_client`
+- `client_request_id`
+
+If the same agent sends the same `source_client + client_request_id` again, configured durable storage returns the existing intent instead of creating a duplicate.
+
+Example values:
 
 ```json
 {
-  "markets": [
-    {
-      "id": "10000000-0000-4000-8000-000000000003",
-      "title": "Will SignalArc complete its public docs?",
-      "status": "OPEN",
-      "category": "product",
-      "collateral_asset": "USDC",
-      "chain": "Arc Testnet",
-      "closes_at": "2026-06-01T00:00:00Z",
-      "resolution_source": "Project repository evidence"
-    }
-  ]
+  "agent_id": "agent_demo_custom_001",
+  "source_client": "custom-agent",
+  "client_request_id": "demo-001"
 }
 ```
 
-### GET /markets and GET /markets/{market_id}
+## Endpoint Summary
 
-`GET /markets` returns up to 50 full market records with creator, contract, and lifecycle metadata. `GET /markets/{market_id}` returns one full record by id. Both are read-only and are exposed in the Custom GPT OpenAPI as `listMarkets` and `getMarket`. Use them when callers ask for open or trending markets, or when the GPT needs to look up a single market by id. Live market discovery through these Actions does not require onboarding, wallet, faucet, or signature steps.
+| Capability | Endpoint |
+| --- | --- |
+| Health | `GET /health` |
+| Readiness | `GET /readyz` |
+| Schema validation | `GET /schema/validate` |
+| Agent market discovery | `GET /agent/markets` |
+| Full market list | `GET /markets` |
+| Full market detail | `GET /markets/{market_id}` |
+| Start onboarding | `POST /agent/onboarding/start` |
+| Verify onboarding OTP | `POST /agent/onboarding/verify` |
+| Onboarding lookup | `GET /agent/onboarding/{onboarding_id}` |
+| Active session | `GET /agent/sessions/{agent_id}` |
+| Registered wallet | `GET /agent/wallets/{agent_id}` |
+| Wallet balance | `GET /agent/wallets/{agent_id}/balance` |
+| Testnet faucet | `POST /agent/wallets/{agent_id}/faucet` |
+| Create intent | `POST /agent/intents` |
+| Get intent | `GET /agent/intents/{intent_id}` |
+| Confirm intent | `POST /agent/intents/{intent_id}/confirm` |
+| Execute intent | `POST /agent/intents/{intent_id}/execute` |
+| List intent executions | `GET /agent/intents/{intent_id}/executions` |
+| Agent portfolio | `GET /agent/portfolio/{agent_id}` |
+| Agent activity | `GET /agent/activity/{agent_id}` |
 
-## Judge / User Testing Guide
+## Curl Examples
 
-This section is the recommended path for grant judges and end users testing SignalArc through the published GPT Agent.
+Set the base URL once:
 
-1. Open the SignalArc GPT Agent (already wired to `https://api.signalarc.fun`).
-2. Connect your SignalArc account by starting agent onboarding from the GPT Agent.
-3. Provide a real, reachable email address when prompted. SignalArc dispatches the Circle OTP email to that address.
-4. Enter the OTP from your email back into the GPT Agent. The agent will verify, register the resolved Circle Agent Wallet, and activate an agent session.
-5. Check the registered wallet via the GPT Agent. The response includes the `agent_wallet_address` SignalArc will use for ARC-TESTNET actions.
-6. Check the wallet balance via the GPT Agent. This is read-only.
-7. Request the ARC-TESTNET faucet via the GPT Agent. SignalArc only funds the registered agent wallet address; you cannot supply a different recipient.
-8. Create a draft market intent through the GPT Agent for one of the supported actions (for example, `create_market` or `buy_yes`).
-9. Confirm the intent. SignalArc returns an execution plan but does not broadcast yet.
-10. Execute the intent only after explicit approval. Execution runs through the Circle Agent Wallet on ARC-TESTNET only.
+```bash
+BASE_URL="https://api.signalarc.fun"
+AGENT_ID="agent_demo_custom_001"
+```
 
-You should never be asked to provide a private key, seed phrase, Circle API key, or session token through the agent. SignalArc does not store any of those values in the repository, container image, or database.
+For local development, use:
 
-## Example Use Cases
+```bash
+BASE_URL="http://localhost:4000"
+```
 
-- Custom GPT action surface for prediction market workflows on Arc Testnet.
-- Agent-driven onboarding, funding, and market lifecycle without requiring a private key in the agent.
-- Market discovery for dashboards and automated reports.
-- Probability-signal reading from structured market metadata.
+### List Agent Markets
 
-## Current Limitations
+```bash
+curl "$BASE_URL/agent/markets"
+```
 
-- Autonomous unattended trading is not enabled by default.
-- Mainnet funding, transfer, swap, and contract execution are out of scope.
-- Logout/session management endpoints are not exposed.
-- API key enforcement, paid access, and rate limits are not implemented.
-- Production SLA is not claimed.
-- Behavior beyond the documented endpoints is unknown / not documented.
+### Start Onboarding
+
+```bash
+curl -X POST "$BASE_URL/agent/onboarding/start" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agent_demo_custom_001",
+    "user_email": "user@example.com",
+    "source_client": "custom-agent",
+    "channel": "custom-agent"
+  }'
+```
+
+### Get Session And Wallet
+
+```bash
+curl "$BASE_URL/agent/sessions/$AGENT_ID"
+curl "$BASE_URL/agent/wallets/$AGENT_ID"
+curl "$BASE_URL/agent/wallets/$AGENT_ID/balance"
+```
+
+### Create A buy_yes Intent
+
+```bash
+curl -X POST "$BASE_URL/agent/intents" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agent_demo_custom_001",
+    "source_client": "custom-agent",
+    "client_request_id": "demo-001",
+    "action": "buy_yes",
+    "user_wallet": "0x1111111111111111111111111111111111111111",
+    "market_id": "example-market-id",
+    "market_contract_address": "0x3333333333333333333333333333333333333333",
+    "amount": "1"
+  }'
+```
+
+Save the returned `intent.intent_id`.
+
+### Confirm Intent
+
+```bash
+INTENT_ID="agent_intent_example"
+
+curl -X POST "$BASE_URL/agent/intents/$INTENT_ID/confirm"
+```
+
+### Execute Intent
+
+```bash
+curl -X POST "$BASE_URL/agent/intents/$INTENT_ID/execute"
+```
+
+### Get Intent
+
+```bash
+curl "$BASE_URL/agent/intents/$INTENT_ID"
+```
+
+### List Intent Executions
+
+```bash
+curl "$BASE_URL/agent/intents/$INTENT_ID/executions"
+```
+
+### Get Portfolio
+
+```bash
+curl "$BASE_URL/agent/portfolio/$AGENT_ID"
+```
+
+### Get Activity
+
+```bash
+curl "$BASE_URL/agent/activity/$AGENT_ID"
+```
+
+## Read Models
+
+### Portfolio
+
+`GET /agent/portfolio/{agent_id}` returns a compact read-only portfolio summary for a registered agent wallet.
+
+Current fields include:
+
+- `agent_id`
+- `agent_wallet_address`
+- `chain`
+- `wallet_provider`
+- `active_positions_count`
+- `resolved_or_closed_positions_count`
+- `claimable_refundable_count`
+- `total_exposure`
+- `positions`
+- `settlements`
+- `unavailable_fields`
+
+Current limitation: positions are derived from executed Agent API buy intents and executions, not live onchain wallet-indexed balance reads. Existing settlement rows are internal-user keyed, so agent settlement fields remain unavailable until a wallet-indexed model exists.
+
+### Activity
+
+`GET /agent/activity/{agent_id}` returns recent framework-neutral activity from durable intent and execution records. Items include intent/execution type, action, status, market id, market contract address, amount, outcome/side, tx hashes, sanitized error fields, readback, and timestamps when available.
+
+Agents with a registered wallet but no activity return an empty `items` array. Unknown agents return `404 agent_wallet_not_found`.
+
+### Intent Executions
+
+`GET /agent/intents/{intent_id}/executions` returns execution attempts for one intent, including pending/executed/failed status, tx hashes, readback JSON, and sanitized error code/message when available.
+
+## Safety Model
+
+- `agent_id` validation rejects malformed or generic IDs with `agent_id_invalid`.
+- `allowed_actions` gates executable intent preview, confirmation when a wallet is available, and execution.
+- `execute` requires a confirmed intent.
+- `policy_metadata.max_trade_amount` is optional. When present on the registered wallet, `buy_yes` and `buy_no` amounts above the cap are rejected.
+- Circle CLI/provider failures are sanitized in public responses and durable execution records.
+- Deployer/resolver wallet reuse is rejected for agent wallets.
+- Agent wallet reuse of `user_wallet` is rejected until a documented custody-link model exists.
+- Current execution, faucet, and wallet policies are pinned to `ARC-TESTNET`.
+
+## Stable Error Catalog
+
+Common Agent API errors:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 400 | `invalid_json` | Request body is not valid JSON. |
+| 400 | `agent_id_invalid` | `agent_id` is missing, malformed, too short, or generic. |
+| 400 | `agent_intent_invalid` | Intent validation failed; details may include invalid fields. |
+| 400 | `agent_wallet_missing` | Execution was requested without a registered agent wallet. |
+| 400 | `agent_onboarding_invalid` | Onboarding request validation failed. |
+| 400 | `agent_wallet_invalid` | Wallet registration validation failed. |
+| 403 | `agent_action_forbidden` | Action is outside wallet/session `allowed_actions`. |
+| 403 | `agent_policy_violation` | Optional wallet policy blocks the request, such as `max_trade_amount`. |
+| 404 | `agent_intent_not_found` | No intent exists for the supplied `intent_id`. |
+| 404 | `agent_wallet_not_found` | No registered wallet exists for the supplied `agent_id`. |
+| 404 | `agent_session_not_found` | No active session exists for the supplied `agent_id`. |
+| 409 | `agent_intent_not_confirmed` | Execute was called before confirm. |
+| 409 | `agent_wallet_status_invalid` | Wallet is not active. |
+| 409 | `agent_wallet_chain_invalid` | Wallet is not on `ARC-TESTNET`. |
+| 500 | `agent_activity_get_failed` | Activity read failed. |
+| 500 | `agent_portfolio_get_failed` | Portfolio read failed. |
+| 501 | `circle_agent_wallet_execution_not_enabled` | Circle Agent Wallet execution is not enabled in this runtime. |
+| 501 | `circle_agent_wallet_balance_not_configured` | Balance lookup is not configured. |
+| 501 | `circle_agent_wallet_faucet_not_configured` | Faucet helper is not configured. |
+| 502 | `agent_execution_failed` | Provider execution failed; response is sanitized. |
+| 502 | `circle_agent_wallet_balance_failed` | Circle balance lookup failed; response is sanitized. |
+| 502 | `circle_agent_wallet_faucet_failed` | Circle faucet request failed; response is sanitized. |
+| 503 | `agent_execution_config_invalid` | Execution environment is not configured. |
+
+## OpenAPI
+
+The Custom GPT action schema lives at:
+
+```text
+project-roadmap/signalarc-custom-gpt-openapi.json
+```
+
+The schema is useful for any HTTP client, not only Custom GPTs. It documents the current Agent API endpoints and stable response shapes. Custom GPT-specific behavior belongs in integration instructions, not in the core API contract.
+
+## Known Limitations
+
+- Circle Agent Wallet execution depends on runtime CLI/session availability.
+- The in-process intent store remains a fallback for tests or unconfigured runtimes.
+- API key enforcement, paid access, rate limits, and production SLA are not implemented.
+- Portfolio positions are intent/execution-derived, not live onchain position indexing.
+- Claimable/refundable eligibility remains limited until wallet-indexed claim/refund state is indexed.
+- Mainnet funding and Arc mainnet contract execution are not supported.
+- Behavior beyond the documented endpoints is unknown or not documented.

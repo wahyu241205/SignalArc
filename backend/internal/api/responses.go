@@ -89,15 +89,16 @@ type marketResponse struct {
 }
 
 type agentMarketResponse struct {
-	ID               string    `json:"id"`
-	Title            string    `json:"title"`
-	Status           string    `json:"status"`
-	Category         *string   `json:"category"`
-	CoverImageURL    *string   `json:"cover_image_url"`
-	CollateralAsset  string    `json:"collateral_asset"`
-	Chain            string    `json:"chain"`
-	ClosesAt         time.Time `json:"closes_at"`
-	ResolutionSource *string   `json:"resolution_source"`
+	ID                    string    `json:"id"`
+	Title                 string    `json:"title"`
+	Status                string    `json:"status"`
+	Category              *string   `json:"category"`
+	CoverImageURL         *string   `json:"cover_image_url"`
+	CollateralAsset       string    `json:"collateral_asset"`
+	Chain                 string    `json:"chain"`
+	ClosesAt              time.Time `json:"closes_at"`
+	MarketContractAddress *string   `json:"market_contract_address"`
+	ResolutionSource      *string   `json:"resolution_source"`
 }
 
 func newTradeResponse(trade repository.Trade) tradeResponse {
@@ -176,15 +177,16 @@ func newAgentMarketResponses(markets []repository.Market) []agentMarketResponse 
 	responses := make([]agentMarketResponse, 0, len(markets))
 	for _, market := range markets {
 		responses = append(responses, agentMarketResponse{
-			ID:               market.ID,
-			Title:            market.Title,
-			Status:           market.Status,
-			Category:         nullStringPtr(market.Category),
-			CoverImageURL:    nullStringPtr(market.CoverImageURL),
-			CollateralAsset:  market.CollateralAsset,
-			Chain:            market.Chain,
-			ClosesAt:         market.ClosesAt,
-			ResolutionSource: nullStringPtr(market.ResolutionSource),
+			ID:                    market.ID,
+			Title:                 market.Title,
+			Status:                market.Status,
+			Category:              nullStringPtr(market.Category),
+			CoverImageURL:         nullStringPtr(market.CoverImageURL),
+			CollateralAsset:       market.CollateralAsset,
+			Chain:                 market.Chain,
+			ClosesAt:              market.ClosesAt,
+			MarketContractAddress: nullStringPtr(market.MarketContractAddress),
+			ResolutionSource:      nullStringPtr(market.ResolutionSource),
 		})
 	}
 
