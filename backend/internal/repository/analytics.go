@@ -94,6 +94,18 @@ type UpdateAnalyticsIndexerStateInput struct {
 	LastError         string
 }
 
+type AnalyticsMarketContract struct {
+	MarketAddress  string
+	FactoryAddress string
+}
+
+type UpdateAnalyticsMarketLifecycleInput struct {
+	MarketAddress    string
+	Status           string
+	WinningOutcome   string
+	LastIndexedBlock sql.NullInt64
+}
+
 type AnalyticsRepository struct {
 	db *database.DB
 }
@@ -321,6 +333,52 @@ func (r *AnalyticsRepository) InsertAnalyticsEvent(ctx context.Context, input In
 		return false, err
 	}
 	return inserted, nil
+}
+
+func (r *AnalyticsRepository) ListAnalyticsMarketsByFactory(ctx context.Context, factoryAddress string) ([]AnalyticsMarketContract, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT market_address, factory_address
+		FROM analytics_markets
+		WHERE factory_address = $1
+		ORDER BY deployment_block DESC NULLS LAST, market_address ASC
+	`, factoryAddress)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	markets := []AnalyticsMarketContract{}
+	for rows.Next() {
+		var market AnalyticsMarketContract
+		if err := rows.Scan(&market.MarketAddress, &market.FactoryAddress); err != nil {
+			return nil, err
+		}
+		markets = append(markets, market)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return markets, nil
+}
+
+func (r *AnalyticsRepository) UpdateAnalyticsMarketLifecycle(ctx context.Context, input UpdateAnalyticsMarketLifecycleInput) error {
+	return r.db.Exec(ctx, `
+		UPDATE analytics_markets
+		SET
+			status = COALESCE($2, status),
+			winning_outcome = COALESCE($3, winning_outcome),
+			last_indexed_block = GREATEST(
+				COALESCE(last_indexed_block, 0),
+				COALESCE($4, 0)
+			),
+			updated_at = now()
+		WHERE market_address = $1
+	`,
+		input.MarketAddress,
+		nullableText(input.Status),
+		nullableText(input.WinningOutcome),
+		input.LastIndexedBlock,
+	)
 }
 
 func (r *AnalyticsRepository) UpdateAnalyticsIndexerState(ctx context.Context, input UpdateAnalyticsIndexerStateInput) error {

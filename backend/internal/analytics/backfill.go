@@ -31,6 +31,9 @@ func (backfiller *Backfiller) Run(ctx context.Context, opts BackfillOptions) (Ba
 	if !opts.DryRun && backfiller.store == nil {
 		return BackfillResult{}, fmt.Errorf("analytics backfiller store is required for write mode")
 	}
+	if opts.IncludeMarketEvents && backfiller.store == nil {
+		return BackfillResult{}, fmt.Errorf("analytics backfiller store is required to discover market contracts")
+	}
 	if opts.FactoryAddress == "" {
 		return BackfillResult{}, fmt.Errorf("factory address is required")
 	}
@@ -40,8 +43,9 @@ func (backfiller *Backfiller) Run(ctx context.Context, opts BackfillOptions) (Ba
 	}
 
 	result := BackfillResult{
-		FactoryAddress: opts.FactoryAddress,
-		DryRun:         opts.DryRun,
+		FactoryAddress:      opts.FactoryAddress,
+		DryRun:              opts.DryRun,
+		IncludeMarketEvents: opts.IncludeMarketEvents,
 	}
 	pageParams := map[string]string{}
 
@@ -102,10 +106,20 @@ func (backfiller *Backfiller) Run(ctx context.Context, opts BackfillOptions) (Ba
 		pageParams = page.NextPageParams
 	}
 
+	if opts.IncludeMarketEvents {
+		if err := backfiller.ingestMarketEvents(ctx, opts, chainID, &result); err != nil {
+			return result, err
+		}
+	}
+
 	if !opts.DryRun {
 		if result.LatestBlock.Valid {
+			source := IndexerSourceFactory
+			if opts.IncludeMarketEvents {
+				source = IndexerSourceMarkets
+			}
 			if err := backfiller.store.UpdateAnalyticsIndexerState(ctx, repository.UpdateAnalyticsIndexerStateInput{
-				Source:            IndexerSourceFactory,
+				Source:            source,
 				FactoryAddress:    opts.FactoryAddress,
 				LastIndexedBlock:  result.LatestBlock.Int64,
 				LastIndexedLogKey: latestLogKey(result),
@@ -123,6 +137,74 @@ func (backfiller *Backfiller) Run(ctx context.Context, opts BackfillOptions) (Ba
 	}
 
 	return result, nil
+}
+
+func (backfiller *Backfiller) ingestMarketEvents(ctx context.Context, opts BackfillOptions, chainID int, result *BackfillResult) error {
+	markets, err := backfiller.store.ListAnalyticsMarketsByFactory(ctx, opts.FactoryAddress)
+	if err != nil {
+		return err
+	}
+
+	for _, market := range markets {
+		pageParams := map[string]string{}
+		pagesFetchedForMarket := 0
+
+		for {
+			if opts.PageLimit > 0 && pagesFetchedForMarket >= opts.PageLimit {
+				break
+			}
+
+			page, err := backfiller.client.FetchAddressLogs(ctx, market.MarketAddress, pageParams)
+			if err != nil {
+				return err
+			}
+			pagesFetchedForMarket++
+			result.PagesFetched++
+			result.LogsSeen += len(page.Items)
+
+			for _, log := range page.Items {
+				if opts.FromBlock > 0 && log.BlockNumber < opts.FromBlock {
+					continue
+				}
+
+				event, matched, err := ParseMarketEvent(opts.FactoryAddress, market.MarketAddress, log)
+				if err != nil {
+					return err
+				}
+				if !matched {
+					continue
+				}
+
+				result.EventsParsed++
+				updateLatest(result, event.BlockNumber, event.BlockTimestamp)
+
+				if opts.DryRun {
+					continue
+				}
+
+				inserted, err := backfiller.store.InsertAnalyticsEvent(ctx, childEventInput(chainID, event))
+				if err != nil {
+					return err
+				}
+				if inserted {
+					result.EventsInserted++
+				}
+
+				if event.Status != "" {
+					if err := backfiller.store.UpdateAnalyticsMarketLifecycle(ctx, lifecycleInput(event)); err != nil {
+						return err
+					}
+				}
+			}
+
+			if len(page.NextPageParams) == 0 {
+				break
+			}
+			pageParams = page.NextPageParams
+		}
+	}
+
+	return nil
 }
 
 func marketInput(event MarketDeployed) repository.UpsertAnalyticsMarketInput {
@@ -154,6 +236,42 @@ func eventInput(chainID int, event MarketDeployed) repository.InsertAnalyticsEve
 		LogIndex:        event.LogIndex,
 		BlockTimestamp:  sql.NullTime{Time: event.BlockTimestamp, Valid: !event.BlockTimestamp.IsZero()},
 		Raw:             event.Raw,
+	}
+}
+
+func childEventInput(chainID int, event MarketEvent) repository.InsertAnalyticsEventInput {
+	return repository.InsertAnalyticsEventInput{
+		ChainID:         chainID,
+		ContractAddress: event.MarketAddress,
+		MarketAddress:   event.MarketAddress,
+		FactoryAddress:  event.FactoryAddress,
+		EventName:       event.EventName,
+		TransactionHash: event.TransactionHash,
+		BlockNumber:     event.BlockNumber,
+		LogIndex:        event.LogIndex,
+		BlockTimestamp:  sql.NullTime{Time: event.BlockTimestamp, Valid: !event.BlockTimestamp.IsZero()},
+		WalletAddress:   event.WalletAddress,
+		Side:            event.Side,
+		AmountBaseUnits: event.AmountBaseUnits,
+		Raw:             event.Raw,
+	}
+}
+
+func lifecycleInput(event MarketEvent) repository.UpdateAnalyticsMarketLifecycleInput {
+	return repository.UpdateAnalyticsMarketLifecycleInput{
+		MarketAddress:    event.MarketAddress,
+		Status:           event.Status,
+		WinningOutcome:   event.WinningOutcome,
+		LastIndexedBlock: sql.NullInt64{Int64: event.BlockNumber, Valid: event.BlockNumber > 0},
+	}
+}
+
+func updateLatest(result *BackfillResult, blockNumber int64, blockTimestamp time.Time) {
+	if blockNumber > 0 && (!result.LatestBlock.Valid || blockNumber > result.LatestBlock.Int64) {
+		result.LatestBlock = sql.NullInt64{Int64: blockNumber, Valid: true}
+	}
+	if !blockTimestamp.IsZero() && (!result.LatestEventAt.Valid || blockTimestamp.After(result.LatestEventAt.Time)) {
+		result.LatestEventAt = sql.NullTime{Time: blockTimestamp, Valid: true}
 	}
 }
 

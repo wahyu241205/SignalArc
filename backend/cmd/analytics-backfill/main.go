@@ -19,27 +19,29 @@ import (
 const activeFactoryAddress = "0x02555FC5EE3c53938f2F0356e963865503442A56"
 
 type commandOutput struct {
-	Status          string                       `json:"status"`
-	Mode            string                       `json:"mode"`
-	FactoryAddress  string                       `json:"factory_address"`
-	PagesFetched    int                          `json:"pages_fetched"`
-	LogsSeen        int                          `json:"logs_seen"`
-	EventsParsed    int                          `json:"events_parsed"`
-	EventsInserted  int                          `json:"events_inserted"`
-	MarketsUpserted int                          `json:"markets_upserted"`
-	LatestBlock     *int64                       `json:"latest_block"`
-	LatestEventAt   *time.Time                   `json:"latest_event_at"`
-	Summary         *repository.AnalyticsSummary `json:"summary,omitempty"`
+	Status              string                       `json:"status"`
+	Mode                string                       `json:"mode"`
+	FactoryAddress      string                       `json:"factory_address"`
+	PagesFetched        int                          `json:"pages_fetched"`
+	LogsSeen            int                          `json:"logs_seen"`
+	EventsParsed        int                          `json:"events_parsed"`
+	EventsInserted      int                          `json:"events_inserted"`
+	MarketsUpserted     int                          `json:"markets_upserted"`
+	IncludeMarketEvents bool                         `json:"include_market_events"`
+	LatestBlock         *int64                       `json:"latest_block"`
+	LatestEventAt       *time.Time                   `json:"latest_event_at"`
+	Summary             *repository.AnalyticsSummary `json:"summary,omitempty"`
 }
 
 func main() {
 	var (
-		dryRun         = flag.Bool("dry-run", true, "fetch and parse logs without writing to the database")
-		factoryAddress = flag.String("factory", activeFactoryAddress, "SignalArc factory contract address")
-		fromBlock      = flag.Int64("from-block", 0, "minimum block number to ingest")
-		pageLimit      = flag.Int("page-limit", 1, "maximum Blockscout v2 pages to fetch; set 0 for all pages")
-		baseURL        = flag.String("base-url", analytics.DefaultArcscanBaseURL, "Arcscan/Blockscout base URL")
-		timeoutSeconds = flag.Int("timeout-seconds", 15, "HTTP timeout in seconds")
+		dryRun              = flag.Bool("dry-run", true, "fetch and parse logs without writing to the database")
+		factoryAddress      = flag.String("factory", activeFactoryAddress, "SignalArc factory contract address")
+		fromBlock           = flag.Int64("from-block", 0, "minimum block number to ingest")
+		pageLimit           = flag.Int("page-limit", 1, "maximum Blockscout v2 pages to fetch; set 0 for all pages")
+		baseURL             = flag.String("base-url", analytics.DefaultArcscanBaseURL, "Arcscan/Blockscout base URL")
+		timeoutSeconds      = flag.Int("timeout-seconds", 15, "HTTP timeout in seconds")
+		includeMarketEvents = flag.Bool("include-market-events", false, "also fetch logs for market contracts already discovered in analytics_markets")
 	)
 	flag.Parse()
 
@@ -60,10 +62,10 @@ func main() {
 
 	var store analytics.Store
 	var db *database.DB
-	if !*dryRun {
+	if !*dryRun || *includeMarketEvents {
 		databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 		if databaseURL == "" {
-			log.Fatal().Msg("DATABASE_URL is required when dry-run=false")
+			log.Fatal().Msg("DATABASE_URL is required when dry-run=false or include-market-events=true")
 		}
 		connected, err := database.Connect(ctx, databaseURL)
 		if err != nil {
@@ -75,11 +77,12 @@ func main() {
 	}
 
 	result, err := analytics.NewBackfiller(client, store).Run(ctx, analytics.BackfillOptions{
-		FactoryAddress: strings.TrimSpace(*factoryAddress),
-		FromBlock:      *fromBlock,
-		PageLimit:      *pageLimit,
-		DryRun:         *dryRun,
-		ChainID:        analytics.DefaultChainID,
+		FactoryAddress:      strings.TrimSpace(*factoryAddress),
+		FromBlock:           *fromBlock,
+		PageLimit:           *pageLimit,
+		DryRun:              *dryRun,
+		ChainID:             analytics.DefaultChainID,
+		IncludeMarketEvents: *includeMarketEvents,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("analytics backfill failed")
@@ -114,17 +117,18 @@ func newCommandOutput(result analytics.BackfillResult) commandOutput {
 	}
 
 	return commandOutput{
-		Status:          "ok",
-		Mode:            mode,
-		FactoryAddress:  result.FactoryAddress,
-		PagesFetched:    result.PagesFetched,
-		LogsSeen:        result.LogsSeen,
-		EventsParsed:    result.EventsParsed,
-		EventsInserted:  result.EventsInserted,
-		MarketsUpserted: result.MarketsUpserted,
-		LatestBlock:     latestBlock,
-		LatestEventAt:   latestEventAt,
-		Summary:         summary,
+		Status:              "ok",
+		Mode:                mode,
+		FactoryAddress:      result.FactoryAddress,
+		PagesFetched:        result.PagesFetched,
+		LogsSeen:            result.LogsSeen,
+		EventsParsed:        result.EventsParsed,
+		EventsInserted:      result.EventsInserted,
+		MarketsUpserted:     result.MarketsUpserted,
+		IncludeMarketEvents: result.IncludeMarketEvents,
+		LatestBlock:         latestBlock,
+		LatestEventAt:       latestEventAt,
+		Summary:             summary,
 	}
 }
 

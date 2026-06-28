@@ -13,7 +13,13 @@ const (
 	DefaultArcscanBaseURL = "https://testnet.arcscan.app"
 	DefaultChainID        = 5042002
 	MarketDeployedEvent   = "MarketDeployed"
+	PositionOpenedEvent   = "PositionOpened"
+	MarketResolvedEvent   = "MarketResolved"
+	MarketCancelledEvent  = "MarketCancelled"
+	PayoutClaimedEvent    = "PayoutClaimed"
+	RefundClaimedEvent    = "RefundClaimed"
 	IndexerSourceFactory  = "arcscan_factory_market_deployed"
+	IndexerSourceMarkets  = "arcscan_market_events"
 )
 
 type BlockscoutLog struct {
@@ -62,6 +68,22 @@ type MarketDeployed struct {
 	Raw                    json.RawMessage
 }
 
+type MarketEvent struct {
+	FactoryAddress  string
+	MarketAddress   string
+	EventName       string
+	TransactionHash string
+	BlockNumber     int64
+	LogIndex        int
+	BlockTimestamp  time.Time
+	WalletAddress   string
+	Side            string
+	WinningOutcome  string
+	AmountBaseUnits string
+	Status          string
+	Raw             json.RawMessage
+}
+
 type Client interface {
 	FetchAddressLogs(context.Context, string, map[string]string) (LogsPage, error)
 }
@@ -69,27 +91,31 @@ type Client interface {
 type Store interface {
 	UpsertAnalyticsMarket(context.Context, repository.UpsertAnalyticsMarketInput) error
 	InsertAnalyticsEvent(context.Context, repository.InsertAnalyticsEventInput) (bool, error)
+	ListAnalyticsMarketsByFactory(context.Context, string) ([]repository.AnalyticsMarketContract, error)
+	UpdateAnalyticsMarketLifecycle(context.Context, repository.UpdateAnalyticsMarketLifecycleInput) error
 	UpdateAnalyticsIndexerState(context.Context, repository.UpdateAnalyticsIndexerStateInput) error
 	RebuildAnalyticsSummaryCache(context.Context, string) (repository.AnalyticsSummary, error)
 }
 
 type BackfillOptions struct {
-	FactoryAddress string
-	FromBlock      int64
-	PageLimit      int
-	DryRun         bool
-	ChainID        int
+	FactoryAddress      string
+	FromBlock           int64
+	PageLimit           int
+	DryRun              bool
+	ChainID             int
+	IncludeMarketEvents bool
 }
 
 type BackfillResult struct {
-	FactoryAddress  string
-	DryRun          bool
-	PagesFetched    int
-	LogsSeen        int
-	EventsParsed    int
-	EventsInserted  int
-	MarketsUpserted int
-	LatestBlock     sql.NullInt64
-	LatestEventAt   sql.NullTime
-	Summary         repository.AnalyticsSummary
+	FactoryAddress      string
+	DryRun              bool
+	IncludeMarketEvents bool
+	PagesFetched        int
+	LogsSeen            int
+	EventsParsed        int
+	EventsInserted      int
+	MarketsUpserted     int
+	LatestBlock         sql.NullInt64
+	LatestEventAt       sql.NullTime
+	Summary             repository.AnalyticsSummary
 }

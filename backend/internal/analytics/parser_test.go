@@ -65,3 +65,92 @@ func TestParseMarketDeployedIgnoresOtherEvents(t *testing.T) {
 		t.Fatal("expected unrelated event not to match")
 	}
 }
+
+func TestParsePositionOpened(t *testing.T) {
+	event := parseMarketEventForTest(t, BlockscoutDecoded{
+		MethodCall: "PositionOpened(address indexed user, uint8 indexed side, uint256 amount)",
+		Parameters: []BlockscoutParameter{
+			{Name: "user", Value: "0xUser"},
+			{Name: "side", Value: "1"},
+			{Name: "amount", Value: "2500000"},
+		},
+	})
+
+	if event.EventName != PositionOpenedEvent || event.WalletAddress != "0xUser" || event.Side != "YES" || event.AmountBaseUnits != "2500000" {
+		t.Fatalf("unexpected PositionOpened parse: %#v", event)
+	}
+}
+
+func TestParseMarketResolved(t *testing.T) {
+	event := parseMarketEventForTest(t, BlockscoutDecoded{
+		MethodCall: "MarketResolved(uint8 winningOutcome)",
+		Parameters: []BlockscoutParameter{
+			{Name: "winningOutcome", Value: "2"},
+		},
+	})
+
+	if event.EventName != MarketResolvedEvent || event.Status != "RESOLVED" || event.WinningOutcome != "NO" {
+		t.Fatalf("unexpected MarketResolved parse: %#v", event)
+	}
+}
+
+func TestParseMarketCancelled(t *testing.T) {
+	event := parseMarketEventForTest(t, BlockscoutDecoded{MethodCall: "MarketCancelled()"})
+
+	if event.EventName != MarketCancelledEvent || event.Status != "CANCELLED" {
+		t.Fatalf("unexpected MarketCancelled parse: %#v", event)
+	}
+}
+
+func TestParsePayoutClaimed(t *testing.T) {
+	event := parseMarketEventForTest(t, BlockscoutDecoded{
+		MethodCall: "PayoutClaimed(address indexed user, uint256 amount)",
+		Parameters: []BlockscoutParameter{
+			{Name: "user", Value: "0xWinner"},
+			{Name: "amount", Value: "3000000"},
+		},
+	})
+
+	if event.EventName != PayoutClaimedEvent || event.WalletAddress != "0xWinner" || event.AmountBaseUnits != "3000000" {
+		t.Fatalf("unexpected PayoutClaimed parse: %#v", event)
+	}
+}
+
+func TestParseRefundClaimed(t *testing.T) {
+	event := parseMarketEventForTest(t, BlockscoutDecoded{
+		MethodCall: "RefundClaimed(address indexed user, uint256 amount)",
+		Parameters: []BlockscoutParameter{
+			{Name: "user", Value: "0xRefunded"},
+			{Name: "amount", Value: "4000000"},
+		},
+	})
+
+	if event.EventName != RefundClaimedEvent || event.WalletAddress != "0xRefunded" || event.AmountBaseUnits != "4000000" {
+		t.Fatalf("unexpected RefundClaimed parse: %#v", event)
+	}
+}
+
+func parseMarketEventForTest(t *testing.T, decoded BlockscoutDecoded) MarketEvent {
+	t.Helper()
+	event, matched, err := ParseMarketEvent("0xFactory", "0xMarket", BlockscoutLog{
+		BlockNumber:     49152803,
+		BlockTimestamp:  "2026-06-28T14:54:38.000000Z",
+		Index:           2,
+		TransactionHash: "0xchildtx",
+		Raw:             json.RawMessage(`{"child":"raw"}`),
+		Decoded:         &decoded,
+	})
+	if err != nil {
+		t.Fatalf("parse market event: %v", err)
+	}
+	if !matched {
+		t.Fatal("expected market event to match")
+	}
+	if event.FactoryAddress != "0xFactory" || event.MarketAddress != "0xMarket" {
+		t.Fatalf("unexpected addresses: %#v", event)
+	}
+	if len(event.Raw) == 0 {
+		t.Fatal("expected raw log JSON to be preserved")
+	}
+	return event
+}
