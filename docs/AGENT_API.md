@@ -237,11 +237,11 @@ Failure codes:
 
 ## Market Intent Lifecycle
 
-Agents preview, confirm, and execute intents through these endpoints. They are documented at the surface level here; see the OpenAPI schema for full request/response shapes.
+Agents preview, confirm, and execute intents through these endpoints. The configured backend stores intent and execution records in Postgres so callers can retry by idempotency key and operators can audit execution attempts. The in-process intent store remains a fallback for tests or unconfigured runtimes.
 
 ### POST /agent/intents
 
-Creates a market intent preview. The request must include `agent_id`, `source_client`, `client_request_id`, `action`, and `user_wallet`. Intent preview records are currently in-memory backend state and are not durable across backend restarts. Supported actions:
+Creates a durable market intent preview. The request must include `agent_id`, `source_client`, `client_request_id`, `action`, and `user_wallet`. Duplicate requests with the same `agent_id`, `source_client`, and `client_request_id` return the existing intent instead of creating a duplicate record. Supported actions:
 
 - `create_market`
 - `buy_yes`
@@ -256,7 +256,7 @@ For `create_market`, `close_timestamp` MUST be either a UTC RFC3339 string such 
 
 ### GET /agent/intents/{intent_id}
 
-Returns the current in-memory intent preview or confirmed state. This is useful immediately after preview or confirmation, but it is not a durable audit/history endpoint yet.
+Returns the current durable intent preview, confirmed, executed, or failed state.
 
 ### POST /agent/intents/{intent_id}/confirm
 
@@ -264,7 +264,7 @@ Confirms a previewed intent and produces an execution plan. SignalArc validates 
 
 ### POST /agent/intents/{intent_id}/execute
 
-Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. Execution mode is `circle_agent_wallet_cli`.
+Executes a confirmed intent through the registered Circle Agent Wallet on ARC-TESTNET. Execution mode is `circle_agent_wallet_cli` when the Circle provider is enabled. SignalArc creates a pending execution record before provider execution, then persists either the successful tx/readback result or a sanitized failure code/message.
 
 ## Agent-Readable Market Discovery
 

@@ -27,6 +27,7 @@ func NewRouter(db *database.DB) http.Handler {
 	tradesRepository := repository.NewTradesRepository(db)
 	agentWalletsRepository := repository.NewAgentWalletsRepository(db)
 	agentSessionsRepository := repository.NewAgentSessionsRepository(db)
+	agentIntentsRepository := repository.NewAgentIntentsRepository(db)
 	agentIntentStore := agent.NewStore()
 	cfg := config.Load()
 	circleExecutor := agent.NewCircleCLIExecutor(agent.CircleCLIExecutorConfig{
@@ -65,7 +66,7 @@ func NewRouter(db *database.DB) http.Handler {
 	registerPositionRoutes(router, positionsRepository)
 	registerResolutionRoutes(router, resolutionsRepository)
 	registerSettlementRoutes(router, settlementsRepository)
-	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, circleExecutor, agentSessionsRepository, circleOnboardingStarter, circleWalletResolver, circleFaucetRunner)
+	registerAgentIntentRoutes(router, agentIntentStore, agentWalletsRepository, circleExecutor, agentSessionsRepository, circleOnboardingStarter, circleWalletResolver, circleFaucetRunner, agentIntentsRepository)
 
 	return router
 }

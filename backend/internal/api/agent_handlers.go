@@ -86,6 +86,19 @@ type agentSessionRegistry interface {
 	GetAgentSessionBySessionID(context.Context, string) (repository.AgentSession, error)
 }
 
+type durableAgentIntentRegistry interface {
+	CreateAgentIntent(context.Context, repository.CreateAgentIntentInput) (repository.AgentIntent, error)
+	GetAgentIntentByIntentID(context.Context, string) (repository.AgentIntent, error)
+	ConfirmAgentIntent(context.Context, string) (repository.AgentIntent, error)
+	MarkAgentIntentExecuted(context.Context, string) (repository.AgentIntent, error)
+	MarkAgentIntentFailed(context.Context, string) (repository.AgentIntent, error)
+	CreateAgentExecution(context.Context, repository.CreateAgentExecutionInput) (repository.AgentExecution, error)
+	MarkAgentExecutionExecuted(context.Context, string, repository.CompleteAgentExecutionInput) (repository.AgentExecution, error)
+	MarkAgentExecutionFailed(context.Context, string, repository.FailAgentExecutionInput) (repository.AgentExecution, error)
+	ListAgentIntentsByAgentID(context.Context, string, int) ([]repository.AgentIntent, error)
+	ListAgentExecutionsByAgentID(context.Context, string, int) ([]repository.AgentExecution, error)
+}
+
 type agentWalletBalanceResponse struct {
 	AgentID            string `json:"agent_id"`
 	AgentWalletAddress string `json:"agent_wallet_address"`
@@ -243,9 +256,14 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 	var onboardingStarter agent.CircleOnboardingStarter
 	var walletResolver agent.CircleWalletResolver
 	var faucetRunner agent.CircleAgentWalletFaucet
+	var durableIntents durableAgentIntentRegistry
 	for _, extra := range extras {
 		if registry, ok := extra.(agentSessionRegistry); ok {
 			sessionRegistry = registry
+			continue
+		}
+		if registry, ok := extra.(durableAgentIntentRegistry); ok {
+			durableIntents = registry
 			continue
 		}
 		if starter, ok := extra.(agent.CircleOnboardingStarter); ok {
@@ -743,6 +761,14 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_create_failed", "failed to create agent intent preview")
 			return
 		}
+		if durableIntents != nil {
+			persistedIntent, err := durableIntents.CreateAgentIntent(r.Context(), newDurableAgentIntentInput(intent))
+			if err != nil {
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_create_failed", "failed to create agent intent preview")
+				return
+			}
+			intent = newAgentIntentFromRepository(persistedIntent)
+		}
 
 		if !intent.ValidationResult.Valid {
 			httpjson.WriteJSON(w, http.StatusBadRequest, map[string]any{
@@ -758,6 +784,22 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 
 	router.Get("/agent/intents/{id}", func(w http.ResponseWriter, r *http.Request) {
 		intentID := chi.URLParam(r, "id")
+		if durableIntents != nil {
+			intent, err := durableIntents.GetAgentIntentByIntentID(r.Context(), intentID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					httpjson.WriteError(w, http.StatusNotFound, "agent_intent_not_found", "agent intent not found")
+					return
+				}
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_get_failed", "failed to get agent intent")
+				return
+			}
+			httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+				"intent": newAgentIntentResponse(newAgentIntentFromRepository(intent)),
+			})
+			return
+		}
+
 		intent, err := store.GetIntent(intentID)
 		if err != nil {
 			if errors.Is(err, agent.ErrIntentNotFound) {
@@ -776,6 +818,32 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 
 	router.Post("/agent/intents/{id}/confirm", func(w http.ResponseWriter, r *http.Request) {
 		intentID := chi.URLParam(r, "id")
+		if durableIntents != nil {
+			persistedIntent, err := durableIntents.GetAgentIntentByIntentID(r.Context(), intentID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					httpjson.WriteError(w, http.StatusNotFound, "agent_intent_not_found", "agent intent not found")
+					return
+				}
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_get_failed", "failed to get agent intent")
+				return
+			}
+			intent := newAgentIntentFromRepository(persistedIntent)
+			if !intent.ValidationResult.Valid {
+				httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
+				return
+			}
+			confirmedIntent, err := durableIntents.ConfirmAgentIntent(r.Context(), intentID)
+			if err != nil {
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_confirm_failed", "failed to confirm agent intent")
+				return
+			}
+			httpjson.WriteJSON(w, http.StatusOK, map[string]any{
+				"execution_plan": newAgentExecutionPlanResponse(agent.NewExecutionPlan(newAgentIntentFromRepository(confirmedIntent))),
+			})
+			return
+		}
+
 		executionPlan, err := store.ConfirmIntent(intentID)
 		if err != nil {
 			if errors.Is(err, agent.ErrIntentNotFound) {
@@ -798,15 +866,30 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 
 	router.Post("/agent/intents/{id}/execute", func(w http.ResponseWriter, r *http.Request) {
 		intentID := chi.URLParam(r, "id")
-		intent, err := store.GetIntent(intentID)
-		if err != nil {
-			if errors.Is(err, agent.ErrIntentNotFound) {
-				httpjson.WriteError(w, http.StatusNotFound, "agent_intent_not_found", "agent intent not found")
+		var intent agent.Intent
+		if durableIntents != nil {
+			persistedIntent, err := durableIntents.GetAgentIntentByIntentID(r.Context(), intentID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					httpjson.WriteError(w, http.StatusNotFound, "agent_intent_not_found", "agent intent not found")
+					return
+				}
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_get_failed", "failed to get agent intent")
 				return
 			}
+			intent = newAgentIntentFromRepository(persistedIntent)
+		} else {
+			var err error
+			intent, err = store.GetIntent(intentID)
+			if err != nil {
+				if errors.Is(err, agent.ErrIntentNotFound) {
+					httpjson.WriteError(w, http.StatusNotFound, "agent_intent_not_found", "agent intent not found")
+					return
+				}
 
-			httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_get_failed", "failed to get agent intent")
-			return
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_get_failed", "failed to get agent intent")
+				return
+			}
 		}
 
 		if intent.Status != agent.StatusConfirmed {
@@ -849,6 +932,24 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			}
 		}
 
+		var execution repository.AgentExecution
+		if durableIntents != nil {
+			executionPlan := agent.NewExecutionPlan(intent)
+			execution, err = durableIntents.CreateAgentExecution(r.Context(), repository.CreateAgentExecutionInput{
+				IntentID:              intent.ID,
+				AgentID:               intent.AgentID,
+				Action:                intent.Action,
+				ExecutionMode:         executionPlan.ExecutionMode,
+				Network:               executionPlan.Network,
+				AgentFactoryAddress:   executionPlan.AgentFactoryAddress,
+				MarketContractAddress: intent.MarketContractAddress,
+			})
+			if err != nil {
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_execution_create_failed", "failed to create agent execution record")
+				return
+			}
+		}
+
 		var result agent.ExecutionResult
 		switch intent.Action {
 		case agent.ActionCreateMarket:
@@ -871,34 +972,39 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			err = agent.ErrExecutionNotImplemented
 		}
 		if err != nil {
-			if errors.Is(err, agent.ErrExecutionProviderDisabled) {
-				httpjson.WriteError(w, http.StatusServiceUnavailable, "agent_execution_provider_disabled", "Circle Agent Wallet execution provider is disabled")
-				return
+			failure := newAgentExecutionFailure(err)
+			if durableIntents != nil && execution.ID != "" {
+				_, _ = durableIntents.MarkAgentExecutionFailed(r.Context(), execution.ID, repository.FailAgentExecutionInput{
+					ErrorCode:    failure.Code,
+					ErrorMessage: failure.Message,
+					Readback:     json.RawMessage(`{}`),
+				})
+				_, _ = durableIntents.MarkAgentIntentFailed(r.Context(), intent.ID)
 			}
-			if errors.Is(err, agent.ErrExecutionNotImplemented) {
-				httpjson.WriteError(w, http.StatusNotImplemented, "not_implemented", "agent execution action is not implemented")
-				return
-			}
-			if errors.Is(err, agent.ErrCreateMarketCloseTimestampStale) {
-				httpjson.WriteError(w, http.StatusBadRequest, "create_market_close_timestamp_stale", "close_timestamp must be in the future before execution")
-				return
-			}
-			if errors.Is(err, agent.ErrIntentInvalid) {
-				httpjson.WriteError(w, http.StatusBadRequest, "agent_intent_invalid", "agent intent validation failed")
-				return
-			}
-			if errors.Is(err, agent.ErrIntentNotConfirmed) {
-				httpjson.WriteError(w, http.StatusConflict, "agent_intent_not_confirmed", "agent intent must be confirmed before execution")
-				return
-			}
-			if errors.Is(err, agent.ErrExecutionConfigInvalid) {
-				httpjson.WriteError(w, http.StatusServiceUnavailable, "agent_execution_config_invalid", "agent execution environment is not configured")
-				return
-			}
-
 			logCircleProviderFailure(r.Context(), "agent_execution", intent.AgentID, intent.ID, enrichExecuteErrorAction(err, intent.Action))
-			httpjson.WriteError(w, http.StatusBadGateway, "agent_execution_failed", "agent execution failed")
+			httpjson.WriteError(w, failure.Status, failure.Code, failure.Message)
 			return
+		}
+		if durableIntents != nil && execution.ID != "" {
+			_, err = durableIntents.MarkAgentExecutionExecuted(r.Context(), execution.ID, repository.CompleteAgentExecutionInput{
+				ExecutionMode:          result.ExecutionMode,
+				Network:                result.Network,
+				AgentFactoryAddress:    result.AgentFactoryAddress,
+				MarketContractAddress:  result.MarketContractAddress,
+				ApproveTransactionHash: result.ApproveTransactionHash,
+				TransactionHash:        result.TransactionHash,
+				BroadcastPerformed:     result.BroadcastPerformed,
+				Readback:               newAgentExecutionReadbackJSON(result.Readback),
+			})
+			if err != nil {
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_execution_update_failed", "failed to update agent execution record")
+				return
+			}
+			_, err = durableIntents.MarkAgentIntentExecuted(r.Context(), intent.ID)
+			if err != nil {
+				httpjson.WriteError(w, http.StatusInternalServerError, "agent_intent_update_failed", "failed to update agent intent")
+				return
+			}
 		}
 
 		httpjson.WriteJSON(w, http.StatusOK, map[string]any{
@@ -1366,6 +1472,101 @@ func newAgentIntentResponse(intent agent.Intent) agentIntentResponse {
 		ValidationResult:      intent.ValidationResult,
 		Warnings:              intent.Warnings,
 		CreatedAt:             intent.CreatedAt.Format("2006-01-02T15:04:05.000000000Z07:00"),
+	}
+}
+
+func newDurableAgentIntentInput(intent agent.Intent) repository.CreateAgentIntentInput {
+	validationResult, _ := json.Marshal(intent.ValidationResult)
+	warnings, _ := json.Marshal(intent.Warnings)
+	return repository.CreateAgentIntentInput{
+		IntentID:              intent.ID,
+		AgentID:               intent.AgentID,
+		AgentWalletAddress:    intent.AgentWalletAddress,
+		WalletProvider:        intent.WalletProvider,
+		SourceClient:          intent.SourceClient,
+		ClientRequestID:       intent.ClientRequestID,
+		Action:                intent.Action,
+		Status:                intent.Status,
+		RequiresConfirmation:  intent.RequiresConfirmation,
+		UserWallet:            intent.UserWallet,
+		MarketID:              intent.MarketID,
+		MarketContractAddress: intent.MarketContractAddress,
+		Amount:                intent.Amount,
+		Outcome:               intent.Outcome,
+		Resolver:              intent.Resolver,
+		CollateralToken:       intent.CollateralToken,
+		CloseTimestamp:        intent.CloseTimestamp,
+		Question:              intent.Question,
+		ValidationResult:      validationResult,
+		Warnings:              warnings,
+	}
+}
+
+func newAgentIntentFromRepository(intent repository.AgentIntent) agent.Intent {
+	validationResult := agent.ValidationResult{Valid: true, Errors: []string{}}
+	if len(intent.ValidationResult) > 0 {
+		_ = json.Unmarshal(intent.ValidationResult, &validationResult)
+	}
+	warnings := []string{}
+	if len(intent.Warnings) > 0 {
+		_ = json.Unmarshal(intent.Warnings, &warnings)
+	}
+
+	return agent.Intent{
+		ID:                    intent.IntentID,
+		AgentID:               nullStringValue(intent.AgentID),
+		AgentWalletAddress:    nullStringValue(intent.AgentWalletAddress),
+		WalletProvider:        nullStringValue(intent.WalletProvider),
+		SourceClient:          nullStringValue(intent.SourceClient),
+		ClientRequestID:       nullStringValue(intent.ClientRequestID),
+		Action:                intent.Action,
+		Status:                intent.Status,
+		RequiresConfirmation:  intent.RequiresConfirmation,
+		UserWallet:            nullStringValue(intent.UserWallet),
+		MarketID:              nullStringValue(intent.MarketID),
+		MarketContractAddress: nullStringValue(intent.MarketContractAddress),
+		Amount:                nullStringValue(intent.Amount),
+		Outcome:               nullStringValue(intent.Outcome),
+		Resolver:              nullStringValue(intent.Resolver),
+		CollateralToken:       nullStringValue(intent.CollateralToken),
+		CloseTimestamp:        nullStringValue(intent.CloseTimestamp),
+		Question:              nullStringValue(intent.Question),
+		ValidationResult:      validationResult,
+		Warnings:              warnings,
+		CreatedAt:             intent.CreatedAt,
+	}
+}
+
+func newAgentExecutionReadbackJSON(readback agent.ExecutionReadback) json.RawMessage {
+	bytes, err := json.Marshal(readback)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return bytes
+}
+
+type agentExecutionFailure struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+func newAgentExecutionFailure(err error) agentExecutionFailure {
+	switch {
+	case errors.Is(err, agent.ErrExecutionProviderDisabled):
+		return agentExecutionFailure{Status: http.StatusServiceUnavailable, Code: "agent_execution_provider_disabled", Message: "Circle Agent Wallet execution provider is disabled"}
+	case errors.Is(err, agent.ErrExecutionNotImplemented):
+		return agentExecutionFailure{Status: http.StatusNotImplemented, Code: "not_implemented", Message: "agent execution action is not implemented"}
+	case errors.Is(err, agent.ErrCreateMarketCloseTimestampStale):
+		return agentExecutionFailure{Status: http.StatusBadRequest, Code: "create_market_close_timestamp_stale", Message: "close_timestamp must be in the future before execution"}
+	case errors.Is(err, agent.ErrIntentInvalid):
+		return agentExecutionFailure{Status: http.StatusBadRequest, Code: "agent_intent_invalid", Message: "agent intent validation failed"}
+	case errors.Is(err, agent.ErrIntentNotConfirmed):
+		return agentExecutionFailure{Status: http.StatusConflict, Code: "agent_intent_not_confirmed", Message: "agent intent must be confirmed before execution"}
+	case errors.Is(err, agent.ErrExecutionConfigInvalid):
+		return agentExecutionFailure{Status: http.StatusServiceUnavailable, Code: "agent_execution_config_invalid", Message: "agent execution environment is not configured"}
+	default:
+		return agentExecutionFailure{Status: http.StatusBadGateway, Code: "agent_execution_failed", Message: "agent execution failed"}
 	}
 }
 

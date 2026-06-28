@@ -687,7 +687,7 @@
       "post": {
         "operationId": "createAgentIntent",
         "summary": "Create a SignalArc agent intent preview",
-        "description": "Creates an agent intent preview. Reuse the exact agent_id from startAgentOnboarding and send valid JSON. For action=create_market, close_timestamp MUST be a UTC RFC3339 string such as 2026-05-31T23:59:00Z or a unix-seconds integer string such as 1780000000. Convert natural-language dates first.",
+        "description": "Creates a durable agent intent preview. Reuse the exact agent_id from startAgentOnboarding and send valid JSON. Duplicate agent_id + source_client + client_request_id requests return the existing intent. For action=create_market, close_timestamp MUST be a UTC RFC3339 string such as 2026-05-31T23:59:00Z or a unix-seconds integer string such as 1780000000. Convert natural-language dates first.",
         "requestBody": {
           "required": true,
           "content": {
@@ -964,7 +964,7 @@
       "get": {
         "operationId": "getAgentIntent",
         "summary": "Get a SignalArc agent intent",
-        "description": "Returns an in-memory agent intent by intent_id. This is useful immediately after preview or confirmation, but intents are not durable across backend restarts yet.",
+        "description": "Returns a durable agent intent by intent_id. Configured backend runtimes store intent preview, confirmation, executed, and failed state in Postgres.",
         "parameters": [
           {
             "name": "intent_id",

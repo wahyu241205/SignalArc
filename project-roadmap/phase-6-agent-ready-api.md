@@ -35,7 +35,7 @@ The current backend has three separate layers:
 | --- | --- | --- |
 | Agent wallet registry | Postgres `agent_wallets` through `backend/internal/repository/agent_wallets.go` | DB-backed. |
 | Agent onboarding/session boundary | Postgres `agent_onboarding_sessions` and `agent_sessions` through `backend/internal/repository/agent_sessions.go` | DB-backed metadata; Circle secrets are not stored. |
-| Agent intent lifecycle | In-process `agent.Store` in `backend/internal/agent/intents.go` | In-memory only; lost on backend restart. |
+| Agent intent lifecycle | Postgres `agent_intents` through `backend/internal/repository/agent_intents.go`; `agent.Store` remains fallback/test plumbing | DB-backed in configured backend runtime. |
 | Circle Agent Wallet execution | `CircleCLIExecutor` in `backend/internal/agent/circle_cli_executor.go` | Guarded by config and Circle CLI/session availability. |
 | Market discovery | `GET /markets`, `GET /markets/{id}`, `GET /agent/markets` | DB-backed read model. |
 | User positions/settlements | `/users/{user_id}/positions`, `/users/{user_id}/settlements` | DB-backed but user-id keyed, not agent-wallet keyed. |
@@ -80,7 +80,7 @@ Execution is intentionally fail-closed unless the backend runtime has Circle CLI
 | Create intent | Implemented as preview. | In-memory only; response includes validation result and warnings. |
 | Confirm intent | Implemented. | Produces an execution plan only; no transaction is broadcast. |
 | Execute intent | Implemented for configured Circle CLI runtime. | Execution supports `create_market`, `buy_yes`, `buy_no`, `close_market`, `resolve_market`, `claim_payout`, `cancel_market`, and `claim_refund` through `circle_agent_wallet_cli` when enabled. |
-| Execution result | Implemented as response only. | Result includes tx hash/readback, but there is no durable execution record yet. |
+| Execution result | Implemented and persisted. | `agent_executions` records pending, executed, and failed attempts with tx hashes, readback JSON, and sanitized errors. |
 | Portfolio/positions read model | Partly implemented. | Existing DB routes are keyed by internal `user_id`, not `agent_id`, wallet address, or agent wallet. |
 | Activity/history read model | Partly implemented. | Trades, positions, settlements exist as backend repositories/routes, but no unified agent activity feed exists. |
 | Stable error codes | Partly implemented. | Many handler errors use stable codes; Phase 6B/6D should formalize and document the complete error catalog. |
@@ -115,13 +115,10 @@ DB-backed:
 
 In-memory only:
 
-- Agent intent preview records.
-- Agent intent confirmed state.
 - Raw Circle OTP request id between onboarding start and verify.
 
 Documented but incomplete:
 
-- Durable intent and execution records.
 - Unified agent portfolio and activity read models.
 - Production Circle CLI/session strategy.
 - API authentication, rate limiting, and policy enforcement.
@@ -130,8 +127,7 @@ Documented but incomplete:
 Unsafe or not production-ready:
 
 - Circle CLI execution depends on runtime CLI/session availability.
-- Intent confirmation/execution cannot survive backend restart.
-- Execution result and provider errors are not persisted for audit/history.
+- Existing unconfigured/test fallback intent storage remains in-process.
 - Agent API routes do not yet enforce API keys, rate limits, or per-agent policy caps.
 - Intent creation does not yet enforce the same `agent_id` shape used by onboarding/wallet registration.
 
@@ -190,15 +186,19 @@ Deliverables:
 
 ### 6B Durable Intent & Execution Records
 
+Status: IMPLEMENTED LOCALLY in this phase.
+
 Goal:
 
 - Move Agent API intents and execution attempts out of process memory.
 
-Likely work:
+Implemented:
 
-- Add durable `agent_intents` and `agent_executions` records after migration review.
-- Persist preview, confirmation, execution attempt, execution result, tx hashes, readbacks, sanitized error classes, and status transitions.
-- Add idempotency behavior around `client_request_id`.
+- Added migration `000020_create_agent_intents_executions` for `agent_intents` and `agent_executions`.
+- Added repository methods for create/get/confirm/execute/fail and list-by-agent support.
+- Wired configured backend routing to use durable intent/execution storage while preserving `agent.Store` fallback behavior for tests/unconfigured paths.
+- Added minimal idempotency using `agent_id + source_client + client_request_id`.
+- Persisted execution pending, success tx/readback, and sanitized failure code/message.
 
 ### 6C Agent Market / Portfolio / Activity API
 
@@ -239,4 +239,3 @@ Likely work:
 - OpenAPI cleanup with examples for generic HTTP clients.
 - Custom GPT-specific instructions moved to an integration guide.
 - SDK/tool examples that never require private keys or Circle secrets.
-
