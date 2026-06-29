@@ -104,8 +104,10 @@ func TestCircleCLIExecutorCreateMarketBuildsCommandsAndReadback(t *testing.T) {
 func TestCircleCLIExecutorBuyYesBuildsApproveAndBuyCommands(t *testing.T) {
 	runner := &fakeCommandRunner{outputs: buyOutputs("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "1000000", "1000000", "1000000", "1000000")}
 	executor := newTestCircleCLIExecutor(runner, true)
+	intent := confirmedIntent(ActionBuyYes)
+	intent.Amount = "1"
 
-	result, err := executor.ExecuteBuyYes(context.Background(), confirmedIntent(ActionBuyYes))
+	result, err := executor.ExecuteBuyYes(context.Background(), intent)
 	if err != nil {
 		t.Fatalf("execute buy yes: %v", err)
 	}
@@ -134,23 +136,48 @@ func TestCircleCLIExecutorBuyYesBuildsApproveAndBuyCommands(t *testing.T) {
 }
 
 func TestCircleCLIExecutorBuyNoBuildsApproveAndBuyCommands(t *testing.T) {
-	runner := &fakeCommandRunner{outputs: buyOutputs("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "1000000", "1000000", "1000000", "1000000")}
+	runner := &fakeCommandRunner{outputs: buyOutputs("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "1500000", "1500000", "1500000", "1500000")}
 	executor := newTestCircleCLIExecutor(runner, true)
+	intent := confirmedIntent(ActionBuyNo)
+	intent.Amount = "1.5"
 
-	result, err := executor.ExecuteBuyNo(context.Background(), confirmedIntent(ActionBuyNo))
+	result, err := executor.ExecuteBuyNo(context.Background(), intent)
 	if err != nil {
 		t.Fatalf("execute buy no: %v", err)
 	}
 
+	assertArgs(t, runner.calls[0].args, []string{
+		"wallet", "execute", "approve(address,uint256)",
+		"0x3333333333333333333333333333333333333333", "1500000",
+		"--address", "0x9999999999999999999999999999999999999999",
+		"--contract", ArcTestnetUSDCAddress,
+		"--chain", ChainArcTestnet,
+		"--output", "json",
+	})
 	assertArgs(t, runner.calls[1].args, []string{
-		"wallet", "execute", "buyNo(uint256)", "1000000",
+		"wallet", "execute", "buyNo(uint256)", "1500000",
 		"--address", "0x9999999999999999999999999999999999999999",
 		"--contract", "0x3333333333333333333333333333333333333333",
 		"--chain", ChainArcTestnet,
 		"--output", "json",
 	})
-	if result.Readback.NoPositions != "1000000" || result.Readback.TotalNo != "1000000" {
+	if result.Readback.NoPositions != "1500000" || result.Readback.TotalNo != "1500000" {
 		t.Fatalf("unexpected readback %#v", result.Readback)
+	}
+}
+
+func TestCircleCLIExecutorBuyRejectsUSDCAmountBeyondSixDecimals(t *testing.T) {
+	runner := &fakeCommandRunner{}
+	executor := newTestCircleCLIExecutor(runner, true)
+	intent := confirmedIntent(ActionBuyYes)
+	intent.Amount = "1.0000001"
+
+	_, err := executor.ExecuteBuyYes(context.Background(), intent)
+	if !errors.Is(err, ErrIntentInvalid) {
+		t.Fatalf("expected ErrIntentInvalid, got %v", err)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("expected no Circle CLI calls for invalid precision, got %d", len(runner.calls))
 	}
 }
 
