@@ -19,10 +19,11 @@ import (
 )
 
 type stubAgentExecutor struct {
-	result agent.ExecutionResult
-	err    error
-	intent agent.Intent
-	called bool
+	result                agent.ExecutionResult
+	err                   error
+	requiredAllowedAction string
+	intent                agent.Intent
+	called                bool
 }
 
 type stubCircleOnboardingRunner struct {
@@ -104,6 +105,9 @@ func (executor *stubAgentExecutor) ExecuteCreateMarket(_ context.Context, intent
 func (executor *stubAgentExecutor) ExecuteBuyYes(_ context.Context, intent agent.Intent) (agent.ExecutionResult, error) {
 	executor.called = true
 	executor.intent = intent
+	if executor.requiredAllowedAction != "" && !agent.AgentWalletAllowsAction(agent.AgentWallet{AllowedActions: intent.AllowedActions}, executor.requiredAllowedAction) {
+		return agent.ExecutionResult{}, agent.ErrIntentInvalid
+	}
 	if executor.err != nil {
 		return agent.ExecutionResult{}, executor.err
 	}
@@ -2553,6 +2557,80 @@ func TestExecuteConfirmedIntentPersistsDurableExecutionSuccess(t *testing.T) {
 	}
 }
 
+func TestExecuteDurableBuyYesHydratesAllowedActionsFromRegisteredWallet(t *testing.T) {
+	durableRegistry := newTestDurableAgentIntentRegistry()
+	store := agent.NewStore()
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyYes)
+	executor := &stubAgentExecutor{
+		requiredAllowedAction: agent.ActionBuyYes,
+		result: agent.ExecutionResult{
+			AgentID:                "agent_test_1",
+			AgentWalletAddress:     "0x9999999999999999999999999999999999999999",
+			WalletProvider:         agent.WalletProviderCircleAgentWallet,
+			Action:                 agent.ActionBuyYes,
+			Status:                 agent.StatusExecuted,
+			ExecutionMode:          agent.ExecutionModeCircleAgentWalletCLI,
+			Network:                agent.NetworkArcTestnet,
+			MarketContractAddress:  "0x3333333333333333333333333333333333333333",
+			BroadcastPerformed:     true,
+			ApproveTransactionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			TransactionHash:        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Readback: agent.ExecutionReadback{
+				YesPositions:    "1000000",
+				TotalYes:        "1000000",
+				TotalCollateral: "1000000",
+				USDCBalance:     "19000000",
+			},
+		},
+	}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, walletRegistry, executor, durableRegistry)
+
+	intentID := createAgentIntent(t, router, `{
+		"agent_id": "agent_test_1",
+		"source_client": "hermes-telegram",
+		"client_request_id": "buy-yes-durable-hydration",
+		"action": "buy_yes",
+		"market_id": "546af477-7d88-48b4-8358-5d64f1b51e90",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "1"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+	executor.result.IntentID = intentID
+
+	reloadedIntent := newAgentIntentFromRepository(durableRegistry.intents[intentID])
+	if len(reloadedIntent.AllowedActions) != 0 {
+		t.Fatalf("expected durable reload to omit allowed actions, got %#v", reloadedIntent.AllowedActions)
+	}
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !executor.called {
+		t.Fatal("expected executor to be called")
+	}
+	if !agent.AgentWalletAllowsAction(agent.AgentWallet{AllowedActions: executor.intent.AllowedActions}, agent.ActionBuyYes) {
+		t.Fatalf("expected executor intent allowed actions to include buy_yes, got %#v", executor.intent.AllowedActions)
+	}
+	if executor.intent.AgentWalletAddress != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("unexpected executor agent wallet %q", executor.intent.AgentWalletAddress)
+	}
+	if executor.intent.WalletProvider != agent.WalletProviderCircleAgentWallet {
+		t.Fatalf("unexpected executor wallet provider %q", executor.intent.WalletProvider)
+	}
+	if executor.intent.UserWallet != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("expected missing user_wallet to bind to agent wallet, got %q", executor.intent.UserWallet)
+	}
+	if durableRegistry.intents[intentID].Status != agent.StatusExecuted {
+		t.Fatalf("expected durable intent executed, got %q", durableRegistry.intents[intentID].Status)
+	}
+}
+
 func TestExecuteConfirmedIntentPersistsDurableExecutionFailure(t *testing.T) {
 	durableRegistry := newTestDurableAgentIntentRegistry()
 	store := agent.NewStore()
@@ -2882,6 +2960,44 @@ func TestExecuteRejectsDisallowedAction(t *testing.T) {
 	}
 	if executor.called {
 		t.Fatal("executor should not be called for disallowed action")
+	}
+}
+
+func TestExecuteDurableIntentRejectsDisallowedRegisteredWalletAction(t *testing.T) {
+	durableRegistry := newTestDurableAgentIntentRegistry()
+	store := agent.NewStore()
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionBuyYes)
+	executor := &stubAgentExecutor{requiredAllowedAction: agent.ActionBuyYes}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, store, walletRegistry, executor, durableRegistry)
+
+	intentID := createAgentIntent(t, router, `{
+		"agent_id": "agent_test_1",
+		"source_client": "hermes-telegram",
+		"client_request_id": "buy-yes-durable-disallowed",
+		"action": "buy_yes",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "1"
+	}`)
+	confirmAgentIntent(t, router, intentID)
+	wallet := walletRegistry.wallets["agent_test_1"]
+	wallet.AllowedActions = []string{agent.ActionBuyNo}
+	walletRegistry.wallets["agent_test_1"] = wallet
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents/"+intentID+"/execute", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected execute status %d, got %d: %s", http.StatusForbidden, response.Code, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("agent_action_forbidden")) {
+		t.Fatalf("expected agent_action_forbidden, got %s", response.Body.String())
+	}
+	if executor.called {
+		t.Fatal("executor should not be called for durable disallowed action")
 	}
 }
 
