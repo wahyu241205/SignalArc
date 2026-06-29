@@ -2103,6 +2103,42 @@ func TestCreateAgentIntentValidationErrors(t *testing.T) {
 	}
 }
 
+func TestCreateAgentIntentBindsCircleAgentWalletWhenUserWalletMissing(t *testing.T) {
+	registry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, registry, agent.ActionBuyYes)
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), registry, nil)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/intents", bytes.NewBufferString(`{
+		"action": "buy_yes",
+		"agent_id": "agent_test_1",
+		"source_client": "hermes_telegram",
+		"client_request_id": "client_req_agent_wallet_binding",
+		"market_id": "market-1",
+		"market_contract_address": "0x3333333333333333333333333333333333333333",
+		"amount": "5"
+	}`))
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Intent agentIntentResponse `json:"intent"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Intent.UserWallet != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("expected user_wallet to bind to agent wallet address, got %q", body.Intent.UserWallet)
+	}
+	if !body.Intent.ValidationResult.Valid {
+		t.Fatalf("expected valid validation result, got %#v", body.Intent.ValidationResult)
+	}
+}
+
 func TestCreateAgentIntentIncludesRegisteredAgentMetadata(t *testing.T) {
 	registry := newTestAgentWalletRegistry()
 	registerTestAgentWallet(t, registry, agent.ActionBuyYes)

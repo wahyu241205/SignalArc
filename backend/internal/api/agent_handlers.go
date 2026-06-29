@@ -902,6 +902,11 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			}
 		}
 
+		intentUserWallet := request.UserWallet
+		if shouldBindAgentWalletAsIntentUserWallet(request, registeredWallet) {
+			intentUserWallet = registeredWallet.AgentWalletAddress
+		}
+
 		intent, err := store.CreateIntent(agent.CreateIntentInput{
 			AgentID:               request.AgentID,
 			AgentWalletAddress:    firstNonEmpty(request.AgentWalletAddress, registeredWallet.AgentWalletAddress),
@@ -910,7 +915,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			SourceClient:          request.SourceClient,
 			ClientRequestID:       request.ClientRequestID,
 			Action:                request.Action,
-			UserWallet:            request.UserWallet,
+			UserWallet:            intentUserWallet,
 			MarketID:              request.MarketID,
 			MarketContractAddress: request.MarketContractAddress,
 			Amount:                request.Amount,
@@ -1264,6 +1269,28 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			"execution": newAgentExecutionResponse(result),
 		})
 	})
+}
+
+func shouldBindAgentWalletAsIntentUserWallet(request createAgentIntentRequest, wallet repository.AgentWallet) bool {
+	if strings.TrimSpace(request.UserWallet) != "" {
+		return false
+	}
+	if !isBackendExecutableAgentAction(strings.TrimSpace(request.Action)) {
+		return false
+	}
+	if wallet.AgentID == "" || wallet.AgentWalletAddress == "" {
+		return false
+	}
+	if wallet.WalletProvider != agent.WalletProviderCircleAgentWallet {
+		return false
+	}
+	if wallet.Chain != agent.ChainArcTestnet {
+		return false
+	}
+	if wallet.Status != agent.WalletStatusActive {
+		return false
+	}
+	return repositoryAgentWalletAllowsAction(wallet, strings.TrimSpace(request.Action))
 }
 
 func isBackendExecutableAgentAction(action string) bool {
