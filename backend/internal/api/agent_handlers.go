@@ -1168,6 +1168,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			httpjson.WriteError(w, http.StatusForbidden, "agent_wallet_forbidden", err.Error())
 			return
 		}
+		intent = hydrateAgentIntentForExecution(intent, agentWallet)
 		if policyViolations := agentWalletPolicyViolations(intent, agentWallet); len(policyViolations) > 0 {
 			writeAgentPolicyViolation(w, policyViolations)
 			return
@@ -1269,6 +1270,19 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			"execution": newAgentExecutionResponse(result),
 		})
 	})
+}
+
+func hydrateAgentIntentForExecution(intent agent.Intent, wallet repository.AgentWallet) agent.Intent {
+	if intent.AgentWalletAddress == "" {
+		intent.AgentWalletAddress = wallet.AgentWalletAddress
+	}
+	if intent.WalletProvider == "" {
+		intent.WalletProvider = wallet.WalletProvider
+	}
+	if len(intent.AllowedActions) == 0 {
+		intent.AllowedActions = append([]string{}, wallet.AllowedActions...)
+	}
+	return intent
 }
 
 func shouldBindAgentWalletAsIntentUserWallet(request createAgentIntentRequest, wallet repository.AgentWallet) bool {
