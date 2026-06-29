@@ -215,10 +215,14 @@ func (executor *CircleCLIExecutor) executeBuy(ctx context.Context, intent Intent
 	if strings.TrimSpace(intent.MarketContractAddress) == "" || strings.TrimSpace(intent.Amount) == "" {
 		return ExecutionResult{}, ErrIntentInvalid
 	}
+	amountBaseUnits, err := usdcAmountToBaseUnits(intent.Amount)
+	if err != nil {
+		return ExecutionResult{}, err
+	}
 
 	approveHash, err := executor.walletExecute(ctx,
 		"approve(address,uint256)",
-		[]string{intent.MarketContractAddress, intent.Amount},
+		[]string{intent.MarketContractAddress, amountBaseUnits},
 		intent.AgentWalletAddress,
 		ArcTestnetUSDCAddress,
 	)
@@ -228,7 +232,7 @@ func (executor *CircleCLIExecutor) executeBuy(ctx context.Context, intent Intent
 
 	buyHash, err := executor.walletExecute(ctx,
 		buySignature,
-		[]string{intent.Amount},
+		[]string{amountBaseUnits},
 		intent.AgentWalletAddress,
 		intent.MarketContractAddress,
 	)
@@ -439,6 +443,50 @@ func normalizeOutcomeParam(outcome string) (string, error) {
 	default:
 		return "", ErrIntentInvalid
 	}
+}
+
+const usdcDecimals = 6
+
+func usdcAmountToBaseUnits(amount string) (string, error) {
+	trimmed := strings.TrimSpace(amount)
+	if trimmed == "" {
+		return "", ErrIntentInvalid
+	}
+
+	parts := strings.Split(trimmed, ".")
+	if len(parts) > 2 || parts[0] == "" {
+		return "", ErrIntentInvalid
+	}
+
+	whole := parts[0]
+	if !isDecimalDigits(whole) {
+		return "", ErrIntentInvalid
+	}
+
+	fractional := ""
+	if len(parts) == 2 {
+		fractional = parts[1]
+		if fractional == "" || len(fractional) > usdcDecimals || !isDecimalDigits(fractional) {
+			return "", ErrIntentInvalid
+		}
+	}
+
+	fractional += strings.Repeat("0", usdcDecimals-len(fractional))
+	baseUnits := strings.TrimLeft(whole+fractional, "0")
+	if baseUnits == "" {
+		return "", ErrIntentInvalid
+	}
+
+	return baseUnits, nil
+}
+
+func isDecimalDigits(value string) bool {
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (executor *CircleCLIExecutor) walletExecute(ctx context.Context, signature string, params []string, walletAddress string, contractAddress string) (string, error) {
