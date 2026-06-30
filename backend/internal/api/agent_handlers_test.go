@@ -47,6 +47,13 @@ type stubCircleWalletResolver struct {
 	balanceAddress string
 }
 
+type stubCircleBalanceReader struct {
+	balances agent.CircleAgentWalletBalances
+	err      error
+	request  agent.CircleAgentWalletBalanceRequest
+	called   bool
+}
+
 func (runner *stubCircleOnboardingRunner) StartOTP(_ context.Context, email string) (agent.CircleOTPStartResult, error) {
 	runner.startCalled = true
 	runner.email = email
@@ -82,6 +89,15 @@ func (resolver *stubCircleWalletResolver) GetAgentWalletBalances(_ context.Conte
 		return agent.CircleAgentWalletBalances{}, resolver.balanceErr
 	}
 	return resolver.balances, nil
+}
+
+func (reader *stubCircleBalanceReader) GetAgentWalletBalances(_ context.Context, request agent.CircleAgentWalletBalanceRequest) (agent.CircleAgentWalletBalances, error) {
+	reader.called = true
+	reader.request = request
+	if reader.err != nil {
+		return agent.CircleAgentWalletBalances{}, reader.err
+	}
+	return reader.balances, nil
 }
 
 type testEnvCommandRunner struct {
@@ -177,6 +193,24 @@ type testAgentSessionRegistry struct {
 	agentSessions      map[string]repository.AgentSession
 	sessionsByID       map[string]repository.AgentSession
 	failStatusUpdate   bool
+}
+
+func TestHydrateAgentIntentForExecutionIncludesPolicyMetadata(t *testing.T) {
+	wallet := repository.AgentWallet{
+		AgentID:            "agent_test",
+		AgentWalletAddress: "0x9999999999999999999999999999999999999999",
+		WalletProvider:     agent.WalletProviderCircleAgentWallet,
+		AllowedActions:     []string{agent.ActionBuyYes},
+		PolicyMetadata:     json.RawMessage(`{"circle_wallet_id":"wallet-1","max_trade_amount":"10"}`),
+	}
+
+	intent := hydrateAgentIntentForExecution(agent.Intent{AgentID: "agent_test"}, wallet)
+	if intent.PolicyMetadata["circle_wallet_id"] != "wallet-1" {
+		t.Fatalf("expected circle_wallet_id hydration, got %#v", intent.PolicyMetadata)
+	}
+	if intent.PolicyMetadata["max_trade_amount"] != "10" {
+		t.Fatalf("expected max_trade_amount hydration, got %#v", intent.PolicyMetadata)
+	}
 }
 
 type testDurableAgentIntentRegistry struct {
@@ -1935,6 +1969,115 @@ func TestGetAgentWalletBalanceReturnsEmptyBalances(t *testing.T) {
 	}
 	if len(body.Balance.Balances) != 0 {
 		t.Fatalf("expected empty balances, got %#v", body.Balance.Balances)
+	}
+}
+
+func TestGetAgentWalletBalancePrefersDirectAPIReader(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionCreateMarket)
+	wallet := walletRegistry.wallets["agent_test_1"]
+	wallet.PolicyMetadata = json.RawMessage(`{"circle_wallet_id":"wallet-1"}`)
+	walletRegistry.wallets["agent_test_1"] = wallet
+	resolver := &stubCircleWalletResolver{
+		balances: agent.CircleAgentWalletBalances{Balances: []any{map[string]any{"source": "cli"}}},
+	}
+	reader := &stubCircleBalanceReader{
+		balances: agent.CircleAgentWalletBalances{Balances: []any{map[string]any{"source": "api"}}},
+	}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil, newTestAgentSessionRegistry(), agent.CircleOnboardingStarter{}, resolver, reader)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/wallets/agent_test_1/balance", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if !reader.called {
+		t.Fatal("expected direct API balance reader to be called")
+	}
+	if resolver.balanceCalled {
+		t.Fatal("CLI balance resolver must not be called when direct API reader is configured")
+	}
+	if reader.request.AgentID != "agent_test_1" || reader.request.AgentWalletAddress != "0x9999999999999999999999999999999999999999" {
+		t.Fatalf("unexpected direct API request: %#v", reader.request)
+	}
+	if reader.request.PolicyMetadata["circle_wallet_id"] != "wallet-1" {
+		t.Fatalf("expected circle wallet id in policy metadata, got %#v", reader.request.PolicyMetadata)
+	}
+
+	var body struct {
+		Balance agentWalletBalanceResponse `json:"agent_wallet_balance"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode balance response: %v", err)
+	}
+	if len(body.Balance.Balances) != 1 {
+		t.Fatalf("expected one API balance, got %#v", body.Balance.Balances)
+	}
+}
+
+func TestGetAgentWalletBalanceUnknownAgentReturnsNotFound(t *testing.T) {
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), newTestAgentWalletRegistry(), nil, newTestAgentSessionRegistry(), agent.CircleOnboardingStarter{}, &stubCircleBalanceReader{})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/wallets/agent_test_missing/balance", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, response.Code, response.Body.String())
+	}
+}
+
+func TestGetAgentWalletBalanceInactiveWalletReturnsConflict(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionCreateMarket)
+	wallet := walletRegistry.wallets["agent_test_1"]
+	wallet.Status = "disabled"
+	walletRegistry.wallets["agent_test_1"] = wallet
+	reader := &stubCircleBalanceReader{}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil, newTestAgentSessionRegistry(), agent.CircleOnboardingStarter{}, reader)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/wallets/agent_test_1/balance", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, response.Code, response.Body.String())
+	}
+	if reader.called {
+		t.Fatal("balance provider must not be called for inactive wallet")
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("agent_wallet_status_invalid")) {
+		t.Fatalf("expected status invalid error, got %s", response.Body.String())
+	}
+}
+
+func TestGetAgentWalletBalanceWrongChainReturnsConflict(t *testing.T) {
+	walletRegistry := newTestAgentWalletRegistry()
+	registerTestAgentWallet(t, walletRegistry, agent.ActionCreateMarket)
+	wallet := walletRegistry.wallets["agent_test_1"]
+	wallet.Chain = "ETH-SEPOLIA"
+	walletRegistry.wallets["agent_test_1"] = wallet
+	reader := &stubCircleBalanceReader{}
+	router := chi.NewRouter()
+	registerAgentIntentRoutes(router, agent.NewStore(), walletRegistry, nil, newTestAgentSessionRegistry(), agent.CircleOnboardingStarter{}, reader)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/agent/wallets/agent_test_1/balance", nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, response.Code, response.Body.String())
+	}
+	if reader.called {
+		t.Fatal("balance provider must not be called for wrong chain")
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("agent_wallet_chain_invalid")) {
+		t.Fatalf("expected chain invalid error, got %s", response.Body.String())
 	}
 }
 

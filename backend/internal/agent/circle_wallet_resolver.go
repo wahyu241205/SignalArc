@@ -77,6 +77,18 @@ type CircleAgentWalletBalances struct {
 	Balances []any
 }
 
+type CircleAgentWalletBalanceRequest struct {
+	AgentID            string
+	AgentWalletAddress string
+	WalletProvider     string
+	Chain              string
+	PolicyMetadata     map[string]string
+}
+
+type CircleAgentWalletBalanceReader interface {
+	GetAgentWalletBalances(context.Context, CircleAgentWalletBalanceRequest) (CircleAgentWalletBalances, error)
+}
+
 type CircleWalletResolver interface {
 	ResolveAgentWallet(context.Context, string) (CircleAgentWallet, error)
 	GetAgentWalletBalances(context.Context, string) (CircleAgentWalletBalances, error)

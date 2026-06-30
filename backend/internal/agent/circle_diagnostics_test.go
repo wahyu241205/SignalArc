@@ -44,6 +44,19 @@ func TestCircleErrorHelpersExtractClassAndSummary(t *testing.T) {
 	}
 }
 
+func TestCircleErrorHelpersExtractDiagnosticInterface(t *testing.T) {
+	err := fakeCircleDiagnosticError{
+		class:   "circle_request_invalid",
+		summary: "status=400 code=bad_request message=invalid request",
+	}
+	if class := CircleErrorClassFromError(err); class != "circle_request_invalid" {
+		t.Fatalf("expected circle_request_invalid class, got %q", class)
+	}
+	if summary := CircleErrorSummaryFromError(err); summary != "status=400 code=bad_request message=invalid request" {
+		t.Fatalf("expected diagnostic summary, got %q", summary)
+	}
+}
+
 func TestCheckAgentSessionLivenessReturnsLiveWhenWalletPresent(t *testing.T) {
 	commandRunner := &fakeEnvCommandRunner{
 		output: []byte(`{"data":{"wallets":[{"address":"0xa9914bca9123ba0079be8c968f632c0db6400fe7","chain":"ARC-TESTNET"}]}}`),
@@ -140,4 +153,21 @@ func TestGetAgentWalletBalancesReturnsClassifiedAuthRequiredError(t *testing.T) 
 	if class := CircleErrorClassFromError(err); class != CircleErrorClassAuthRequired {
 		t.Fatalf("expected auth_required class on returned error, got %q", class)
 	}
+}
+
+type fakeCircleDiagnosticError struct {
+	class   string
+	summary string
+}
+
+func (err fakeCircleDiagnosticError) Error() string {
+	return "fake circle diagnostic error"
+}
+
+func (err fakeCircleDiagnosticError) ErrorClass() string {
+	return err.class
+}
+
+func (err fakeCircleDiagnosticError) SanitizedSummary() string {
+	return err.summary
 }

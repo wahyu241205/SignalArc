@@ -25,10 +25,11 @@ const (
 	StatusConfirmed = "confirmed"
 	StatusExecuted  = "executed"
 
-	ExecutionModeAgentContract        = "agent_contract"
-	ExecutionModeCircleAgentWalletCLI = "circle_agent_wallet_cli"
-	NetworkArcTestnet                 = "arc_testnet"
-	AgentFactoryAddress               = "0x69aE770e8b2F96297101FeC4dc123B3801dA7d80"
+	ExecutionModeAgentContract            = "agent_contract"
+	ExecutionModeCircleAgentWalletCLI     = "circle_agent_wallet_cli"
+	ExecutionModeCircleDeveloperWalletAPI = "circle_developer_wallet_api"
+	NetworkArcTestnet                     = "arc_testnet"
+	AgentFactoryAddress                   = "0x69aE770e8b2F96297101FeC4dc123B3801dA7d80"
 
 	WalletProviderCircleAgentWallet        = "circle_agent_wallet"
 	WalletProviderTemporaryTestnetAgentEOA = "temporary_testnet_agent_eoa"
@@ -60,6 +61,7 @@ type CreateIntentInput struct {
 	CollateralToken       string
 	CloseTimestamp        string
 	Question              string
+	PolicyMetadata        map[string]string
 }
 
 type AgentWallet struct {
@@ -95,6 +97,7 @@ type Intent struct {
 	CollateralToken       string
 	CloseTimestamp        string
 	Question              string
+	PolicyMetadata        map[string]string
 	ValidationResult      ValidationResult
 	Warnings              []string
 	CreatedAt             time.Time
@@ -192,6 +195,9 @@ func (store *Store) CreateIntent(input CreateIntentInput) (Intent, error) {
 			if len(normalized.AllowedActions) == 0 {
 				normalized.AllowedActions = append([]string{}, wallet.AllowedActions...)
 			}
+			if len(normalized.PolicyMetadata) == 0 {
+				normalized.PolicyMetadata = normalizeStringMap(wallet.PolicyMetadata)
+			}
 		}
 	}
 	intentID, err := store.newID()
@@ -219,11 +225,12 @@ func (store *Store) CreateIntent(input CreateIntentInput) (Intent, error) {
 		CollateralToken:       normalized.CollateralToken,
 		CloseTimestamp:        normalized.CloseTimestamp,
 		Question:              normalized.Question,
+		PolicyMetadata:        normalizeStringMap(normalized.PolicyMetadata),
 		ValidationResult:      validationResult,
 		Warnings: []string{
 			"preview only; no transaction has been executed",
 			"execution requires a registered agent wallet controlled separately from the user/deployer wallet",
-			"Circle Agent Wallet contract execution is not enabled until CLI authentication and live wallet proof are complete",
+			"Circle Agent Wallet contract execution must be enabled and configured before backend execution is available",
 		},
 		CreatedAt: store.now().UTC(),
 	}
@@ -363,6 +370,7 @@ func normalizeInput(input CreateIntentInput) CreateIntentInput {
 		CollateralToken:       strings.TrimSpace(input.CollateralToken),
 		CloseTimestamp:        normalizeCloseTimestamp(input.CloseTimestamp),
 		Question:              strings.TrimSpace(input.Question),
+		PolicyMetadata:        normalizeStringMap(input.PolicyMetadata),
 	}
 }
 
@@ -417,6 +425,22 @@ func normalizeStringSlice(values []string) []string {
 		if value != "" {
 			normalized = append(normalized, value)
 		}
+	}
+	return normalized
+}
+
+func normalizeStringMap(values map[string]string) map[string]string {
+	normalized := make(map[string]string, len(values))
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		normalized[key] = value
+	}
+	if len(normalized) == 0 {
+		return nil
 	}
 	return normalized
 }
@@ -494,7 +518,7 @@ func normalizeAgentWallet(wallet AgentWallet) AgentWallet {
 		Chain:              strings.TrimSpace(wallet.Chain),
 		AllowedActions:     allowedActions,
 		Status:             strings.TrimSpace(wallet.Status),
-		PolicyMetadata:     wallet.PolicyMetadata,
+		PolicyMetadata:     normalizeStringMap(wallet.PolicyMetadata),
 		CreatedAt:          wallet.CreatedAt,
 		UpdatedAt:          wallet.UpdatedAt,
 	}
