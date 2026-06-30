@@ -313,6 +313,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 	var sessionRegistry agentSessionRegistry
 	var onboardingStarter agent.CircleOnboardingStarter
 	var walletResolver agent.CircleWalletResolver
+	var balanceReader agent.CircleAgentWalletBalanceReader
 	var faucetRunner agent.CircleAgentWalletFaucet
 	var durableIntents durableAgentIntentRegistry
 	for _, extra := range extras {
@@ -330,6 +331,10 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 		}
 		if resolver, ok := extra.(agent.CircleWalletResolver); ok {
 			walletResolver = resolver
+			continue
+		}
+		if reader, ok := extra.(agent.CircleAgentWalletBalanceReader); ok {
+			balanceReader = reader
 			continue
 		}
 		if runner, ok := extra.(agent.CircleAgentWalletFaucet); ok {
@@ -693,7 +698,7 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 		if !ok {
 			return
 		}
-		if walletResolver == nil {
+		if balanceReader == nil && walletResolver == nil {
 			httpjson.WriteError(w, http.StatusNotImplemented, "circle_agent_wallet_balance_not_configured", "Circle Agent Wallet balance lookup is not configured")
 			return
 		}
@@ -707,7 +712,16 @@ func registerAgentIntentRoutes(router chi.Router, store *agent.Store, walletRegi
 			httpjson.WriteError(w, http.StatusInternalServerError, "agent_wallet_get_failed", "failed to get agent wallet")
 			return
 		}
-		balances, err := walletResolver.GetAgentWalletBalances(r.Context(), wallet.AgentWalletAddress)
+		if wallet.Status != agent.WalletStatusActive {
+			httpjson.WriteError(w, http.StatusConflict, "agent_wallet_status_invalid", "agent wallet is not active")
+			return
+		}
+		if wallet.Chain != agent.ChainArcTestnet {
+			httpjson.WriteError(w, http.StatusConflict, "agent_wallet_chain_invalid", "agent wallet chain is not ARC-TESTNET")
+			return
+		}
+
+		balances, err := readAgentWalletBalances(r.Context(), balanceReader, walletResolver, wallet)
 		if err != nil {
 			logCircleProviderFailure(r.Context(), "circle_agent_wallet_balance", wallet.AgentID, "", err)
 			httpjson.WriteError(w, http.StatusBadGateway, "circle_agent_wallet_balance_failed", "Circle Agent Wallet balance lookup failed")
@@ -1281,6 +1295,9 @@ func hydrateAgentIntentForExecution(intent agent.Intent, wallet repository.Agent
 	}
 	if len(intent.AllowedActions) == 0 {
 		intent.AllowedActions = append([]string{}, wallet.AllowedActions...)
+	}
+	if len(intent.PolicyMetadata) == 0 {
+		intent.PolicyMetadata = agentPolicyMetadataMap(wallet.PolicyMetadata)
 	}
 	return intent
 }
@@ -2002,6 +2019,8 @@ func newAgentExecutionFailure(err error) agentExecutionFailure {
 		return agentExecutionFailure{Status: http.StatusNotImplemented, Code: "not_implemented", Message: "agent execution action is not implemented"}
 	case errors.Is(err, agent.ErrCreateMarketCloseTimestampStale):
 		return agentExecutionFailure{Status: http.StatusBadRequest, Code: "create_market_close_timestamp_stale", Message: "close_timestamp must be in the future before execution"}
+	case errors.Is(err, agent.ErrCircleWalletIDMissing):
+		return agentExecutionFailure{Status: http.StatusBadRequest, Code: "circle_wallet_id_missing", Message: "circle_wallet_id policy metadata is required for Circle API execution"}
 	case errors.Is(err, agent.ErrIntentInvalid):
 		return agentExecutionFailure{Status: http.StatusBadRequest, Code: "agent_intent_invalid", Message: "agent intent validation failed"}
 	case errors.Is(err, agent.ErrIntentNotConfirmed):
@@ -2121,6 +2140,15 @@ func agentPolicyMetadataString(raw json.RawMessage, key string) (string, bool) {
 		return strings.TrimSpace(stringValue), true
 	}
 	return strings.TrimSpace(string(value)), true
+}
+
+func agentPolicyMetadataMap(raw json.RawMessage) map[string]string {
+	metadata := map[string]string{}
+	if len(raw) == 0 {
+		return metadata
+	}
+	_ = json.Unmarshal(raw, &metadata)
+	return metadata
 }
 
 func outcomeFromAgentAction(action string, fallback string) string {
@@ -2271,6 +2299,22 @@ func repositoryAgentWalletAllowsAction(wallet repository.AgentWallet, action str
 		}
 	}
 	return false
+}
+
+func readAgentWalletBalances(ctx context.Context, balanceReader agent.CircleAgentWalletBalanceReader, walletResolver agent.CircleWalletResolver, wallet repository.AgentWallet) (agent.CircleAgentWalletBalances, error) {
+	if balanceReader != nil {
+		return balanceReader.GetAgentWalletBalances(ctx, agent.CircleAgentWalletBalanceRequest{
+			AgentID:            wallet.AgentID,
+			AgentWalletAddress: wallet.AgentWalletAddress,
+			WalletProvider:     wallet.WalletProvider,
+			Chain:              wallet.Chain,
+			PolicyMetadata:     agentPolicyMetadataMap(wallet.PolicyMetadata),
+		})
+	}
+	if walletResolver == nil {
+		return agent.CircleAgentWalletBalances{}, agent.ErrCircleAgentWalletBalanceFailed
+	}
+	return walletResolver.GetAgentWalletBalances(ctx, wallet.AgentWalletAddress)
 }
 
 func knownDeployerResolverWallet() string {

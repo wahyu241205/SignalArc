@@ -28,6 +28,11 @@ type CircleCLIError struct {
 	ExecCtx *ExecuteContext
 }
 
+type circleDiagnosticError interface {
+	ErrorClass() string
+	SanitizedSummary() string
+}
+
 func (err *CircleCLIError) Error() string {
 	if err == nil {
 		return ""
@@ -52,6 +57,12 @@ func CircleErrorClassFromError(err error) string {
 	if err == nil {
 		return ""
 	}
+	var diagnosticErr circleDiagnosticError
+	if errors.As(err, &diagnosticErr) && diagnosticErr != nil {
+		if errorClass := strings.TrimSpace(diagnosticErr.ErrorClass()); errorClass != "" {
+			return errorClass
+		}
+	}
 	var cliErr *CircleCLIError
 	if errors.As(err, &cliErr) && cliErr != nil {
 		if strings.TrimSpace(cliErr.ErrorClass) != "" {
@@ -65,6 +76,10 @@ func CircleErrorClassFromError(err error) string {
 func CircleErrorSummaryFromError(err error) string {
 	if err == nil {
 		return ""
+	}
+	var diagnosticErr circleDiagnosticError
+	if errors.As(err, &diagnosticErr) && diagnosticErr != nil {
+		return diagnosticErr.SanitizedSummary()
 	}
 	var cliErr *CircleCLIError
 	if errors.As(err, &cliErr) && cliErr != nil {
